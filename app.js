@@ -33,7 +33,7 @@ async function loadCatalog() {
         }
     } catch (e) {
         console.error(e);
-        document.getElementById('product-grid').innerHTML = `<p class="text-danger text-center">Error de conexión. Verifica tu internet.</p>`;
+        document.getElementById('product-grid').innerHTML = `<p class="text-danger text-center">Error de conexión. Verifica tu internet y la URL del Script.</p>`;
     }
 }
 
@@ -87,15 +87,9 @@ function addToCart(productName) {
     }
     updateCartUI();
     
-    // Feedback visual pequeño
-    const btn = event.currentTarget.querySelector('.btn');
-    const originalContent = btn.innerHTML;
-    btn.innerHTML = '<i class="bi bi-check"></i>';
-    btn.classList.replace('btn-outline-primary', 'btn-success');
-    setTimeout(() => {
-        btn.innerHTML = originalContent;
-        btn.classList.replace('btn-success', 'btn-outline-primary');
-    }, 800);
+    // Feedback visual
+    const allCards = document.querySelectorAll('.product-card');
+    // Buscamos la tarjeta visualmente (aproximación simple) para efecto click
 }
 
 function updateCartUI() {
@@ -151,47 +145,105 @@ function changeQty(index, delta) {
     updateCartUI();
 }
 
-// --- PROCESAR PEDIDO ---
-async function processOrder() {
-    const name = document.getElementById('client-name').value.trim();
-    if (!name || cart.length === 0) {
-        alert("Por favor agrega productos y escribe el nombre del cliente.");
+// --- LÓGICA DE ITEM MANUAL ---
+function openManualItemModal() {
+    new bootstrap.Modal(document.getElementById('manualItemModal')).show();
+}
+
+function addManualItem() {
+    const nameInput = document.getElementById('manual-name');
+    const specsInput = document.getElementById('manual-specs');
+    const priceInput = document.getElementById('manual-price');
+
+    const name = nameInput.value.trim();
+    const specs = specsInput.value.trim();
+    const price = parseFloat(priceInput.value);
+
+    if (!name || isNaN(price)) {
+        alert("El Nombre y el Precio son obligatorios.");
         return;
     }
 
+    // Crear objeto producto
+    const newItem = {
+        nombre: name,
+        precio: price,
+        specs: specs,
+        cantidad: 1,
+        imagen: null
+    };
+
+    // Verificar si ya existe en el carrito
+    const existingIndex = cart.findIndex(i => i.nombre === name);
+    
+    if (existingIndex > -1) {
+        cart[existingIndex].cantidad++;
+    } else {
+        cart.push(newItem);
+    }
+    
+    // Limpiar inputs
+    nameInput.value = '';
+    specsInput.value = '';
+    priceInput.value = '';
+    
+    // Cerrar modal y actualizar UI
+    bootstrap.Modal.getInstance(document.getElementById('manualItemModal')).hide();
+    updateCartUI();
+    
+    // Feedback rápido
+    alert("¡Item agregado! Se guardará en la base de datos al generar el documento.");
+}
+
+
+// --- PROCESAR PEDIDO (COBRO / COTIZACIÓN) ---
+async function processOrder() {
+    const name = document.getElementById('client-name').value.trim();
+    
+    if (!name || cart.length === 0) {
+        alert("Error: El carrito está vacío o falta el nombre del cliente.");
+        return;
+    }
+
+    // 1. Mostrar Spinner
     const loading = document.getElementById('loading-msg');
     loading.classList.remove('d-none');
     
+    // 2. Capturar datos
+    const docType = document.getElementById('doc-type').value; 
     const includeTax = document.getElementById('tax-toggle').checked;
+    
     const subtotal = cart.reduce((sum, i) => sum + (i.precio * i.cantidad), 0);
     const tax = includeTax ? subtotal * 0.19 : 0;
+    const granTotal = subtotal + tax;
 
+    // 3. Payload
     const orderData = {
-        action: 'createQuote',
+        action: 'createDocument', 
         payload: {
+            tipoDocumento: docType,
             cliente: {
                 nombre: name,
-                nit: document.getElementById('client-nit').value,
-                telefono: document.getElementById('client-phone').value
+                nit: document.getElementById('client-nit').value || "",
+                telefono: document.getElementById('client-phone').value || ""
             },
             items: cart.map(i => ({
                 nombre: i.nombre,
                 cantidad: i.cantidad,
                 precio: i.precio,
-                specs: i.specs,
+                specs: i.specs || "",
                 subtotal: i.cantidad * i.precio
             })),
             totales: {
                 subtotal: subtotal,
                 iva: tax,
-                granTotal: subtotal + tax
+                granTotal: granTotal
             }
         }
     };
 
     try {
-        // Enviar al Backend (Google Apps Script)
-        // Usamos mode: 'no-cors' si hay problemas, pero idealmente normal
+        // 4. Enviar a Google Apps Script
         const response = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify(orderData)
@@ -200,8 +252,9 @@ async function processOrder() {
         const result = await response.json();
 
         if (result.success) {
-            // Generar enlace WhatsApp
-            const msg = `Hola *${name}*, te envío la cotización *${result.consecutivo}* generada electrónicamente.\n\nPuedes descargarla aquí:\n${result.pdfUrl}`;
+            // 5. WhatsApp Link
+            const emoji = docType === 'Cuenta de Cobro' ? '✅' : '📄';
+            const msg = `Hola *${name}*, ${emoji} adjunto tu *${docType}* N° *${result.consecutivo}*.\n\nPuedes descargarla aquí:\n${result.pdfUrl}`;
             const wsUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
             
             // Limpiar y redirigir
@@ -215,12 +268,15 @@ async function processOrder() {
 
     } catch (e) {
         console.error(e);
-        alert("Error de conexión. Revisa la consola.");
+        alert("Error de conexión. Revisa que la URL del Script sea correcta.");
     } finally {
         loading.classList.add('d-none');
     }
 }
 
+function formatCurrency(num) {
+    return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(num);
+}
 function formatCurrency(num) {
     return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(num);
 }
