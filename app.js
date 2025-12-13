@@ -1,6 +1,9 @@
 // --- CONFIGURACIÓN ---
 const API_URL = "https://script.google.com/macros/s/AKfycbw1Ybr3bX_uJj-NHp9pTCe90EIaRLuNwCnwaJ-7cpdQEdA2VMbiGXxfvzlTImp8pts_6w/exec"; 
 
+// --- CONFIGURACIÓN ---
+const API_URL = "PEGAR_AQUI_TU_URL_DE_APPS_SCRIPT"; 
+
 let catalog = [];
 let cart = [];
 
@@ -51,13 +54,22 @@ function renderCatalog(products) {
             ? `<img src="${prod.imagen}" alt="${prod.nombre}">` 
             : `<i class="bi bi-box-seam no-image-placeholder"></i>`;
 
+        // OJO: Usamos encodeURIComponent para pasar strings seguros en el onclick
+        const prodDataSafe = encodeURIComponent(JSON.stringify(prod));
+
         const html = `
             <div class="col-6 col-md-4 col-lg-3">
-                <div class="card product-card h-100" onclick="addToCart('${prod.nombre}')">
-                    <div class="card-img-top-wrapper border-bottom">
+                <div class="card product-card h-100">
+                     <div class="position-absolute top-0 end-0 p-2 z-2">
+                        <button class="btn btn-sm btn-light rounded-circle shadow-sm" style="width:30px; height:30px; padding:0;" onclick="openEditProductModal('${prodDataSafe}')">
+                            <i class="bi bi-pencil-fill text-warning" style="font-size: 0.8rem;"></i>
+                        </button>
+                    </div>
+
+                    <div class="card-img-top-wrapper border-bottom" onclick="addToCart('${prod.nombre}')">
                         ${imgHtml}
                     </div>
-                    <div class="card-body p-2 d-flex flex-column">
+                    <div class="card-body p-2 d-flex flex-column" onclick="addToCart('${prod.nombre}')">
                         <h6 class="card-title text-truncate mb-1" style="font-size: 0.9rem;">${prod.nombre}</h6>
                         <small class="text-muted mb-2 d-none d-sm-block text-truncate">${prod.specs}</small>
                         <div class="mt-auto d-flex justify-content-between align-items-center">
@@ -73,6 +85,67 @@ function renderCatalog(products) {
         container.innerHTML += html;
     });
 }
+
+// --- LÓGICA DE EDICIÓN DE PRODUCTO (CRUD) ---
+function openEditProductModal(prodDataEncoded) {
+    const prod = JSON.parse(decodeURIComponent(prodDataEncoded));
+    
+    document.getElementById('edit-original-name').value = prod.nombre;
+    document.getElementById('edit-name').value = prod.nombre;
+    document.getElementById('edit-specs').value = prod.specs;
+    document.getElementById('edit-price').value = prod.precio;
+    document.getElementById('edit-image').value = prod.imagen || "";
+
+    new bootstrap.Modal(document.getElementById('editProductModal')).show();
+}
+
+async function saveProductChanges() {
+    const originalName = document.getElementById('edit-original-name').value;
+    const name = document.getElementById('edit-name').value.trim();
+    const specs = document.getElementById('edit-specs').value.trim();
+    const price = parseFloat(document.getElementById('edit-price').value);
+    const image = document.getElementById('edit-image').value.trim();
+
+    if (!name || isNaN(price)) {
+        alert("Nombre y precio son obligatorios.");
+        return;
+    }
+
+    const spinner = document.getElementById('edit-loading-msg');
+    spinner.classList.remove('d-none');
+
+    const payload = {
+        action: 'updateProduct',
+        payload: {
+            originalName: originalName,
+            nombre: name,
+            specs: specs,
+            precio: price,
+            imagen: image
+        }
+    };
+
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            alert("Producto actualizado correctamente.");
+            bootstrap.Modal.getInstance(document.getElementById('editProductModal')).hide();
+            await loadCatalog(); // Recarga inmediata
+        } else {
+            alert("Error: " + result.error);
+        }
+    } catch (e) {
+        alert("Error de conexión: " + e);
+    } finally {
+        spinner.classList.add('d-none');
+    }
+}
+
 
 // --- LÓGICA DEL CARRITO ---
 function addToCart(productName) {
@@ -212,10 +285,9 @@ function addManualItem() {
         precio: price,
         specs: specs,
         cantidad: 1,
-        imagen: img || null // Si está vacío es null
+        imagen: img || null 
     };
 
-    // Agregar directamente (no agrupamos manuales por nombre para permitir items únicos)
     cart.push(newItem);
     
     nameInput.value = '';
@@ -226,7 +298,7 @@ function addManualItem() {
     bootstrap.Modal.getInstance(document.getElementById('manualItemModal')).hide();
     updateCartUI();
     
-    alert("¡Item agregado! Si es nuevo, se guardará en tu catálogo.");
+    alert("¡Item agregado! Recuerda: Se guardará en tu catálogo cuando generes el documento.");
 }
 
 // --- PROCESAR PEDIDO ---
@@ -262,7 +334,7 @@ async function processOrder(mode) {
                 cantidad: i.cantidad,
                 precio: i.precio,
                 specs: i.specs || "",
-                imagen: i.imagen || "", // Enviamos la imagen al backend
+                imagen: i.imagen || "",
                 subtotal: i.cantidad * i.precio
             })),
             totales: {
@@ -285,6 +357,10 @@ async function processOrder(mode) {
             cart = [];
             updateCartUI();
             bootstrap.Modal.getInstance(document.getElementById('cartModal')).hide();
+            
+            // RECARGA INMEDIATA (Auto-aprendizaje visual)
+            await loadCatalog();
+            // ---------------------------------------------
 
             if (mode === 'whatsapp') {
                 const emoji = docType === 'Cuenta de Cobro' ? '✅' : '📄';
@@ -292,7 +368,7 @@ async function processOrder(mode) {
                 const wsUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
                 window.open(wsUrl, '_blank');
             } else {
-                const confirmMsg = `¡${docType} ${result.consecutivo} generada con éxito!\n\nSe ha guardado en la carpeta del cliente en Drive.\n\n¿Deseas abrir el PDF ahora?`;
+                const confirmMsg = `¡${docType} ${result.consecutivo} generado!\n\nSe ha actualizado el catálogo con los productos nuevos.\n\n¿Abrir PDF?`;
                 if(confirm(confirmMsg)) {
                     window.open(result.pdfUrl, '_blank');
                 }
@@ -307,10 +383,6 @@ async function processOrder(mode) {
     } finally {
         loading.classList.add('d-none');
     }
-}
-
-function formatCurrency(num) {
-    return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(num);
 }
 
 function formatCurrency(num) {
