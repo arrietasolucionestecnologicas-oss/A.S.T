@@ -87,9 +87,7 @@ function addToCart(productName) {
     }
     updateCartUI();
     
-    // Feedback visual
-    const allCards = document.querySelectorAll('.product-card');
-    // Buscamos la tarjeta visualmente (aproximación simple) para efecto click
+    // Feedback visual (opcional si deseas agregar animación)
 }
 
 function updateCartUI() {
@@ -197,7 +195,8 @@ function addManualItem() {
 
 
 // --- PROCESAR PEDIDO (COBRO / COTIZACIÓN) ---
-async function processOrder() {
+// mode puede ser: 'save' (Solo generar) o 'whatsapp' (Generar y Enviar)
+async function processOrder(mode) {
     const name = document.getElementById('client-name').value.trim();
     
     if (!name || cart.length === 0) {
@@ -252,16 +251,24 @@ async function processOrder() {
         const result = await response.json();
 
         if (result.success) {
-            // 5. WhatsApp Link
-            const emoji = docType === 'Cuenta de Cobro' ? '✅' : '📄';
-            const msg = `Hola *${name}*, ${emoji} adjunto tu *${docType}* N° *${result.consecutivo}*.\n\nPuedes descargarla aquí:\n${result.pdfUrl}`;
-            const wsUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
-            
-            // Limpiar y redirigir
+            // Limpiar carrito
             cart = [];
             updateCartUI();
             bootstrap.Modal.getInstance(document.getElementById('cartModal')).hide();
-            window.open(wsUrl, '_blank');
+
+            // 5. Decidir acción según el botón presionado
+            if (mode === 'whatsapp') {
+                const emoji = docType === 'Cuenta de Cobro' ? '✅' : '📄';
+                const msg = `Hola *${name}*, ${emoji} adjunto tu *${docType}* N° *${result.consecutivo}*.\n\nPuedes descargarla aquí:\n${result.pdfUrl}`;
+                const wsUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+                window.open(wsUrl, '_blank');
+            } else {
+                // Modo 'save' (Solo mostrar alerta y abrir PDF)
+                const confirmMsg = `¡${docType} ${result.consecutivo} generada con éxito!\n\nSe ha guardado en la carpeta del cliente en Drive.\n\n¿Deseas abrir el PDF ahora?`;
+                if(confirm(confirmMsg)) {
+                    window.open(result.pdfUrl, '_blank');
+                }
+            }
         } else {
             alert("Error del servidor: " + result.error);
         }
@@ -274,9 +281,6 @@ async function processOrder() {
     }
 }
 
-function formatCurrency(num) {
-    return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(num);
-}
 function formatCurrency(num) {
     return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(num);
 }
