@@ -1,9 +1,6 @@
 // --- CONFIGURACIÓN ---
 const API_URL = "https://script.google.com/macros/s/AKfycbw1Ybr3bX_uJj-NHp9pTCe90EIaRLuNwCnwaJ-7cpdQEdA2VMbiGXxfvzlTImp8pts_6w/exec"; 
 
-// --- CONFIGURACIÓN ---
-const API_URL = "PEGAR_AQUI_TU_URL_DE_APPS_SCRIPT"; 
-
 let catalog = [];
 let cart = [];
 
