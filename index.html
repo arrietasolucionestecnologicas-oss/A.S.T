@@ -102,12 +102,16 @@
                         </div>
                     </form>
                 </div>
-                <div class="modal-footer d-flex flex-column">
-                    <button type="button" class="btn btn-success w-100 py-2 fw-bold" onclick="processOrder()">
-                        <i class="bi bi-whatsapp"></i> Generar y Enviar a WhatsApp
+                <div class="modal-footer d-flex flex-column gap-2">
+                    <button type="button" class="btn btn-secondary w-100 py-2 fw-bold" onclick="processOrder('save')">
+                        <i class="bi bi-file-earmark-pdf"></i> Solo Generar PDF
                     </button>
+                    <button type="button" class="btn btn-success w-100 py-2 fw-bold" onclick="processOrder('whatsapp')">
+                        <i class="bi bi-whatsapp"></i> Generar y Enviar WhatsApp
+                    </button>
+                    
                     <div id="loading-msg" class="text-center small text-muted mt-2 d-none">
-                        <div class="spinner-border spinner-border-sm text-success" role="status"></div>
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
                         Generando PDF oficial, por favor espera...
                     </div>
                 </div>
