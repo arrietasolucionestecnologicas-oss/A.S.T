@@ -47,7 +47,6 @@ function renderCatalog(products) {
     }
 
     products.forEach(prod => {
-        // Manejo de imagen o placeholder
         const imgHtml = prod.imagen 
             ? `<img src="${prod.imagen}" alt="${prod.nombre}">` 
             : `<i class="bi bi-box-seam no-image-placeholder"></i>`;
@@ -78,16 +77,9 @@ function renderCatalog(products) {
 // --- LÓGICA DEL CARRITO ---
 function addToCart(productName) {
     const product = catalog.find(p => p.nombre === productName);
-    const existing = cart.find(item => item.nombre === productName);
-
-    if (existing) {
-        existing.cantidad++;
-    } else {
-        cart.push({ ...product, cantidad: 1 });
-    }
+    // Clonamos para independencia total en el carrito
+    cart.push({ ...product, cantidad: 1 });
     updateCartUI();
-    
-    // Feedback visual (opcional si deseas agregar animación)
 }
 
 function updateCartUI() {
@@ -113,16 +105,41 @@ function renderCart() {
 
     cart.forEach((item, index) => {
         subtotal += item.precio * item.cantidad;
+        
+        // Renderizado de imagen miniatura en carrito
+        const thumbHtml = item.imagen 
+            ? `<img src="${item.imagen}" class="rounded" style="width:40px; height:40px; object-fit:cover; cursor:pointer;" onclick="updateCartImage(${index})">`
+            : `<div class="bg-light rounded d-flex align-items-center justify-content-center" style="width:40px; height:40px; cursor:pointer;" onclick="updateCartImage(${index})"><i class="bi bi-camera text-muted"></i></div>`;
+
         container.innerHTML += `
-            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
-                <div style="flex: 1;">
-                    <h6 class="mb-0 text-truncate" style="max-width: 180px;">${item.nombre}</h6>
-                    <small class="text-primary">${formatCurrency(item.precio)}</small>
+            <div class="d-flex flex-column mb-3 border-bottom pb-2">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="d-flex" style="flex: 1; margin-right: 10px;">
+                        ${thumbHtml}
+                        <div class="ms-2">
+                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 150px;">${item.nombre}</h6>
+                            <small class="text-primary" style="font-size:0.75rem;">Clic en foto para editar</small>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex align-items-center bg-light rounded px-2" style="height: 32px;">
+                        <i class="bi bi-dash-circle text-muted" style="cursor:pointer;" onclick="changeQty(${index}, -1)"></i>
+                        <input type="text" class="quantity-control mx-1" value="${item.cantidad}" readonly style="width:25px; text-align:center; border:none; background:transparent;">
+                        <i class="bi bi-plus-circle text-primary" style="cursor:pointer;" onclick="changeQty(${index}, 1)"></i>
+                    </div>
                 </div>
-                <div class="d-flex align-items-center bg-light rounded px-2">
-                    <i class="bi bi-dash-circle text-muted" style="cursor:pointer;" onclick="changeQty(${index}, -1)"></i>
-                    <input type="text" class="quantity-control" value="${item.cantidad}" readonly>
-                    <i class="bi bi-plus-circle text-primary" style="cursor:pointer;" onclick="changeQty(${index}, 1)"></i>
+                
+                <div class="mt-2">
+                     <textarea class="form-control form-control-sm" rows="2" placeholder="Descripción / Detalles..." onchange="updateCartSpecs(this, ${index})">${item.specs || ''}</textarea>
+                </div>
+
+                <div class="mt-2 d-flex align-items-center justify-content-end">
+                    <span class="small me-2 text-muted">Unitario:</span>
+                    <input type="number" 
+                           class="form-control form-control-sm" 
+                           value="${item.precio}" 
+                           onchange="updateCartPrice(this, ${index})" 
+                           style="width: 120px;">
                 </div>
             </div>
         `;
@@ -143,6 +160,32 @@ function changeQty(index, delta) {
     updateCartUI();
 }
 
+// FUNCIONES DE EDICIÓN EN CARRITO
+function updateCartPrice(input, index) {
+    const newPrice = parseFloat(input.value);
+    if(isNaN(newPrice) || newPrice < 0) {
+        alert("Precio inválido");
+        input.value = cart[index].precio; 
+        return;
+    }
+    cart[index].precio = newPrice;
+    renderCart();
+}
+
+function updateCartSpecs(textarea, index) {
+    cart[index].specs = textarea.value;
+}
+
+function updateCartImage(index) {
+    const currentUrl = cart[index].imagen || "";
+    const newUrl = prompt("Ingresa la URL de la imagen para este producto:", currentUrl);
+    
+    if (newUrl !== null) {
+        cart[index].imagen = newUrl.trim();
+        renderCart();
+    }
+}
+
 // --- LÓGICA DE ITEM MANUAL ---
 function openManualItemModal() {
     new bootstrap.Modal(document.getElementById('manualItemModal')).show();
@@ -152,50 +195,41 @@ function addManualItem() {
     const nameInput = document.getElementById('manual-name');
     const specsInput = document.getElementById('manual-specs');
     const priceInput = document.getElementById('manual-price');
+    const imgInput = document.getElementById('manual-image');
 
     const name = nameInput.value.trim();
     const specs = specsInput.value.trim();
     const price = parseFloat(priceInput.value);
+    const img = imgInput.value.trim();
 
     if (!name || isNaN(price)) {
         alert("El Nombre y el Precio son obligatorios.");
         return;
     }
 
-    // Crear objeto producto
     const newItem = {
         nombre: name,
         precio: price,
         specs: specs,
         cantidad: 1,
-        imagen: null
+        imagen: img || null // Si está vacío es null
     };
 
-    // Verificar si ya existe en el carrito
-    const existingIndex = cart.findIndex(i => i.nombre === name);
+    // Agregar directamente (no agrupamos manuales por nombre para permitir items únicos)
+    cart.push(newItem);
     
-    if (existingIndex > -1) {
-        cart[existingIndex].cantidad++;
-    } else {
-        cart.push(newItem);
-    }
-    
-    // Limpiar inputs
     nameInput.value = '';
     specsInput.value = '';
     priceInput.value = '';
+    imgInput.value = '';
     
-    // Cerrar modal y actualizar UI
     bootstrap.Modal.getInstance(document.getElementById('manualItemModal')).hide();
     updateCartUI();
     
-    // Feedback rápido
-    alert("¡Item agregado! Se guardará en la base de datos al generar el documento.");
+    alert("¡Item agregado! Si es nuevo, se guardará en tu catálogo.");
 }
 
-
-// --- PROCESAR PEDIDO (COBRO / COTIZACIÓN) ---
-// mode puede ser: 'save' (Solo generar) o 'whatsapp' (Generar y Enviar)
+// --- PROCESAR PEDIDO ---
 async function processOrder(mode) {
     const name = document.getElementById('client-name').value.trim();
     
@@ -204,11 +238,9 @@ async function processOrder(mode) {
         return;
     }
 
-    // 1. Mostrar Spinner
     const loading = document.getElementById('loading-msg');
     loading.classList.remove('d-none');
     
-    // 2. Capturar datos
     const docType = document.getElementById('doc-type').value; 
     const includeTax = document.getElementById('tax-toggle').checked;
     
@@ -216,7 +248,6 @@ async function processOrder(mode) {
     const tax = includeTax ? subtotal * 0.19 : 0;
     const granTotal = subtotal + tax;
 
-    // 3. Payload
     const orderData = {
         action: 'createDocument', 
         payload: {
@@ -231,6 +262,7 @@ async function processOrder(mode) {
                 cantidad: i.cantidad,
                 precio: i.precio,
                 specs: i.specs || "",
+                imagen: i.imagen || "", // Enviamos la imagen al backend
                 subtotal: i.cantidad * i.precio
             })),
             totales: {
@@ -242,7 +274,6 @@ async function processOrder(mode) {
     };
 
     try {
-        // 4. Enviar a Google Apps Script
         const response = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify(orderData)
@@ -251,19 +282,16 @@ async function processOrder(mode) {
         const result = await response.json();
 
         if (result.success) {
-            // Limpiar carrito
             cart = [];
             updateCartUI();
             bootstrap.Modal.getInstance(document.getElementById('cartModal')).hide();
 
-            // 5. Decidir acción según el botón presionado
             if (mode === 'whatsapp') {
                 const emoji = docType === 'Cuenta de Cobro' ? '✅' : '📄';
                 const msg = `Hola *${name}*, ${emoji} adjunto tu *${docType}* N° *${result.consecutivo}*.\n\nPuedes descargarla aquí:\n${result.pdfUrl}`;
                 const wsUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
                 window.open(wsUrl, '_blank');
             } else {
-                // Modo 'save' (Solo mostrar alerta y abrir PDF)
                 const confirmMsg = `¡${docType} ${result.consecutivo} generada con éxito!\n\nSe ha guardado en la carpeta del cliente en Drive.\n\n¿Deseas abrir el PDF ahora?`;
                 if(confirm(confirmMsg)) {
                     window.open(result.pdfUrl, '_blank');
@@ -279,6 +307,10 @@ async function processOrder(mode) {
     } finally {
         loading.classList.add('d-none');
     }
+}
+
+function formatCurrency(num) {
+    return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(num);
 }
 
 function formatCurrency(num) {
