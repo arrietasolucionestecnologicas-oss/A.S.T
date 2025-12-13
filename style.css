@@ -21,6 +21,7 @@ body {
     align-items: center;
     justify-content: center;
     overflow: hidden;
+    position: relative;
 }
 
 .card-img-top-wrapper img {
@@ -52,4 +53,12 @@ body {
     border: none;
     background: transparent;
     font-weight: bold;
+}
+
+/* Ajustes Modal Móvil */
+@media (max-width: 576px) {
+    .modal-fullscreen-sm-down .modal-content {
+        height: 100vh;
+        border-radius: 0;
+    }
 }
