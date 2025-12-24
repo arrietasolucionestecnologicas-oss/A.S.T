@@ -1,10 +1,11 @@
 {
-  "name": "Software Contable Arrieta",
-  "short_name": "Arrieta ERP",
+  "name": "A.S.T. Soluciones Tecnológicas",
+  "short_name": "AST Manager",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#0077C8",
+  "background_color": "#0a0a0a",
+  "theme_color": "#00e5ff",
+  "description": "Sistema de Gestión de Ingeniería y Servicios",
   "orientation": "portrait",
   "icons": [
     {
