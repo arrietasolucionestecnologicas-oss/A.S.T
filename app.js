@@ -24,12 +24,10 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- COMUNICACIÓN CON GOOGLE (CORE) ---
 async function callApi(action, payload = {}) {
     try {
-        // En Apps Script externo, siempre usamos POST "no-cors" o POST normal con redirect follow
-        // Para recibir respuesta JSON limpia de GAS en dominio externo:
         const response = await fetch(API_URL, {
             method: 'POST',
-            redirect: "follow", // VITAL PARA APPS SCRIPT
-            headers: { "Content-Type": "text/plain;charset=utf-8" }, // Evita preflight OPTIONS
+            redirect: "follow",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
             body: JSON.stringify({
                 action: action,
                 auth: API_KEY,
@@ -115,7 +113,6 @@ function loadEditModal(uuid) {
     document.getElementById('p-specs').value = p.specs;
     document.getElementById('p-costo').value = p.costo;
     document.getElementById('p-precio').value = p.precio;
-    // ... mapea el resto (iva, imagen, web) igual que antes
     document.getElementById('p-web').checked = p.visibleWeb;
     document.getElementById('p-imagen').value = p.imagen;
     
@@ -134,7 +131,6 @@ async function saveProduct() {
         specs: document.getElementById('p-specs').value,
         costo: Number(document.getElementById('p-costo').value),
         precio: Number(document.getElementById('p-precio').value),
-        // Puedes agregar IVA aquí si lo usas en el form
         iva: 19, 
         imagen: document.getElementById('p-imagen').value,
         visibleWeb: document.getElementById('p-web').checked
@@ -145,7 +141,7 @@ async function saveProduct() {
 
     if (res.success) {
         bootstrap.Modal.getInstance(document.getElementById('prodModal')).hide();
-        fetchCatalog(); // Recargar grilla
+        fetchCatalog(); 
     } else {
         alert("Error al guardar: " + res.error);
     }
@@ -197,10 +193,8 @@ async function generatePDF() {
     const btn = document.querySelector('#cartModal .btn-success');
     btn.disabled = true; btn.innerHTML = "GENERANDO...";
 
-    // Calculamos subtotal e iva simple
     let sub = 0;
     cart.forEach(c => sub += (c.precio * c.cantidad));
-    // Asumiendo 19% general por ahora, puedes refinar esto
     const iva = sub * 0.19; 
 
     const payload = {
