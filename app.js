@@ -6,11 +6,9 @@ let catalog = [];
 let cart = [];
 const fmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
-// --- INICIALIZACIÓN ---
 document.addEventListener('DOMContentLoaded', () => {
     fetchCatalog();
     
-    // Filtro de búsqueda
     document.getElementById('search').addEventListener('input', (e) => {
         const term = e.target.value.toLowerCase();
         const filtered = catalog.filter(p => 
@@ -21,7 +19,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// --- COMUNICACIÓN CON GOOGLE (CORE) ---
 async function callApi(action, payload = {}) {
     try {
         const response = await fetch(API_URL, {
@@ -42,13 +39,11 @@ async function callApi(action, payload = {}) {
     } catch (error) {
         console.error("Error API:", error);
         document.getElementById('connection-status').className = 'status-dot bg-danger';
-        // En caso de error crítico, quitamos el spinner para que el usuario pueda reintentar o ver el error
         document.getElementById('catalog-grid').innerHTML = '<div class="col-12 text-center text-danger mt-5"><i class="bi bi-wifi-off fs-1"></i><p>Error de conexión con el Servidor.</p></div>';
         return { success: false, error: error.message };
     }
 }
 
-// --- LÓGICA DE NEGOCIO ---
 async function fetchCatalog() {
     const res = await callApi('getAdminCatalog');
     if (res.success) {
@@ -61,7 +56,6 @@ function renderGrid(data) {
     const grid = document.getElementById('catalog-grid');
     grid.innerHTML = '';
     
-    // CASO VACÍO: Si no hay productos, mostrar mensaje amigable y botón de crear
     if(data.length === 0) {
         grid.innerHTML = `
             <div class="col-12 text-center mt-5">
@@ -80,11 +74,12 @@ function renderGrid(data) {
         
         const imgHtml = p.imagen ? `<div style="height:140px; overflow:hidden; border-radius:4px; margin-bottom:10px; background:#000;"><img src="${p.imagen}" style="width:100%; height:100%; object-fit:cover;"></div>` : '';
 
+        // Mostramos el Código generado en la tarjeta
         const html = `
         <div class="col-12 col-md-6 col-lg-4">
             <div class="product-card h-100 p-3 d-flex flex-column">
                 <div class="d-flex justify-content-between mb-2">
-                    <span class="badge ${isService ? 'bg-warning text-dark' : 'bg-info text-dark'}">${p.tipo}</span>
+                    <span class="badge ${isService ? 'bg-warning text-dark' : 'bg-info text-dark'}">${p.codigo || 'NEW'}</span>
                     ${webStatus}
                 </div>
                 ${imgHtml}
@@ -107,11 +102,11 @@ function renderGrid(data) {
     });
 }
 
-// --- CRUD PRODUCTOS ---
 function openProductModal() {
     document.getElementById('prodForm').reset();
     document.getElementById('p-uuid').value = "";
-    document.getElementById('p-imagen-data').value = ""; // Limpiar data oculta
+    document.getElementById('p-imagen-data').value = ""; 
+    document.getElementById('p-codigo').value = "Autogenerado"; // Visual feedback
     new bootstrap.Modal(document.getElementById('prodModal')).show();
 }
 
@@ -121,16 +116,18 @@ function loadEditModal(uuid) {
 
     document.getElementById('p-uuid').value = p.uuid;
     document.getElementById('p-tipo').value = p.tipo;
+    // Cargar Categoría y Código
+    document.getElementById('p-categoria').value = p.categoria || "AUTOMATIZACION_APPS";
     document.getElementById('p-codigo').value = p.codigo;
+    
     document.getElementById('p-nombre').value = p.nombre;
     document.getElementById('p-specs').value = p.specs;
     document.getElementById('p-costo').value = p.costo;
     document.getElementById('p-precio').value = p.precio;
     document.getElementById('p-web').checked = p.visibleWeb;
     
-    // GESTIÓN DE IMAGEN AL EDITAR
-    document.getElementById('p-imagen-data').value = p.imagen; // Guardamos la URL actual en el hidden
-    document.getElementById('p-imagen-file').value = ""; // Limpiamos el input de archivo
+    document.getElementById('p-imagen-data').value = p.imagen; 
+    document.getElementById('p-imagen-file').value = ""; 
     
     new bootstrap.Modal(document.getElementById('prodModal')).show();
 }
@@ -139,12 +136,10 @@ async function saveProduct() {
     const btn = document.querySelector('#prodModal .btn-cyan');
     btn.disabled = true; btn.innerText = "PROCESANDO...";
 
-    // 1. DETECTAR SI HAY NUEVA IMAGEN
     const fileInput = document.getElementById('p-imagen-file');
-    let finalImage = document.getElementById('p-imagen-data').value; // Por defecto usamos la que ya estaba
+    let finalImage = document.getElementById('p-imagen-data').value; 
 
     if (fileInput.files.length > 0) {
-        // Hay archivo nuevo, convertimos a Base64
         try {
             btn.innerText = "SUBIENDO FOTO...";
             finalImage = await toBase64(fileInput.files[0]);
@@ -158,13 +153,14 @@ async function saveProduct() {
     const payload = {
         uuid: document.getElementById('p-uuid').value,
         tipo: document.getElementById('p-tipo').value,
-        codigo: document.getElementById('p-codigo').value,
+        categoria: document.getElementById('p-categoria').value, // NUEVO CAMPO ENVIADO
+        codigo: document.getElementById('p-codigo').value, // Se envía (vacío si es nuevo)
         nombre: document.getElementById('p-nombre').value,
         specs: document.getElementById('p-specs').value,
         costo: Number(document.getElementById('p-costo').value),
         precio: Number(document.getElementById('p-precio').value),
         iva: 19, 
-        imagen: finalImage, // Enviamos el Base64 gigante o la URL corta
+        imagen: finalImage, 
         visibleWeb: document.getElementById('p-web').checked
     };
 
@@ -173,13 +169,12 @@ async function saveProduct() {
 
     if (res.success) {
         bootstrap.Modal.getInstance(document.getElementById('prodModal')).hide();
-        fetchCatalog(); // Recargar grilla
+        fetchCatalog(); 
     } else {
         alert("Error al guardar: " + res.error);
     }
 }
 
-// Utilidad para leer archivo
 const toBase64 = file => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -187,7 +182,6 @@ const toBase64 = file => new Promise((resolve, reject) => {
     reader.onerror = error => reject(error);
 });
 
-// --- CARRITO Y PDF ---
 function addToCart(uuid) {
     const p = catalog.find(x => x.uuid === uuid);
     const exist = cart.find(x => x.uuid === uuid);
