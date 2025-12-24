@@ -1,387 +1,226 @@
-// --- CONFIGURACIÓN ---
-const API_URL = "https://script.google.com/macros/s/AKfycbw1Ybr3bX_uJj-NHp9pTCe90EIaRLuNwCnwaJ-7cpdQEdA2VMbiGXxfvzlTImp8pts_6w/exec"; 
+// --- CONFIGURACIÓN DE CONEXIÓN ---
+const API_URL = "https://script.google.com/macros/s/AKfycbzxdto8_T2I0KlH0sSs78MOG2GtYcQNzwBKS4XkuR3rKmogT9Kqql3_D918VYhO6sX4xg/exec"; 
+const API_KEY = "AST_2025_SECURE"; // Debe coincidir con la del backend
 
 let catalog = [];
 let cart = [];
+const fmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
 // --- INICIALIZACIÓN ---
 document.addEventListener('DOMContentLoaded', () => {
-    loadCatalog();
+    fetchCatalog();
     
-    // Buscador
-    document.getElementById('search-input').addEventListener('input', (e) => {
+    // Filtro de búsqueda
+    document.getElementById('search').addEventListener('input', (e) => {
         const term = e.target.value.toLowerCase();
         const filtered = catalog.filter(p => 
             p.nombre.toLowerCase().includes(term) || 
-            String(p.specs).toLowerCase().includes(term)
+            String(p.codigo).toLowerCase().includes(term)
         );
-        renderCatalog(filtered);
+        renderGrid(filtered);
     });
 });
 
-// --- LÓGICA DE CATÁLOGO ---
-async function loadCatalog() {
+// --- COMUNICACIÓN CON GOOGLE (CORE) ---
+async function callApi(action, payload = {}) {
     try {
-        const response = await fetch(`${API_URL}?action=getCatalog`);
-        const result = await response.json();
+        // En Apps Script externo, siempre usamos POST "no-cors" o POST normal con redirect follow
+        // Para recibir respuesta JSON limpia de GAS en dominio externo:
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            redirect: "follow", // VITAL PARA APPS SCRIPT
+            headers: { "Content-Type": "text/plain;charset=utf-8" }, // Evita preflight OPTIONS
+            body: JSON.stringify({
+                action: action,
+                auth: API_KEY,
+                payload: payload
+            })
+        });
         
-        if (result.success) {
-            catalog = result.data;
-            renderCatalog(catalog);
-        } else {
-            alert("Error cargando productos: " + result.error);
-        }
-    } catch (e) {
-        console.error(e);
-        document.getElementById('product-grid').innerHTML = `<p class="text-danger text-center">Error de conexión. Verifica tu internet y la URL del Script.</p>`;
+        const result = await response.json();
+        document.getElementById('connection-status').className = 'status-dot bg-success';
+        return result;
+
+    } catch (error) {
+        console.error("Error API:", error);
+        document.getElementById('connection-status').className = 'status-dot bg-danger';
+        alert("Error de conexión con el servidor A.S.T.");
+        return { success: false };
     }
 }
 
-function renderCatalog(products) {
-    const container = document.getElementById('product-grid');
-    container.innerHTML = '';
+// --- LÓGICA DE NEGOCIO ---
+async function fetchCatalog() {
+    const res = await callApi('getAdminCatalog');
+    if (res.success) {
+        catalog = res.data;
+        renderGrid(catalog);
+    }
+}
 
-    if (products.length === 0) {
-        container.innerHTML = '<p class="text-center text-muted col-12">No hay productos que coincidan.</p>';
+function renderGrid(data) {
+    const grid = document.getElementById('catalog-grid');
+    grid.innerHTML = '';
+    
+    if(data.length === 0) {
+        grid.innerHTML = '<p class="text-center text-muted">No se encontraron registros.</p>';
         return;
     }
 
-    products.forEach(prod => {
-        const imgHtml = prod.imagen 
-            ? `<img src="${prod.imagen}" alt="${prod.nombre}">` 
-            : `<i class="bi bi-box-seam no-image-placeholder"></i>`;
-
-        // OJO: Usamos encodeURIComponent para pasar strings seguros en el onclick
-        const prodDataSafe = encodeURIComponent(JSON.stringify(prod));
-
+    data.forEach(p => {
+        const isService = p.tipo === 'SERVICIO';
+        const webStatus = p.visibleWeb ? '<span class="text-success small">● WEB ON</span>' : '<span class="text-secondary small">● WEB OFF</span>';
+        
         const html = `
-            <div class="col-6 col-md-4 col-lg-3">
-                <div class="card product-card h-100">
-                     <div class="position-absolute top-0 end-0 p-2 z-2">
-                        <button class="btn btn-sm btn-light rounded-circle shadow-sm" style="width:30px; height:30px; padding:0;" onclick="openEditProductModal('${prodDataSafe}')">
-                            <i class="bi bi-pencil-fill text-warning" style="font-size: 0.8rem;"></i>
-                        </button>
+        <div class="col-12 col-md-6 col-lg-4">
+            <div class="product-card h-100 p-3 d-flex flex-column">
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="badge ${isService ? 'bg-warning text-dark' : 'bg-info text-dark'}">${p.tipo}</span>
+                    ${webStatus}
+                </div>
+                <h6 class="text-white fw-bold mb-1">${p.nombre}</h6>
+                <small class="text-secondary mb-3 text-truncate">${p.specs || '---'}</small>
+                
+                <div class="mt-auto d-flex justify-content-between align-items-end">
+                    <div>
+                        <small class="text-muted" style="font-size:0.7rem">VENTA</small>
+                        <div class="text-cyan fw-bold fs-5">${fmt.format(p.precio)}</div>
                     </div>
-
-                    <div class="card-img-top-wrapper border-bottom" onclick="addToCart('${prod.nombre}')">
-                        ${imgHtml}
-                    </div>
-                    <div class="card-body p-2 d-flex flex-column" onclick="addToCart('${prod.nombre}')">
-                        <h6 class="card-title text-truncate mb-1" style="font-size: 0.9rem;">${prod.nombre}</h6>
-                        <small class="text-muted mb-2 d-none d-sm-block text-truncate">${prod.specs}</small>
-                        <div class="mt-auto d-flex justify-content-between align-items-center">
-                            <span class="price-tag">${formatCurrency(prod.precio)}</span>
-                            <button class="btn btn-sm btn-outline-primary rounded-circle">
-                                <i class="bi bi-plus"></i>
-                            </button>
-                        </div>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-outline-secondary" onclick='loadEditModal("${p.uuid}")'><i class="bi bi-pencil-fill"></i></button>
+                        <button class="btn btn-sm btn-cyan" onclick='addToCart("${p.uuid}")'><i class="bi bi-plus-lg"></i></button>
                     </div>
                 </div>
             </div>
-        `;
-        container.innerHTML += html;
+        </div>`;
+        grid.innerHTML += html;
     });
 }
 
-// --- LÓGICA DE EDICIÓN DE PRODUCTO (CRUD) ---
-function openEditProductModal(prodDataEncoded) {
-    const prod = JSON.parse(decodeURIComponent(prodDataEncoded));
-    
-    document.getElementById('edit-original-name').value = prod.nombre;
-    document.getElementById('edit-name').value = prod.nombre;
-    document.getElementById('edit-specs').value = prod.specs;
-    document.getElementById('edit-price').value = prod.precio;
-    document.getElementById('edit-image').value = prod.imagen || "";
-
-    new bootstrap.Modal(document.getElementById('editProductModal')).show();
+// --- CRUD PRODUCTOS ---
+function openProductModal() {
+    document.getElementById('prodForm').reset();
+    document.getElementById('p-uuid').value = "";
+    new bootstrap.Modal(document.getElementById('prodModal')).show();
 }
 
-async function saveProductChanges() {
-    const originalName = document.getElementById('edit-original-name').value;
-    const name = document.getElementById('edit-name').value.trim();
-    const specs = document.getElementById('edit-specs').value.trim();
-    const price = parseFloat(document.getElementById('edit-price').value);
-    const image = document.getElementById('edit-image').value.trim();
+function loadEditModal(uuid) {
+    const p = catalog.find(x => x.uuid === uuid);
+    if (!p) return;
 
-    if (!name || isNaN(price)) {
-        alert("Nombre y precio son obligatorios.");
-        return;
-    }
+    document.getElementById('p-uuid').value = p.uuid;
+    document.getElementById('p-tipo').value = p.tipo;
+    document.getElementById('p-codigo').value = p.codigo;
+    document.getElementById('p-nombre').value = p.nombre;
+    document.getElementById('p-specs').value = p.specs;
+    document.getElementById('p-costo').value = p.costo;
+    document.getElementById('p-precio').value = p.precio;
+    // ... mapea el resto (iva, imagen, web) igual que antes
+    document.getElementById('p-web').checked = p.visibleWeb;
+    document.getElementById('p-imagen').value = p.imagen;
+    
+    new bootstrap.Modal(document.getElementById('prodModal')).show();
+}
 
-    const spinner = document.getElementById('edit-loading-msg');
-    spinner.classList.remove('d-none');
+async function saveProduct() {
+    const btn = document.querySelector('#prodModal .btn-cyan');
+    btn.disabled = true; btn.innerText = "GUARDANDO...";
 
     const payload = {
-        action: 'updateProduct',
-        payload: {
-            originalName: originalName,
-            nombre: name,
-            specs: specs,
-            precio: price,
-            imagen: image
-        }
+        uuid: document.getElementById('p-uuid').value,
+        tipo: document.getElementById('p-tipo').value,
+        codigo: document.getElementById('p-codigo').value,
+        nombre: document.getElementById('p-nombre').value,
+        specs: document.getElementById('p-specs').value,
+        costo: Number(document.getElementById('p-costo').value),
+        precio: Number(document.getElementById('p-precio').value),
+        // Puedes agregar IVA aquí si lo usas en el form
+        iva: 19, 
+        imagen: document.getElementById('p-imagen').value,
+        visibleWeb: document.getElementById('p-web').checked
     };
 
-    try {
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify(payload)
-        });
-        const result = await response.json();
+    const res = await callApi('upsertProduct', payload);
+    btn.disabled = false; btn.innerText = "GUARDAR DATOS";
 
-        if (result.success) {
-            alert("Producto actualizado correctamente.");
-            bootstrap.Modal.getInstance(document.getElementById('editProductModal')).hide();
-            await loadCatalog(); // Recarga inmediata
-        } else {
-            alert("Error: " + result.error);
-        }
-    } catch (e) {
-        alert("Error de conexión: " + e);
-    } finally {
-        spinner.classList.add('d-none');
+    if (res.success) {
+        bootstrap.Modal.getInstance(document.getElementById('prodModal')).hide();
+        fetchCatalog(); // Recargar grilla
+    } else {
+        alert("Error al guardar: " + res.error);
     }
 }
 
-
-// --- LÓGICA DEL CARRITO ---
-function addToCart(productName) {
-    const product = catalog.find(p => p.nombre === productName);
-    // Clonamos para independencia total en el carrito
-    cart.push({ ...product, cantidad: 1 });
+// --- CARRITO Y PDF ---
+function addToCart(uuid) {
+    const p = catalog.find(x => x.uuid === uuid);
+    const exist = cart.find(x => x.uuid === uuid);
+    if(exist) exist.cantidad++;
+    else cart.push({ ...p, cantidad: 1 });
     updateCartUI();
 }
 
 function updateCartUI() {
-    const count = cart.reduce((sum, item) => sum + item.cantidad, 0);
-    document.getElementById('cart-count').innerText = count;
-}
-
-function openCart() {
-    renderCart();
-    new bootstrap.Modal(document.getElementById('cartModal')).show();
-}
-
-function renderCart() {
+    document.getElementById('cart-count').innerText = cart.length;
     const container = document.getElementById('cart-items');
     container.innerHTML = '';
-    
-    let subtotal = 0;
-    const includeTax = document.getElementById('tax-toggle').checked;
+    let total = 0;
 
-    if (cart.length === 0) {
-        container.innerHTML = '<p class="text-center text-muted">Tu carrito está vacío.</p>';
-    }
-
-    cart.forEach((item, index) => {
-        subtotal += item.precio * item.cantidad;
-        
-        // Renderizado de imagen miniatura en carrito
-        const thumbHtml = item.imagen 
-            ? `<img src="${item.imagen}" class="rounded" style="width:40px; height:40px; object-fit:cover; cursor:pointer;" onclick="updateCartImage(${index})">`
-            : `<div class="bg-light rounded d-flex align-items-center justify-content-center" style="width:40px; height:40px; cursor:pointer;" onclick="updateCartImage(${index})"><i class="bi bi-camera text-muted"></i></div>`;
-
+    cart.forEach((item, i) => {
+        total += (item.precio * item.cantidad);
         container.innerHTML += `
-            <div class="d-flex flex-column mb-3 border-bottom pb-2">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div class="d-flex" style="flex: 1; margin-right: 10px;">
-                        ${thumbHtml}
-                        <div class="ms-2">
-                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 150px;">${item.nombre}</h6>
-                            <small class="text-primary" style="font-size:0.75rem;">Clic en foto para editar</small>
-                        </div>
-                    </div>
-                    
-                    <div class="d-flex align-items-center bg-light rounded px-2" style="height: 32px;">
-                        <i class="bi bi-dash-circle text-muted" style="cursor:pointer;" onclick="changeQty(${index}, -1)"></i>
-                        <input type="text" class="quantity-control mx-1" value="${item.cantidad}" readonly style="width:25px; text-align:center; border:none; background:transparent;">
-                        <i class="bi bi-plus-circle text-primary" style="cursor:pointer;" onclick="changeQty(${index}, 1)"></i>
-                    </div>
+            <div class="d-flex justify-content-between align-items-center border-bottom border-secondary py-2">
+                <div class="text-white small">
+                    <strong>${item.nombre}</strong><br>
+                    ${fmt.format(item.precio)} x ${item.cantidad}
                 </div>
-                
-                <div class="mt-2">
-                     <textarea class="form-control form-control-sm" rows="2" placeholder="Descripción / Detalles..." onchange="updateCartSpecs(this, ${index})">${item.specs || ''}</textarea>
-                </div>
-
-                <div class="mt-2 d-flex align-items-center justify-content-end">
-                    <span class="small me-2 text-muted">Unitario:</span>
-                    <input type="number" 
-                           class="form-control form-control-sm" 
-                           value="${item.precio}" 
-                           onchange="updateCartPrice(this, ${index})" 
-                           style="width: 120px;">
-                </div>
+                <button class="btn btn-sm text-danger" onclick="cart.splice(${i},1);updateCartUI()"><i class="bi bi-trash"></i></button>
             </div>
         `;
     });
-
-    const tax = includeTax ? subtotal * 0.19 : 0;
-    const total = subtotal + tax;
-
-    document.getElementById('cart-subtotal').innerText = formatCurrency(subtotal);
-    document.getElementById('cart-tax').innerText = formatCurrency(tax);
-    document.getElementById('cart-total').innerText = formatCurrency(total);
+    document.getElementById('cart-total').innerText = fmt.format(total);
 }
 
-function changeQty(index, delta) {
-    cart[index].cantidad += delta;
-    if (cart[index].cantidad <= 0) cart.splice(index, 1);
-    renderCart();
-    updateCartUI();
+function openCart() {
+    new bootstrap.Modal(document.getElementById('cartModal')).show();
 }
 
-// FUNCIONES DE EDICIÓN EN CARRITO
-function updateCartPrice(input, index) {
-    const newPrice = parseFloat(input.value);
-    if(isNaN(newPrice) || newPrice < 0) {
-        alert("Precio inválido");
-        input.value = cart[index].precio; 
-        return;
-    }
-    cart[index].precio = newPrice;
-    renderCart();
-}
-
-function updateCartSpecs(textarea, index) {
-    cart[index].specs = textarea.value;
-}
-
-function updateCartImage(index) {
-    const currentUrl = cart[index].imagen || "";
-    const newUrl = prompt("Ingresa la URL de la imagen para este producto:", currentUrl);
-    
-    if (newUrl !== null) {
-        cart[index].imagen = newUrl.trim();
-        renderCart();
-    }
-}
-
-// --- LÓGICA DE ITEM MANUAL ---
-function openManualItemModal() {
-    new bootstrap.Modal(document.getElementById('manualItemModal')).show();
-}
-
-function addManualItem() {
-    const nameInput = document.getElementById('manual-name');
-    const specsInput = document.getElementById('manual-specs');
-    const priceInput = document.getElementById('manual-price');
-    const imgInput = document.getElementById('manual-image');
-
-    const name = nameInput.value.trim();
-    const specs = specsInput.value.trim();
-    const price = parseFloat(priceInput.value);
-    const img = imgInput.value.trim();
-
-    if (!name || isNaN(price)) {
-        alert("El Nombre y el Precio son obligatorios.");
-        return;
-    }
-
-    const newItem = {
-        nombre: name,
-        precio: price,
-        specs: specs,
-        cantidad: 1,
-        imagen: img || null 
+async function generatePDF() {
+    const cliente = {
+        nombre: document.getElementById('c-nombre').value,
+        nit: document.getElementById('c-nit').value,
+        telefono: document.getElementById('c-tel').value
     };
 
-    cart.push(newItem);
-    
-    nameInput.value = '';
-    specsInput.value = '';
-    priceInput.value = '';
-    imgInput.value = '';
-    
-    bootstrap.Modal.getInstance(document.getElementById('manualItemModal')).hide();
-    updateCartUI();
-    
-    alert("¡Item agregado! Recuerda: Se guardará en tu catálogo cuando generes el documento.");
-}
+    if(!cliente.nombre || cart.length === 0) return alert("Falta Cliente o Items");
 
-// --- PROCESAR PEDIDO ---
-async function processOrder(mode) {
-    const name = document.getElementById('client-name').value.trim();
-    
-    if (!name || cart.length === 0) {
-        alert("Error: El carrito está vacío o falta el nombre del cliente.");
-        return;
-    }
+    const btn = document.querySelector('#cartModal .btn-success');
+    btn.disabled = true; btn.innerHTML = "GENERANDO...";
 
-    const loading = document.getElementById('loading-msg');
-    loading.classList.remove('d-none');
-    
-    const docType = document.getElementById('doc-type').value; 
-    const includeTax = document.getElementById('tax-toggle').checked;
-    
-    const subtotal = cart.reduce((sum, i) => sum + (i.precio * i.cantidad), 0);
-    const tax = includeTax ? subtotal * 0.19 : 0;
-    const granTotal = subtotal + tax;
+    // Calculamos subtotal e iva simple
+    let sub = 0;
+    cart.forEach(c => sub += (c.precio * c.cantidad));
+    // Asumiendo 19% general por ahora, puedes refinar esto
+    const iva = sub * 0.19; 
 
-    const orderData = {
-        action: 'createDocument', 
-        payload: {
-            tipoDocumento: docType,
-            cliente: {
-                nombre: name,
-                nit: document.getElementById('client-nit').value || "",
-                telefono: document.getElementById('client-phone').value || ""
-            },
-            items: cart.map(i => ({
-                nombre: i.nombre,
-                cantidad: i.cantidad,
-                precio: i.precio,
-                specs: i.specs || "",
-                imagen: i.imagen || "",
-                subtotal: i.cantidad * i.precio
-            })),
-            totales: {
-                subtotal: subtotal,
-                iva: tax,
-                granTotal: granTotal
-            }
-        }
+    const payload = {
+        tipoDoc: document.getElementById('doc-type').value,
+        cliente: cliente,
+        items: cart.map(c => ({...c, subtotal: c.precio * c.cantidad})),
+        totales: { subtotal: sub, iva: iva, granTotal: sub + iva }
     };
 
-    try {
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify(orderData)
-        });
-        
-        const result = await response.json();
-
-        if (result.success) {
-            cart = [];
-            updateCartUI();
-            bootstrap.Modal.getInstance(document.getElementById('cartModal')).hide();
-            
-            // RECARGA INMEDIATA (Auto-aprendizaje visual)
-            await loadCatalog();
-            // ---------------------------------------------
-
-            if (mode === 'whatsapp') {
-                const emoji = docType === 'Cuenta de Cobro' ? '✅' : '📄';
-                const msg = `Hola *${name}*, ${emoji} adjunto tu *${docType}* N° *${result.consecutivo}*.\n\nPuedes descargarla aquí:\n${result.pdfUrl}`;
-                const wsUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
-                window.open(wsUrl, '_blank');
-            } else {
-                const confirmMsg = `¡${docType} ${result.consecutivo} generado!\n\nSe ha actualizado el catálogo con los productos nuevos.\n\n¿Abrir PDF?`;
-                if(confirm(confirmMsg)) {
-                    window.open(result.pdfUrl, '_blank');
-                }
-            }
-        } else {
-            alert("Error del servidor: " + result.error);
+    const res = await callApi('createDocument', payload);
+    
+    btn.disabled = false; btn.innerHTML = "GENERAR PDF";
+    
+    if (res.success) {
+        cart = []; updateCartUI();
+        bootstrap.Modal.getInstance(document.getElementById('cartModal')).hide();
+        if(confirm(`Documento ${res.data.consecutivo} Generado. ¿Abrir?`)) {
+            window.open(res.data.url, '_blank');
         }
-
-    } catch (e) {
-        console.error(e);
-        alert("Error de conexión. Revisa que la URL del Script sea correcta.");
-    } finally {
-        loading.classList.add('d-none');
+    } else {
+        alert("Error: " + res.error);
     }
-}
-
-function formatCurrency(num) {
-    return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(num);
 }
