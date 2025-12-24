@@ -1,6 +1,6 @@
-// --- CONFIGURACIÓN DE CONEXIÓN ---
-const API_URL = "https://script.google.com/macros/s/AKfycbzxdto8_T2I0KlH0sSs78MOG2GtYcQNzwBKS4XkuR3rKmogT9Kqql3_D918VYhO6sX4xg/exec"; 
-const API_KEY = "AST_2025_SECURE"; // Debe coincidir con la del backend
+// --- CONFIGURACIÓN ---
+const API_URL = "https://script.google.com/macros/s/AKfycbxLayXPyMofzgr6sbh8o5dB57Gg_jKIJGlIo8peFhojmklaE1xkzSssXsH4dhIHMKbfgA/exec"; 
+const API_KEY = "AST_2025_SECURE"; 
 
 let catalog = [];
 let cart = [];
@@ -42,8 +42,9 @@ async function callApi(action, payload = {}) {
     } catch (error) {
         console.error("Error API:", error);
         document.getElementById('connection-status').className = 'status-dot bg-danger';
-        alert("Error de conexión con el servidor A.S.T.");
-        return { success: false };
+        // En caso de error crítico, quitamos el spinner para que el usuario pueda reintentar o ver el error
+        document.getElementById('catalog-grid').innerHTML = '<div class="col-12 text-center text-danger mt-5"><i class="bi bi-wifi-off fs-1"></i><p>Error de conexión con el Servidor.</p></div>';
+        return { success: false, error: error.message };
     }
 }
 
@@ -60,8 +61,16 @@ function renderGrid(data) {
     const grid = document.getElementById('catalog-grid');
     grid.innerHTML = '';
     
+    // CASO VACÍO: Si no hay productos, mostrar mensaje amigable y botón de crear
     if(data.length === 0) {
-        grid.innerHTML = '<p class="text-center text-muted">No se encontraron registros.</p>';
+        grid.innerHTML = `
+            <div class="col-12 text-center mt-5">
+                <i class="bi bi-box-seam text-secondary" style="font-size: 3rem;"></i>
+                <p class="text-muted">La base de datos está vacía.</p>
+                <button class="btn btn-outline-cyan btn-sm" onclick="openProductModal()">
+                    <i class="bi bi-plus-lg"></i> Crear primer ítem
+                </button>
+            </div>`;
         return;
     }
 
@@ -69,6 +78,8 @@ function renderGrid(data) {
         const isService = p.tipo === 'SERVICIO';
         const webStatus = p.visibleWeb ? '<span class="text-success small">● WEB ON</span>' : '<span class="text-secondary small">● WEB OFF</span>';
         
+        const imgHtml = p.imagen ? `<div style="height:140px; overflow:hidden; border-radius:4px; margin-bottom:10px; background:#000;"><img src="${p.imagen}" style="width:100%; height:100%; object-fit:cover;"></div>` : '';
+
         const html = `
         <div class="col-12 col-md-6 col-lg-4">
             <div class="product-card h-100 p-3 d-flex flex-column">
@@ -76,6 +87,7 @@ function renderGrid(data) {
                     <span class="badge ${isService ? 'bg-warning text-dark' : 'bg-info text-dark'}">${p.tipo}</span>
                     ${webStatus}
                 </div>
+                ${imgHtml}
                 <h6 class="text-white fw-bold mb-1">${p.nombre}</h6>
                 <small class="text-secondary mb-3 text-truncate">${p.specs || '---'}</small>
                 
@@ -99,6 +111,7 @@ function renderGrid(data) {
 function openProductModal() {
     document.getElementById('prodForm').reset();
     document.getElementById('p-uuid').value = "";
+    document.getElementById('p-imagen-data').value = ""; // Limpiar data oculta
     new bootstrap.Modal(document.getElementById('prodModal')).show();
 }
 
@@ -114,14 +127,33 @@ function loadEditModal(uuid) {
     document.getElementById('p-costo').value = p.costo;
     document.getElementById('p-precio').value = p.precio;
     document.getElementById('p-web').checked = p.visibleWeb;
-    document.getElementById('p-imagen').value = p.imagen;
+    
+    // GESTIÓN DE IMAGEN AL EDITAR
+    document.getElementById('p-imagen-data').value = p.imagen; // Guardamos la URL actual en el hidden
+    document.getElementById('p-imagen-file').value = ""; // Limpiamos el input de archivo
     
     new bootstrap.Modal(document.getElementById('prodModal')).show();
 }
 
 async function saveProduct() {
     const btn = document.querySelector('#prodModal .btn-cyan');
-    btn.disabled = true; btn.innerText = "GUARDANDO...";
+    btn.disabled = true; btn.innerText = "PROCESANDO...";
+
+    // 1. DETECTAR SI HAY NUEVA IMAGEN
+    const fileInput = document.getElementById('p-imagen-file');
+    let finalImage = document.getElementById('p-imagen-data').value; // Por defecto usamos la que ya estaba
+
+    if (fileInput.files.length > 0) {
+        // Hay archivo nuevo, convertimos a Base64
+        try {
+            btn.innerText = "SUBIENDO FOTO...";
+            finalImage = await toBase64(fileInput.files[0]);
+        } catch (e) {
+            alert("Error al procesar la imagen: " + e);
+            btn.disabled = false; btn.innerText = "GUARDAR DATOS";
+            return;
+        }
+    }
 
     const payload = {
         uuid: document.getElementById('p-uuid').value,
@@ -132,7 +164,7 @@ async function saveProduct() {
         costo: Number(document.getElementById('p-costo').value),
         precio: Number(document.getElementById('p-precio').value),
         iva: 19, 
-        imagen: document.getElementById('p-imagen').value,
+        imagen: finalImage, // Enviamos el Base64 gigante o la URL corta
         visibleWeb: document.getElementById('p-web').checked
     };
 
@@ -141,11 +173,19 @@ async function saveProduct() {
 
     if (res.success) {
         bootstrap.Modal.getInstance(document.getElementById('prodModal')).hide();
-        fetchCatalog(); 
+        fetchCatalog(); // Recargar grilla
     } else {
         alert("Error al guardar: " + res.error);
     }
 }
+
+// Utilidad para leer archivo
+const toBase64 = file => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = error => reject(error);
+});
 
 // --- CARRITO Y PDF ---
 function addToCart(uuid) {
