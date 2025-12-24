@@ -9,6 +9,8 @@ body {
     background-color: var(--ast-dark);
     font-family: 'Segoe UI', Roboto, sans-serif;
     color: #e0e0e0;
+    /* Evitar el rebote elástico en móviles */
+    overscroll-behavior-y: none; 
 }
 
 /* Utilidades */
