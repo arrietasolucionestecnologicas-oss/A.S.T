@@ -32,7 +32,6 @@
     </nav>
 
     <div class="container-fluid py-4">
-        
         <div class="row justify-content-center mb-4">
             <div class="col-12 col-md-6">
                 <div class="input-group input-group-sm border-cyan-glow">
@@ -72,23 +71,33 @@
                                  <input type="file" id="p-imagen-file" class="form-control form-control-sm bg-dark text-white border-secondary" accept="image/*">
                                  <button class="btn btn-outline-secondary" type="button" onclick="document.getElementById('p-imagen-file').value = ''"><i class="bi bi-x"></i></button>
                              </div>
-                             <div class="form-text text-muted" style="font-size: 0.7rem;">Sube una foto desde tu galería.</div>
                              <input type="hidden" id="p-imagen-data"> 
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="small text-cyan fw-bold">Categoría (Brochure)</label>
+                            <select id="p-categoria" class="form-select form-select-sm bg-dark text-white border-cyan">
+                                <option value="AUTOMATIZACION_APPS">Automatización y Apps (APP-XXX)</option>
+                                <option value="DOMOTICA_HOGAR">Domótica y Hogar (DOM-XXX)</option>
+                                <option value="ELECTRICIDAD_RESIDENCIAL">Electricidad Residencial (ELE-XXX)</option>
+                                <option value="MANTENIMIENTO_INDUSTRIAL">Mantenimiento Industrial (IND-XXX)</option>
+                            </select>
                         </div>
 
                         <div class="row g-2 mb-2">
                             <div class="col-6">
                                 <label class="small text-secondary">Tipo</label>
                                 <select id="p-tipo" class="form-select form-select-sm bg-dark text-white border-secondary">
-                                    <option value="PRODUCTO">PRODUCTO</option>
-                                    <option value="SERVICIO">SERVICIO</option>
+                                    <option value="PRODUCTO">PRODUCTO FÍSICO</option>
+                                    <option value="SERVICIO">SERVICIO / M.O.</option>
                                 </select>
                             </div>
                             <div class="col-6">
-                                <label class="small text-secondary">Código</label>
-                                <input type="text" id="p-codigo" class="form-control form-control-sm bg-dark text-white border-secondary">
+                                <label class="small text-secondary">Código (Auto)</label>
+                                <input type="text" id="p-codigo" class="form-control form-control-sm bg-dark text-secondary border-secondary" placeholder="Autogenerado" readonly>
                             </div>
                         </div>
+
                         <div class="mb-2">
                             <label class="small text-secondary">Nombre</label>
                             <input type="text" id="p-nombre" class="form-control bg-dark text-white border-secondary" required>
