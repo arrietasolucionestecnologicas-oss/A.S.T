@@ -4,6 +4,8 @@ const API_KEY = "AST_2025_SECURE";
 
 let catalog = [];
 let cart = [];
+let currentView = 'PRODUCTO'; // Estado actual de la vista
+
 const fmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -11,35 +13,43 @@ document.addEventListener('DOMContentLoaded', () => {
     
     document.getElementById('search').addEventListener('input', (e) => {
         const term = e.target.value.toLowerCase();
+        // Filtramos por término Y por la vista actual
         const filtered = catalog.filter(p => 
-            p.nombre.toLowerCase().includes(term) || 
-            String(p.codigo).toLowerCase().includes(term)
+            p.tipo === currentView && 
+            (p.nombre.toLowerCase().includes(term) || String(p.codigo).toLowerCase().includes(term))
         );
         renderGrid(filtered);
     });
 });
 
+// --- SISTEMA DE PESTAÑAS ---
+function switchTab(viewName) {
+    currentView = viewName;
+    
+    // UI Updates
+    document.getElementById('tab-prod').className = viewName === 'PRODUCTO' ? 'nav-link active' : 'nav-link';
+    document.getElementById('tab-serv').className = viewName === 'SERVICIO' ? 'nav-link active' : 'nav-link';
+    
+    // Refrescar Grid
+    const filtered = catalog.filter(p => p.tipo === currentView);
+    renderGrid(filtered);
+}
+
+// --- API CORE ---
 async function callApi(action, payload = {}) {
     try {
         const response = await fetch(API_URL, {
-            method: 'POST',
-            redirect: "follow",
+            method: 'POST', redirect: "follow",
             headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify({
-                action: action,
-                auth: API_KEY,
-                payload: payload
-            })
+            body: JSON.stringify({ action: action, auth: API_KEY, payload: payload })
         });
-        
         const result = await response.json();
         document.getElementById('connection-status').className = 'status-dot bg-success';
         return result;
-
     } catch (error) {
         console.error("Error API:", error);
         document.getElementById('connection-status').className = 'status-dot bg-danger';
-        document.getElementById('catalog-grid').innerHTML = '<div class="col-12 text-center text-danger mt-5"><i class="bi bi-wifi-off fs-1"></i><p>Error de conexión con el Servidor.</p></div>';
+        document.getElementById('catalog-grid').innerHTML = '<div class="col-12 text-center text-danger mt-5"><i class="bi bi-wifi-off fs-1"></i><p>Error de conexión.</p></div>';
         return { success: false, error: error.message };
     }
 }
@@ -48,7 +58,8 @@ async function fetchCatalog() {
     const res = await callApi('getAdminCatalog');
     if (res.success) {
         catalog = res.data;
-        renderGrid(catalog);
+        // Al cargar, renderizamos la vista por defecto
+        switchTab(currentView); 
     }
 }
 
@@ -60,26 +71,26 @@ function renderGrid(data) {
         grid.innerHTML = `
             <div class="col-12 text-center mt-5">
                 <i class="bi bi-box-seam text-secondary" style="font-size: 3rem;"></i>
-                <p class="text-muted">La base de datos está vacía.</p>
+                <p class="text-muted">No hay ${currentView === 'PRODUCTO' ? 'productos' : 'servicios'} registrados.</p>
                 <button class="btn btn-outline-cyan btn-sm" onclick="openProductModal()">
-                    <i class="bi bi-plus-lg"></i> Crear primer ítem
+                    <i class="bi bi-plus-lg"></i> Crear Nuevo
                 </button>
             </div>`;
         return;
     }
 
     data.forEach(p => {
-        const isService = p.tipo === 'SERVICIO';
-        const webStatus = p.visibleWeb ? '<span class="text-success small">● WEB ON</span>' : '<span class="text-secondary small">● WEB OFF</span>';
-        
-        const imgHtml = p.imagen ? `<div style="height:140px; overflow:hidden; border-radius:4px; margin-bottom:10px; background:#000;"><img src="${p.imagen}" style="width:100%; height:100%; object-fit:cover;"></div>` : '';
+        // Solo mostramos imagen si es producto y tiene imagen
+        const showImg = p.tipo === 'PRODUCTO' && p.imagen;
+        const imgHtml = showImg ? `<div style="height:140px; overflow:hidden; border-radius:4px; margin-bottom:10px; background:#000;"><img src="${p.imagen}" style="width:100%; height:100%; object-fit:cover;"></div>` : '';
+        const badgeCode = p.tipo === 'PRODUCTO' ? `<span class="badge bg-info text-dark">${p.codigo}</span>` : `<span class="badge bg-warning text-dark">SERVICIO</span>`;
 
         const html = `
         <div class="col-12 col-md-6 col-lg-4">
             <div class="product-card h-100 p-3 d-flex flex-column">
                 <div class="d-flex justify-content-between mb-2">
-                    <span class="badge ${isService ? 'bg-warning text-dark' : 'bg-info text-dark'}">${p.codigo || 'NEW'}</span>
-                    ${webStatus}
+                    ${badgeCode}
+                    ${p.tipo==='PRODUCTO' && p.visibleWeb ? '<span class="text-success small">● WEB ON</span>' : ''}
                 </div>
                 ${imgHtml}
                 <h6 class="text-white fw-bold mb-1">${p.nombre}</h6>
@@ -87,7 +98,7 @@ function renderGrid(data) {
                 
                 <div class="mt-auto d-flex justify-content-between align-items-end">
                     <div>
-                        <small class="text-muted" style="font-size:0.7rem">VENTA</small>
+                        <small class="text-muted" style="font-size:0.7rem">PRECIO</small>
                         <div class="text-cyan fw-bold fs-5">${fmt.format(p.precio)}</div>
                     </div>
                     <div class="btn-group">
@@ -101,12 +112,31 @@ function renderGrid(data) {
     });
 }
 
+// --- GESTIÓN FORMULARIO DINÁMICO ---
 function openProductModal() {
     document.getElementById('prodForm').reset();
     document.getElementById('p-uuid').value = "";
-    document.getElementById('p-imagen-data').value = ""; 
-    document.getElementById('p-codigo').value = "Autogenerado"; 
+    document.getElementById('p-imagen-data').value = "";
+    
+    // Pre-seleccionar el tipo según la pestaña donde esté
+    document.getElementById('p-tipo').value = currentView;
+    toggleFormFields();
+    
     new bootstrap.Modal(document.getElementById('prodModal')).show();
+}
+
+function toggleFormFields() {
+    const tipo = document.getElementById('p-tipo').value;
+    const fieldsProd = document.getElementById('fields-producto');
+    const fieldWeb = document.getElementById('field-web');
+
+    if (tipo === 'SERVICIO') {
+        fieldsProd.classList.add('hidden-section'); // Ocultar Imagen, Categoria, Codigo, Costo
+        fieldWeb.classList.add('hidden-section');   // Ocultar opción Web
+    } else {
+        fieldsProd.classList.remove('hidden-section');
+        fieldWeb.classList.remove('hidden-section');
+    }
 }
 
 function loadEditModal(uuid) {
@@ -115,14 +145,21 @@ function loadEditModal(uuid) {
 
     document.getElementById('p-uuid').value = p.uuid;
     document.getElementById('p-tipo').value = p.tipo;
-    document.getElementById('p-categoria').value = p.categoria || "AUTOMATIZACION_APPS";
-    document.getElementById('p-codigo').value = p.codigo;
+    toggleFormFields(); // Ajustar vista
+
+    // Campos comunes
     document.getElementById('p-nombre').value = p.nombre;
     document.getElementById('p-specs').value = p.specs;
-    document.getElementById('p-costo').value = p.costo;
     document.getElementById('p-precio').value = p.precio;
-    document.getElementById('p-web').checked = p.visibleWeb;
-    document.getElementById('p-imagen-data').value = p.imagen; 
+
+    // Campos solo producto
+    if (p.tipo === 'PRODUCTO') {
+        document.getElementById('p-categoria').value = p.categoria || "AUTOMATIZACION_APPS";
+        document.getElementById('p-codigo').value = p.codigo;
+        document.getElementById('p-costo').value = p.costo;
+        document.getElementById('p-web').checked = p.visibleWeb;
+        document.getElementById('p-imagen-data').value = p.imagen;
+    }
     document.getElementById('p-imagen-file').value = ""; 
     
     new bootstrap.Modal(document.getElementById('prodModal')).show();
@@ -135,29 +172,31 @@ async function saveProduct() {
     const fileInput = document.getElementById('p-imagen-file');
     let finalImage = document.getElementById('p-imagen-data').value; 
 
-    if (fileInput.files.length > 0) {
+    if (fileInput && fileInput.files.length > 0) {
         try {
             btn.innerText = "SUBIENDO FOTO...";
             finalImage = await toBase64(fileInput.files[0]);
         } catch (e) {
-            alert("Error al procesar la imagen: " + e);
-            btn.disabled = false; btn.innerText = "GUARDAR DATOS";
-            return;
+            alert("Error imagen"); btn.disabled = false; return;
         }
     }
 
+    const tipo = document.getElementById('p-tipo').value;
+    
     const payload = {
         uuid: document.getElementById('p-uuid').value,
-        tipo: document.getElementById('p-tipo').value,
-        categoria: document.getElementById('p-categoria').value,
-        codigo: document.getElementById('p-codigo').value, 
+        tipo: tipo,
         nombre: document.getElementById('p-nombre').value,
         specs: document.getElementById('p-specs').value,
-        costo: Number(document.getElementById('p-costo').value),
         precio: Number(document.getElementById('p-precio').value),
-        iva: 19, 
-        imagen: finalImage, 
-        visibleWeb: document.getElementById('p-web').checked
+        
+        // Datos opcionales (Solo si es Producto)
+        categoria: tipo==='PRODUCTO' ? document.getElementById('p-categoria').value : "",
+        codigo: tipo==='PRODUCTO' ? document.getElementById('p-codigo').value : "",
+        costo: tipo==='PRODUCTO' ? Number(document.getElementById('p-costo').value) : 0,
+        imagen: tipo==='PRODUCTO' ? finalImage : "",
+        visibleWeb: tipo==='PRODUCTO' ? document.getElementById('p-web').checked : false,
+        iva: 19 
     };
 
     const res = await callApi('upsertProduct', payload);
@@ -167,7 +206,7 @@ async function saveProduct() {
         bootstrap.Modal.getInstance(document.getElementById('prodModal')).hide();
         fetchCatalog(); 
     } else {
-        alert("Error al guardar: " + res.error);
+        alert("Error: " + res.error);
     }
 }
 
@@ -178,16 +217,12 @@ const toBase64 = file => new Promise((resolve, reject) => {
     reader.onerror = error => reject(error);
 });
 
-// --- LÓGICA CARRITO Y PRECIOS EDITABLES ---
+// --- LÓGICA CARRITO Y CÁLCULOS ---
 function addToCart(uuid) {
     const p = catalog.find(x => x.uuid === uuid);
     const exist = cart.find(x => x.uuid === uuid);
-    if(exist) {
-        exist.cantidad++;
-    } else {
-        // Al agregar, clonamos el precio base. Este 'cart' es el que se edita.
-        cart.push({ ...p, cantidad: 1 });
-    }
+    if(exist) exist.cantidad++;
+    else cart.push({ ...p, cantidad: 1 });
     updateCartUI();
 }
 
@@ -195,12 +230,10 @@ function updateCartUI() {
     document.getElementById('cart-count').innerText = cart.length;
     const container = document.getElementById('cart-items');
     container.innerHTML = '';
-    let total = 0;
-
+    
+    let subtotal = 0;
     cart.forEach((item, i) => {
-        total += (item.precio * item.cantidad);
-        
-        // Renderizamos Inputs editables para Cantidad y Precio
+        subtotal += (item.precio * item.cantidad);
         container.innerHTML += `
             <div class="row align-items-center border-bottom border-secondary py-2 g-2">
                 <div class="col-12 text-white small">
@@ -223,6 +256,13 @@ function updateCartUI() {
             </div>
         `;
     });
+
+    // CÁLCULO DE IVA DINÁMICO
+    const applyIva = document.getElementById('check-iva').checked;
+    const ivaVal = applyIva ? (subtotal * 0.19) : 0;
+    const total = subtotal + ivaVal;
+
+    document.getElementById('iva-display').innerText = `IVA: ${fmt.format(ivaVal)}`;
     document.getElementById('cart-total').innerText = fmt.format(total);
 }
 
@@ -232,7 +272,7 @@ function updateCartItem(index, field, value) {
         if (val <= 0) cart.splice(index, 1);
         else cart[index].cantidad = val;
     } else if (field === 'price') {
-        cart[index].precio = val; // Aquí guardamos el descuento o ajuste manual
+        cart[index].precio = val; 
     }
     updateCartUI();
 }
@@ -241,32 +281,34 @@ function openCart() {
     new bootstrap.Modal(document.getElementById('cartModal')).show();
 }
 
-// --- ENVÍO POR WHATSAPP (INFORMAL) ---
+// --- ENVÍO WHATSAPP ---
 function sendWhatsApp() {
     const cliente = document.getElementById('c-nombre').value;
     if(!cliente || cart.length === 0) return alert("Falta Cliente o Items");
 
-    let msg = `Hola *${cliente}*, aquí tienes tu cotización preliminar de *A.S.T.*:\n\n`;
-    let total = 0;
+    let msg = `Hola *${cliente}*, cotización preliminar *A.S.T.*:\n\n`;
+    let subtotal = 0;
 
     cart.forEach(item => {
         const sub = item.precio * item.cantidad;
-        total += sub;
-        msg += `▪ ${item.cantidad}x ${item.nombre}\n   $${item.precio.toLocaleString()} c/u = $${sub.toLocaleString()}\n`;
+        subtotal += sub;
+        msg += `▪ ${item.cantidad}x ${item.nombre}\n   $${item.precio.toLocaleString()} = $${sub.toLocaleString()}\n`;
     });
 
-    const iva = total * 0.19;
-    const granTotal = total + iva;
+    const applyIva = document.getElementById('check-iva').checked;
+    const ivaVal = applyIva ? (subtotal * 0.19) : 0;
+    const granTotal = subtotal + ivaVal;
 
-    msg += `\nSubtotal: $${total.toLocaleString()}`;
-    msg += `\nIVA (19%): $${iva.toLocaleString()}`;
+    if (applyIva) {
+        msg += `\nSubtotal: $${subtotal.toLocaleString()}`;
+        msg += `\nIVA (19%): $${ivaVal.toLocaleString()}`;
+    }
     msg += `\n*TOTAL: $${granTotal.toLocaleString()}*`;
     
-    // Abrir WhatsApp Web/App
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
-// --- GENERACIÓN PDF (FORMAL) ---
+// --- GENERAR PDF ---
 async function generatePDF() {
     const cliente = {
         nombre: document.getElementById('c-nombre').value,
@@ -279,20 +321,23 @@ async function generatePDF() {
     const btn = document.querySelector('#cartModal .btn-success');
     btn.disabled = true; btn.innerHTML = "GENERANDO...";
 
-    let sub = 0;
-    cart.forEach(c => sub += (c.precio * c.cantidad));
-    const iva = sub * 0.19; 
+    // Recalcular totales finales
+    let subtotal = 0;
+    cart.forEach(c => subtotal += (c.precio * c.cantidad));
+    
+    const applyIva = document.getElementById('check-iva').checked;
+    const ivaVal = applyIva ? (subtotal * 0.19) : 0;
 
     const payload = {
         tipoDoc: document.getElementById('doc-type').value,
         cliente: cliente,
         items: cart.map(c => ({...c, subtotal: c.precio * c.cantidad})),
-        totales: { subtotal: sub, iva: iva, granTotal: sub + iva }
+        totales: { subtotal: subtotal, iva: ivaVal, granTotal: subtotal + ivaVal }
     };
 
     const res = await callApi('createDocument', payload);
     
-    btn.disabled = false; btn.innerHTML = '<i class="bi bi-file-earmark-pdf"></i> PDF (Formal)';
+    btn.disabled = false; btn.innerHTML = '<i class="bi bi-file-earmark-pdf"></i> Generar PDF';
     
     if (res.success) {
         cart = []; updateCartUI();
