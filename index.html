@@ -133,10 +133,11 @@
         <div class="modal-dialog modal-lg">
             <div class="modal-content bg-dark-panel border-cyan">
                 <div class="modal-header border-secondary">
-                    <h5 class="modal-title text-cyan">Generador de Documentos</h5>
+                    <h5 class="modal-title text-cyan">Cotización / Pedido</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    <p class="small text-secondary text-center"><i class="bi bi-pencil"></i> Puedes editar el precio y la cantidad antes de enviar.</p>
                     <div id="cart-items" class="mb-3"></div>
                     
                     <div class="p-3 mb-3 border border-secondary rounded bg-dark">
@@ -156,8 +157,13 @@
                         <h4 class="text-cyan m-0" id="cart-total">$0</h4>
                     </div>
                 </div>
-                <div class="modal-footer border-secondary">
-                    <button type="button" class="btn btn-success w-100 fw-bold" onclick="generatePDF()">GENERAR PDF</button>
+                <div class="modal-footer border-secondary d-flex justify-content-between">
+                    <button type="button" class="btn btn-outline-success fw-bold" onclick="sendWhatsApp()">
+                        <i class="bi bi-whatsapp"></i> WhatsApp (Informal)
+                    </button>
+                    <button type="button" class="btn btn-success fw-bold" onclick="generatePDF()">
+                        <i class="bi bi-file-earmark-pdf"></i> PDF (Formal)
+                    </button>
                 </div>
             </div>
         </div>
