@@ -5,6 +5,7 @@ const API_KEY = "AST_2025_SECURE";
 let catalog = [];
 let cart = [];
 let currentView = 'PRODUCTO'; 
+let deferredPrompt; // Para la instalación PWA
 
 const fmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
@@ -19,6 +20,27 @@ document.addEventListener('DOMContentLoaded', () => {
         renderGrid(filtered);
     });
 });
+
+// --- LÓGICA DE INSTALACIÓN PWA ---
+window.addEventListener('beforeinstallprompt', (e) => {
+    // Prevenir que el navegador muestre su propio mini-infobar inmediatamente
+    e.preventDefault();
+    deferredPrompt = e;
+    // Mostrar nuestro botón de instalación
+    const installBtn = document.getElementById('btn-install');
+    if (installBtn) {
+        installBtn.style.display = 'block';
+    }
+});
+
+async function installApp() {
+    if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        document.getElementById('btn-install').style.display = 'none';
+    }
+}
 
 function switchTab(viewName) {
     currentView = viewName;
@@ -71,7 +93,6 @@ function renderGrid(data) {
     }
 
     data.forEach(p => {
-        // AHORA MOSTRAMOS IMAGEN PARA TODOS LOS TIPOS SI EXISTE
         const imgHtml = p.imagen ? `<div style="height:140px; overflow:hidden; border-radius:4px; margin-bottom:10px; background:#000;"><img src="${p.imagen}" style="width:100%; height:100%; object-fit:cover;"></div>` : '';
         const badgeCode = p.tipo === 'PRODUCTO' ? `<span class="badge bg-info text-dark">${p.codigo}</span>` : `<span class="badge bg-warning text-dark">SERVICIO</span>`;
 
@@ -114,9 +135,8 @@ function openProductModal() {
 function toggleFormFields() {
     const tipo = document.getElementById('p-tipo').value;
     const fieldsProd = document.getElementById('fields-producto');
-    // Ya no ocultamos el switch web ni la imagen, solo los campos específicos de producto
     if (tipo === 'SERVICIO') {
-        fieldsProd.classList.add('hidden-section'); // Ocultar Categoria, Codigo, Costo
+        fieldsProd.classList.add('hidden-section'); 
     } else {
         fieldsProd.classList.remove('hidden-section');
     }
@@ -171,11 +191,9 @@ async function saveProduct() {
         specs: document.getElementById('p-specs').value,
         precio: Number(document.getElementById('p-precio').value),
         
-        // Imagen y Web ahora son universales
         imagen: finalImage,
         visibleWeb: document.getElementById('p-web').checked,
 
-        // Datos específicos de producto
         categoria: tipo==='PRODUCTO' ? document.getElementById('p-categoria').value : "",
         codigo: tipo==='PRODUCTO' ? document.getElementById('p-codigo').value : "",
         costo: tipo==='PRODUCTO' ? Number(document.getElementById('p-costo').value) : 0,
@@ -263,10 +281,16 @@ function openCart() {
 }
 
 function sendWhatsApp() {
-    const cliente = document.getElementById('c-nombre').value;
-    if(!cliente || cart.length === 0) return alert("Falta Cliente o Items");
+    // CAMBIO: El nombre del cliente ya no es obligatorio para WhatsApp
+    const clienteInput = document.getElementById('c-nombre').value;
+    
+    // Solo validamos que haya items en el carrito
+    if (cart.length === 0) return alert("El carrito está vacío. Agrega productos o servicios.");
 
-    let msg = `Hola *${cliente}*, cotización preliminar *A.S.T.*:\n\n`;
+    // Saludo condicional: si no hay nombre, saludo genérico
+    const saludo = clienteInput ? `Hola *${clienteInput}*` : `Hola`;
+    
+    let msg = `${saludo}, cotización preliminar *A.S.T.*:\n\n`;
     let subtotal = 0;
 
     cart.forEach(item => {
@@ -289,13 +313,14 @@ function sendWhatsApp() {
 }
 
 async function generatePDF() {
+    // Para PDF sí mantenemos la validación estricta (Documento Formal)
     const cliente = {
         nombre: document.getElementById('c-nombre').value,
         nit: document.getElementById('c-nit').value,
         telefono: document.getElementById('c-tel').value
     };
 
-    if(!cliente.nombre || cart.length === 0) return alert("Falta Cliente o Items");
+    if(!cliente.nombre || cart.length === 0) return alert("Para generar PDF (Formal) se requiere el Nombre del Cliente.");
 
     const btn = document.querySelector('#cartModal .btn-success');
     btn.disabled = true; btn.innerHTML = "GENERANDO...";
