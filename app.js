@@ -4,16 +4,14 @@ const API_KEY = "AST_2025_SECURE";
 
 let catalog = [];
 let cart = [];
-let currentView = 'PRODUCTO'; // Estado actual de la vista
+let currentView = 'PRODUCTO'; 
 
 const fmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
 document.addEventListener('DOMContentLoaded', () => {
     fetchCatalog();
-    
     document.getElementById('search').addEventListener('input', (e) => {
         const term = e.target.value.toLowerCase();
-        // Filtramos por término Y por la vista actual
         const filtered = catalog.filter(p => 
             p.tipo === currentView && 
             (p.nombre.toLowerCase().includes(term) || String(p.codigo).toLowerCase().includes(term))
@@ -22,20 +20,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// --- SISTEMA DE PESTAÑAS ---
 function switchTab(viewName) {
     currentView = viewName;
-    
-    // UI Updates
     document.getElementById('tab-prod').className = viewName === 'PRODUCTO' ? 'nav-link active' : 'nav-link';
     document.getElementById('tab-serv').className = viewName === 'SERVICIO' ? 'nav-link active' : 'nav-link';
-    
-    // Refrescar Grid
     const filtered = catalog.filter(p => p.tipo === currentView);
     renderGrid(filtered);
 }
 
-// --- API CORE ---
 async function callApi(action, payload = {}) {
     try {
         const response = await fetch(API_URL, {
@@ -58,7 +50,6 @@ async function fetchCatalog() {
     const res = await callApi('getAdminCatalog');
     if (res.success) {
         catalog = res.data;
-        // Al cargar, renderizamos la vista por defecto
         switchTab(currentView); 
     }
 }
@@ -80,9 +71,8 @@ function renderGrid(data) {
     }
 
     data.forEach(p => {
-        // Solo mostramos imagen si es producto y tiene imagen
-        const showImg = p.tipo === 'PRODUCTO' && p.imagen;
-        const imgHtml = showImg ? `<div style="height:140px; overflow:hidden; border-radius:4px; margin-bottom:10px; background:#000;"><img src="${p.imagen}" style="width:100%; height:100%; object-fit:cover;"></div>` : '';
+        // AHORA MOSTRAMOS IMAGEN PARA TODOS LOS TIPOS SI EXISTE
+        const imgHtml = p.imagen ? `<div style="height:140px; overflow:hidden; border-radius:4px; margin-bottom:10px; background:#000;"><img src="${p.imagen}" style="width:100%; height:100%; object-fit:cover;"></div>` : '';
         const badgeCode = p.tipo === 'PRODUCTO' ? `<span class="badge bg-info text-dark">${p.codigo}</span>` : `<span class="badge bg-warning text-dark">SERVICIO</span>`;
 
         const html = `
@@ -90,7 +80,7 @@ function renderGrid(data) {
             <div class="product-card h-100 p-3 d-flex flex-column">
                 <div class="d-flex justify-content-between mb-2">
                     ${badgeCode}
-                    ${p.tipo==='PRODUCTO' && p.visibleWeb ? '<span class="text-success small">● WEB ON</span>' : ''}
+                    ${p.visibleWeb ? '<span class="text-success small">● WEB ON</span>' : ''}
                 </div>
                 ${imgHtml}
                 <h6 class="text-white fw-bold mb-1">${p.nombre}</h6>
@@ -112,30 +102,23 @@ function renderGrid(data) {
     });
 }
 
-// --- GESTIÓN FORMULARIO DINÁMICO ---
 function openProductModal() {
     document.getElementById('prodForm').reset();
     document.getElementById('p-uuid').value = "";
     document.getElementById('p-imagen-data').value = "";
-    
-    // Pre-seleccionar el tipo según la pestaña donde esté
     document.getElementById('p-tipo').value = currentView;
     toggleFormFields();
-    
     new bootstrap.Modal(document.getElementById('prodModal')).show();
 }
 
 function toggleFormFields() {
     const tipo = document.getElementById('p-tipo').value;
     const fieldsProd = document.getElementById('fields-producto');
-    const fieldWeb = document.getElementById('field-web');
-
+    // Ya no ocultamos el switch web ni la imagen, solo los campos específicos de producto
     if (tipo === 'SERVICIO') {
-        fieldsProd.classList.add('hidden-section'); // Ocultar Imagen, Categoria, Codigo, Costo
-        fieldWeb.classList.add('hidden-section');   // Ocultar opción Web
+        fieldsProd.classList.add('hidden-section'); // Ocultar Categoria, Codigo, Costo
     } else {
         fieldsProd.classList.remove('hidden-section');
-        fieldWeb.classList.remove('hidden-section');
     }
 }
 
@@ -145,22 +128,20 @@ function loadEditModal(uuid) {
 
     document.getElementById('p-uuid').value = p.uuid;
     document.getElementById('p-tipo').value = p.tipo;
-    toggleFormFields(); // Ajustar vista
+    toggleFormFields();
 
-    // Campos comunes
     document.getElementById('p-nombre').value = p.nombre;
     document.getElementById('p-specs').value = p.specs;
     document.getElementById('p-precio').value = p.precio;
+    document.getElementById('p-web').checked = p.visibleWeb;
+    document.getElementById('p-imagen-data').value = p.imagen;
+    document.getElementById('p-imagen-file').value = "";
 
-    // Campos solo producto
     if (p.tipo === 'PRODUCTO') {
         document.getElementById('p-categoria').value = p.categoria || "AUTOMATIZACION_APPS";
         document.getElementById('p-codigo').value = p.codigo;
         document.getElementById('p-costo').value = p.costo;
-        document.getElementById('p-web').checked = p.visibleWeb;
-        document.getElementById('p-imagen-data').value = p.imagen;
     }
-    document.getElementById('p-imagen-file').value = ""; 
     
     new bootstrap.Modal(document.getElementById('prodModal')).show();
 }
@@ -190,12 +171,14 @@ async function saveProduct() {
         specs: document.getElementById('p-specs').value,
         precio: Number(document.getElementById('p-precio').value),
         
-        // Datos opcionales (Solo si es Producto)
+        // Imagen y Web ahora son universales
+        imagen: finalImage,
+        visibleWeb: document.getElementById('p-web').checked,
+
+        // Datos específicos de producto
         categoria: tipo==='PRODUCTO' ? document.getElementById('p-categoria').value : "",
         codigo: tipo==='PRODUCTO' ? document.getElementById('p-codigo').value : "",
         costo: tipo==='PRODUCTO' ? Number(document.getElementById('p-costo').value) : 0,
-        imagen: tipo==='PRODUCTO' ? finalImage : "",
-        visibleWeb: tipo==='PRODUCTO' ? document.getElementById('p-web').checked : false,
         iva: 19 
     };
 
@@ -217,7 +200,6 @@ const toBase64 = file => new Promise((resolve, reject) => {
     reader.onerror = error => reject(error);
 });
 
-// --- LÓGICA CARRITO Y CÁLCULOS ---
 function addToCart(uuid) {
     const p = catalog.find(x => x.uuid === uuid);
     const exist = cart.find(x => x.uuid === uuid);
@@ -257,7 +239,6 @@ function updateCartUI() {
         `;
     });
 
-    // CÁLCULO DE IVA DINÁMICO
     const applyIva = document.getElementById('check-iva').checked;
     const ivaVal = applyIva ? (subtotal * 0.19) : 0;
     const total = subtotal + ivaVal;
@@ -281,7 +262,6 @@ function openCart() {
     new bootstrap.Modal(document.getElementById('cartModal')).show();
 }
 
-// --- ENVÍO WHATSAPP ---
 function sendWhatsApp() {
     const cliente = document.getElementById('c-nombre').value;
     if(!cliente || cart.length === 0) return alert("Falta Cliente o Items");
@@ -308,7 +288,6 @@ function sendWhatsApp() {
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
-// --- GENERAR PDF ---
 async function generatePDF() {
     const cliente = {
         nombre: document.getElementById('c-nombre').value,
@@ -321,7 +300,6 @@ async function generatePDF() {
     const btn = document.querySelector('#cartModal .btn-success');
     btn.disabled = true; btn.innerHTML = "GENERANDO...";
 
-    // Recalcular totales finales
     let subtotal = 0;
     cart.forEach(c => subtotal += (c.precio * c.cantidad));
     
