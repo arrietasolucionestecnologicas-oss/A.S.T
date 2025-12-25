@@ -21,6 +21,8 @@
         .nav-pills .nav-link { color: #aaa; border: 1px solid #333; margin-right: 5px; }
         .nav-pills .nav-link.active { background-color: var(--ast-cyan); color: #000; font-weight: bold; }
         .hidden-section { display: none !important; }
+        /* Botón instalar */
+        #btn-install { display: none; }
     </style>
 </head>
 <body>
@@ -30,6 +32,11 @@
             <img src="icon.png" width="30" height="30" class="d-inline-block align-top rounded me-2" alt="">
             A.S.T. <span class="text-cyan">SYSTEMS</span>
         </a>
+        
+        <button id="btn-install" class="btn btn-sm btn-outline-light ms-2 fw-bold" onclick="installApp()">
+            <i class="bi bi-download"></i> INSTALAR APP
+        </button>
+
         <div class="ms-auto d-flex gap-2 align-items-center">
             <div id="connection-status" class="status-dot bg-secondary" title="Estado de Conexión"></div>
             <button class="btn btn-sm btn-outline-cyan" onclick="openProductModal()">
@@ -172,7 +179,7 @@
                     <div class="p-3 mb-3 border border-secondary rounded bg-dark">
                         <h6 class="text-white mb-2">Datos del Cliente</h6>
                         <div class="row g-2">
-                            <div class="col-md-6"><input type="text" id="c-nombre" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Nombre / Razón Social"></div>
+                            <div class="col-md-6"><input type="text" id="c-nombre" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Nombre / Razón Social (Opcional para WhatsApp)"></div>
                             <div class="col-md-3"><input type="text" id="c-nit" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="NIT"></div>
                             <div class="col-md-3"><input type="text" id="c-tel" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Teléfono"></div>
                         </div>
