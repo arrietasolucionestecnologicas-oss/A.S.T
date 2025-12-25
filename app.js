@@ -74,7 +74,6 @@ function renderGrid(data) {
         
         const imgHtml = p.imagen ? `<div style="height:140px; overflow:hidden; border-radius:4px; margin-bottom:10px; background:#000;"><img src="${p.imagen}" style="width:100%; height:100%; object-fit:cover;"></div>` : '';
 
-        // Mostramos el Código generado en la tarjeta
         const html = `
         <div class="col-12 col-md-6 col-lg-4">
             <div class="product-card h-100 p-3 d-flex flex-column">
@@ -106,7 +105,7 @@ function openProductModal() {
     document.getElementById('prodForm').reset();
     document.getElementById('p-uuid').value = "";
     document.getElementById('p-imagen-data').value = ""; 
-    document.getElementById('p-codigo').value = "Autogenerado"; // Visual feedback
+    document.getElementById('p-codigo').value = "Autogenerado"; 
     new bootstrap.Modal(document.getElementById('prodModal')).show();
 }
 
@@ -116,16 +115,13 @@ function loadEditModal(uuid) {
 
     document.getElementById('p-uuid').value = p.uuid;
     document.getElementById('p-tipo').value = p.tipo;
-    // Cargar Categoría y Código
     document.getElementById('p-categoria').value = p.categoria || "AUTOMATIZACION_APPS";
     document.getElementById('p-codigo').value = p.codigo;
-    
     document.getElementById('p-nombre').value = p.nombre;
     document.getElementById('p-specs').value = p.specs;
     document.getElementById('p-costo').value = p.costo;
     document.getElementById('p-precio').value = p.precio;
     document.getElementById('p-web').checked = p.visibleWeb;
-    
     document.getElementById('p-imagen-data').value = p.imagen; 
     document.getElementById('p-imagen-file').value = ""; 
     
@@ -153,8 +149,8 @@ async function saveProduct() {
     const payload = {
         uuid: document.getElementById('p-uuid').value,
         tipo: document.getElementById('p-tipo').value,
-        categoria: document.getElementById('p-categoria').value, // NUEVO CAMPO ENVIADO
-        codigo: document.getElementById('p-codigo').value, // Se envía (vacío si es nuevo)
+        categoria: document.getElementById('p-categoria').value,
+        codigo: document.getElementById('p-codigo').value, 
         nombre: document.getElementById('p-nombre').value,
         specs: document.getElementById('p-specs').value,
         costo: Number(document.getElementById('p-costo').value),
@@ -182,11 +178,16 @@ const toBase64 = file => new Promise((resolve, reject) => {
     reader.onerror = error => reject(error);
 });
 
+// --- LÓGICA CARRITO Y PRECIOS EDITABLES ---
 function addToCart(uuid) {
     const p = catalog.find(x => x.uuid === uuid);
     const exist = cart.find(x => x.uuid === uuid);
-    if(exist) exist.cantidad++;
-    else cart.push({ ...p, cantidad: 1 });
+    if(exist) {
+        exist.cantidad++;
+    } else {
+        // Al agregar, clonamos el precio base. Este 'cart' es el que se edita.
+        cart.push({ ...p, cantidad: 1 });
+    }
     updateCartUI();
 }
 
@@ -198,23 +199,74 @@ function updateCartUI() {
 
     cart.forEach((item, i) => {
         total += (item.precio * item.cantidad);
+        
+        // Renderizamos Inputs editables para Cantidad y Precio
         container.innerHTML += `
-            <div class="d-flex justify-content-between align-items-center border-bottom border-secondary py-2">
-                <div class="text-white small">
-                    <strong>${item.nombre}</strong><br>
-                    ${fmt.format(item.precio)} x ${item.cantidad}
+            <div class="row align-items-center border-bottom border-secondary py-2 g-2">
+                <div class="col-12 text-white small">
+                    <strong>${item.nombre}</strong> <span class="badge bg-secondary">${item.tipo}</span>
                 </div>
-                <button class="btn btn-sm text-danger" onclick="cart.splice(${i},1);updateCartUI()"><i class="bi bi-trash"></i></button>
+                <div class="col-3">
+                    <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary p-1 text-center" 
+                           value="${item.cantidad}" onchange="updateCartItem(${i}, 'qty', this.value)">
+                </div>
+                <div class="col-4">
+                    <input type="number" class="form-control form-control-sm bg-dark text-cyan border-secondary p-1 text-end" 
+                           value="${item.precio}" onchange="updateCartItem(${i}, 'price', this.value)">
+                </div>
+                <div class="col-3 text-end text-muted small">
+                   ${fmt.format(item.precio * item.cantidad)}
+                </div>
+                <div class="col-2 text-end">
+                    <button class="btn btn-sm text-danger" onclick="cart.splice(${i},1);updateCartUI()"><i class="bi bi-trash"></i></button>
+                </div>
             </div>
         `;
     });
     document.getElementById('cart-total').innerText = fmt.format(total);
 }
 
+function updateCartItem(index, field, value) {
+    const val = Number(value);
+    if (field === 'qty') {
+        if (val <= 0) cart.splice(index, 1);
+        else cart[index].cantidad = val;
+    } else if (field === 'price') {
+        cart[index].precio = val; // Aquí guardamos el descuento o ajuste manual
+    }
+    updateCartUI();
+}
+
 function openCart() {
     new bootstrap.Modal(document.getElementById('cartModal')).show();
 }
 
+// --- ENVÍO POR WHATSAPP (INFORMAL) ---
+function sendWhatsApp() {
+    const cliente = document.getElementById('c-nombre').value;
+    if(!cliente || cart.length === 0) return alert("Falta Cliente o Items");
+
+    let msg = `Hola *${cliente}*, aquí tienes tu cotización preliminar de *A.S.T.*:\n\n`;
+    let total = 0;
+
+    cart.forEach(item => {
+        const sub = item.precio * item.cantidad;
+        total += sub;
+        msg += `▪ ${item.cantidad}x ${item.nombre}\n   $${item.precio.toLocaleString()} c/u = $${sub.toLocaleString()}\n`;
+    });
+
+    const iva = total * 0.19;
+    const granTotal = total + iva;
+
+    msg += `\nSubtotal: $${total.toLocaleString()}`;
+    msg += `\nIVA (19%): $${iva.toLocaleString()}`;
+    msg += `\n*TOTAL: $${granTotal.toLocaleString()}*`;
+    
+    // Abrir WhatsApp Web/App
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+// --- GENERACIÓN PDF (FORMAL) ---
 async function generatePDF() {
     const cliente = {
         nombre: document.getElementById('c-nombre').value,
@@ -240,7 +292,7 @@ async function generatePDF() {
 
     const res = await callApi('createDocument', payload);
     
-    btn.disabled = false; btn.innerHTML = "GENERAR PDF";
+    btn.disabled = false; btn.innerHTML = '<i class="bi bi-file-earmark-pdf"></i> PDF (Formal)';
     
     if (res.success) {
         cart = []; updateCartUI();
