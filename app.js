@@ -4,17 +4,21 @@ const API_KEY = "AST_2025_SECURE";
 
 let catalog = [];
 let cart = [];
-let projects = []; // Lista local de proyectos
-let currentProject = null; // ID del proyecto activo en vista detalle
+let projects = []; 
+let clients = []; // Memoria de Clientes
+let currentProject = null; // ID del proyecto activo
+let currentProjectData = null; // Datos completos del proyecto activo
 let currentView = 'PRODUCTO'; 
-let deferredPrompt; // Para la instalación PWA
+let deferredPrompt; 
 
 const fmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
 document.addEventListener('DOMContentLoaded', () => {
     fetchCatalog();
+    fetchClients(); // Cargar memoria de clientes
+    
     document.getElementById('search').addEventListener('input', (e) => {
-        if(currentView === 'PROYECTOS') return; // El buscador no filtra proyectos aun
+        if(currentView === 'PROYECTOS') return; 
         const term = e.target.value.toLowerCase();
         const filtered = catalog.filter(p => 
             p.tipo === currentView && 
@@ -46,17 +50,14 @@ async function installApp() {
 function switchTab(viewName) {
     currentView = viewName;
     
-    // Reset tabs styles
     document.getElementById('tab-prod').className = 'nav-link';
     document.getElementById('tab-serv').className = 'nav-link';
     document.getElementById('tab-proj').className = 'nav-link';
 
-    // Set active tab style
     if(viewName === 'PRODUCTO') document.getElementById('tab-prod').className = 'nav-link active';
     if(viewName === 'SERVICIO') document.getElementById('tab-serv').className = 'nav-link active';
     if(viewName === 'PROYECTOS') document.getElementById('tab-proj').className = 'nav-link active';
 
-    // Toggle Views
     const viewCatalog = document.getElementById('view-catalog');
     const viewProjects = document.getElementById('view-projects');
     const fabCart = document.getElementById('fab-cart');
@@ -65,9 +66,9 @@ function switchTab(viewName) {
     if (viewName === 'PROYECTOS') {
         viewCatalog.classList.add('hidden-section');
         viewProjects.classList.remove('hidden-section');
-        fabCart.style.display = 'none'; // Ocultar carrito en proyectos
-        btnMainAdd.style.display = 'none'; // Ocultar botón + principal
-        fetchProjects(); // Cargar proyectos
+        fabCart.style.display = 'none'; 
+        btnMainAdd.style.display = 'none'; 
+        fetchProjects(); 
     } else {
         viewCatalog.classList.remove('hidden-section');
         viewProjects.classList.add('hidden-section');
@@ -149,7 +150,7 @@ function renderGrid(data) {
     });
 }
 
-// --- FUNCIONES DE CATALOGO (SIN CAMBIOS) ---
+// --- FUNCIONES DE CATALOGO ---
 function openProductModal() {
     document.getElementById('prodForm').reset();
     document.getElementById('p-uuid').value = "";
@@ -245,7 +246,7 @@ const toBase64 = file => new Promise((resolve, reject) => {
     reader.onerror = error => reject(error);
 });
 
-// --- FUNCIONES CARRITO (SIN CAMBIOS) ---
+// --- FUNCIONES CARRITO ---
 function addToCart(uuid) {
     const p = catalog.find(x => x.uuid === uuid);
     const exist = cart.find(x => x.uuid === uuid);
@@ -369,6 +370,8 @@ async function generatePDF() {
     if (res.success) {
         cart = []; updateCartUI();
         bootstrap.Modal.getInstance(document.getElementById('cartModal')).hide();
+        // Recargar clientes por si se creó uno nuevo
+        fetchClients();
         if(confirm(`Documento ${res.data.consecutivo} Generado. ¿Abrir?`)) {
             window.open(res.data.url, '_blank');
         }
@@ -378,8 +381,35 @@ async function generatePDF() {
 }
 
 // =========================================================
-// === NUEVA LÓGICA DE PROYECTOS (ESTRICTAMENTE AÑADIDA) ===
+// === GESTIÓN DE PROYECTOS Y CLIENTES (MEMORIA) ===
 // =========================================================
+
+async function fetchClients() {
+    const res = await callApi('getClients');
+    if (res.success) {
+        clients = res.data;
+        const datalist = document.getElementById('clients-datalist');
+        datalist.innerHTML = '';
+        clients.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.nombre;
+            datalist.appendChild(opt);
+        });
+    }
+}
+
+function autoFillClient(val, prefix) {
+    const client = clients.find(c => c.nombre.toLowerCase() === val.toLowerCase());
+    if (client) {
+        // Rellena telefono si existe el campo
+        const telInput = document.getElementById(prefix + '-contacto') || document.getElementById(prefix + '-tel');
+        if (telInput) telInput.value = client.telefono || '';
+        
+        // Rellena NIT si existe el campo (solo en cotizaciones)
+        const nitInput = document.getElementById(prefix + '-nit');
+        if (nitInput) nitInput.value = client.nit || '';
+    }
+}
 
 async function fetchProjects() {
     const list = document.getElementById('projects-list');
@@ -396,16 +426,17 @@ async function fetchProjects() {
         }
 
         projects.forEach(p => {
-            // Cálculo visual de márgenes
             const utilClase = p.utilidad >= 0 ? 'text-profit' : 'text-loss';
-            
             const html = `
             <div class="project-card" onclick='openProjectDetails("${p.id}")'>
-                <div class="d-flex justify-content-between">
-                    <h6 class="text-white fw-bold mb-1">${p.cliente}</h6>
-                    <span class="badge bg-secondary">${p.estado}</span>
+                <div class="d-flex justify-content-between mb-1">
+                    <h6 class="text-cyan fw-bold m-0 text-truncate">${p.nombreProyecto || 'Trabajo sin nombre'}</h6>
+                    <span class="badge bg-secondary small" style="font-size:0.6rem">${p.estado}</span>
                 </div>
-                <small class="text-secondary d-block mb-2">${p.contacto || 'Sin contacto'}</small>
+                <div class="d-flex justify-content-between small text-muted mb-2">
+                    <span>${p.cliente}</span>
+                    <span>${p.contacto || ''}</span>
+                </div>
                 
                 <div class="row g-0 text-center bg-dark p-2 rounded">
                     <div class="col-4 border-end border-secondary">
@@ -428,29 +459,34 @@ async function fetchProjects() {
 }
 
 function openNewProjectModal() {
+    document.getElementById('np-proyecto').value = "";
     document.getElementById('np-cliente').value = "";
     document.getElementById('np-contacto').value = "";
     new bootstrap.Modal(document.getElementById('newProjectModal')).show();
 }
 
 async function createNewProject() {
+    const nombre = document.getElementById('np-proyecto').value;
     const cliente = document.getElementById('np-cliente').value;
     const contacto = document.getElementById('np-contacto').value;
     
-    if(!cliente) return alert("Escribe el nombre del cliente");
+    if(!nombre || !cliente) return alert("Escribe el nombre del trabajo y del cliente");
     
     const btn = document.querySelector('#newProjectModal .btn-cyan');
     btn.disabled = true; btn.innerText = "CREANDO...";
     
-    const res = await callApi('createProject', { cliente, contacto });
+    const res = await callApi('createProject', { nombreProyecto: nombre, cliente, contacto });
     
     btn.disabled = false; btn.innerText = "CREAR CARPETA";
     
     if(res.success) {
         bootstrap.Modal.getInstance(document.getElementById('newProjectModal')).hide();
         fetchProjects();
+        fetchClients(); // Actualizar memoria
     }
 }
+
+// --- EDICIÓN Y ELIMINACIÓN DE PROYECTOS ---
 
 async function openProjectDetails(id) {
     currentProject = id;
@@ -458,22 +494,23 @@ async function openProjectDetails(id) {
     modal.show();
     
     document.getElementById('pd-title').innerText = "Cargando...";
+    document.getElementById('pd-subtitle').innerText = "";
     document.getElementById('pd-items-list').innerHTML = '<div class="text-center mt-5"><div class="spinner-border text-cyan"></div></div>';
     
     const res = await callApi('getProjectDetails', { id: id });
     
     if(res.success) {
         const info = res.data.info;
+        currentProjectData = info; // Guardar para edición
         const items = res.data.items;
         
-        document.getElementById('pd-title').innerText = info.cliente;
-        document.getElementById('pd-subtitle').innerText = info.id + " | " + info.estado;
+        document.getElementById('pd-title').innerText = info.nombreProyecto || info.cliente;
+        document.getElementById('pd-subtitle').innerText = info.cliente + " | " + info.estado;
         
         document.getElementById('pd-cobrado').innerText = fmt.format(info.totalCobrado);
         document.getElementById('pd-gastos').innerText = fmt.format(info.totalCostos);
         document.getElementById('pd-utilidad').innerText = fmt.format(info.utilidad);
         
-        // Render Items
         const listDiv = document.getElementById('pd-items-list');
         listDiv.innerHTML = '';
         
@@ -503,8 +540,57 @@ async function openProjectDetails(id) {
     }
 }
 
+function openEditProjectModal() {
+    if(!currentProjectData) return;
+    
+    document.getElementById('ep-id').value = currentProjectData.id;
+    document.getElementById('ep-proyecto').value = currentProjectData.nombreProyecto;
+    document.getElementById('ep-cliente').value = currentProjectData.cliente;
+    document.getElementById('ep-contacto').value = currentProjectData.contacto;
+    document.getElementById('ep-estado').value = currentProjectData.estado;
+    
+    // Ocultar modal detalle y mostrar modal edición
+    bootstrap.Modal.getInstance(document.getElementById('projectDetailModal')).hide();
+    new bootstrap.Modal(document.getElementById('editProjectModal')).show();
+}
+
+async function updateProject() {
+    const payload = {
+        id: document.getElementById('ep-id').value,
+        nombreProyecto: document.getElementById('ep-proyecto').value,
+        cliente: document.getElementById('ep-cliente').value,
+        contacto: document.getElementById('ep-contacto').value,
+        estado: document.getElementById('ep-estado').value
+    };
+    
+    const btn = document.querySelector('#editProjectModal .btn-cyan');
+    btn.disabled = true; btn.innerText = "GUARDANDO...";
+    
+    const res = await callApi('updateProject', payload);
+    btn.disabled = false; btn.innerText = "GUARDAR CAMBIOS";
+    
+    if(res.success) {
+        bootstrap.Modal.getInstance(document.getElementById('editProjectModal')).hide();
+        fetchProjects(); // Recargar lista
+        fetchClients(); // Actualizar memoria clientes
+        openProjectDetails(payload.id); // Volver al detalle
+    }
+}
+
+async function deleteProject() {
+    if(!confirm("¿Estás seguro de eliminar este Proyecto y todos sus gastos registrados? Esta acción no se puede deshacer.")) return;
+    
+    const res = await callApi('deleteProject', { id: currentProject });
+    
+    if(res.success) {
+        bootstrap.Modal.getInstance(document.getElementById('projectDetailModal')).hide();
+        fetchProjects();
+    } else {
+        alert("Error al eliminar");
+    }
+}
+
 function openAddItemModal() {
-    // Resetear formulario
     document.getElementById('ai-desc').value = "";
     document.getElementById('ai-prov').value = "";
     document.getElementById('ai-cant').value = "1";
@@ -550,7 +636,7 @@ async function saveProjectItem() {
 
     if(res.success) {
         bootstrap.Modal.getInstance(document.getElementById('addItemModal')).hide();
-        openProjectDetails(currentProject); // Recargar detalles para ver totales actualizados
-        fetchProjects(); // Actualizar lista background
+        openProjectDetails(currentProject); 
+        fetchProjects(); 
     }
 }
