@@ -4,6 +4,8 @@ const API_KEY = "AST_2025_SECURE";
 
 let catalog = [];
 let cart = [];
+let projects = []; // Lista local de proyectos
+let currentProject = null; // ID del proyecto activo en vista detalle
 let currentView = 'PRODUCTO'; 
 let deferredPrompt; // Para la instalación PWA
 
@@ -12,6 +14,7 @@ const fmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP',
 document.addEventListener('DOMContentLoaded', () => {
     fetchCatalog();
     document.getElementById('search').addEventListener('input', (e) => {
+        if(currentView === 'PROYECTOS') return; // El buscador no filtra proyectos aun
         const term = e.target.value.toLowerCase();
         const filtered = catalog.filter(p => 
             p.tipo === currentView && 
@@ -23,10 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // --- LÓGICA DE INSTALACIÓN PWA ---
 window.addEventListener('beforeinstallprompt', (e) => {
-    // Prevenir que el navegador muestre su propio mini-infobar inmediatamente
     e.preventDefault();
     deferredPrompt = e;
-    // Mostrar nuestro botón de instalación
     const installBtn = document.getElementById('btn-install');
     if (installBtn) {
         installBtn.style.display = 'block';
@@ -44,10 +45,37 @@ async function installApp() {
 
 function switchTab(viewName) {
     currentView = viewName;
-    document.getElementById('tab-prod').className = viewName === 'PRODUCTO' ? 'nav-link active' : 'nav-link';
-    document.getElementById('tab-serv').className = viewName === 'SERVICIO' ? 'nav-link active' : 'nav-link';
-    const filtered = catalog.filter(p => p.tipo === currentView);
-    renderGrid(filtered);
+    
+    // Reset tabs styles
+    document.getElementById('tab-prod').className = 'nav-link';
+    document.getElementById('tab-serv').className = 'nav-link';
+    document.getElementById('tab-proj').className = 'nav-link';
+
+    // Set active tab style
+    if(viewName === 'PRODUCTO') document.getElementById('tab-prod').className = 'nav-link active';
+    if(viewName === 'SERVICIO') document.getElementById('tab-serv').className = 'nav-link active';
+    if(viewName === 'PROYECTOS') document.getElementById('tab-proj').className = 'nav-link active';
+
+    // Toggle Views
+    const viewCatalog = document.getElementById('view-catalog');
+    const viewProjects = document.getElementById('view-projects');
+    const fabCart = document.getElementById('fab-cart');
+    const btnMainAdd = document.getElementById('btn-main-add');
+
+    if (viewName === 'PROYECTOS') {
+        viewCatalog.classList.add('hidden-section');
+        viewProjects.classList.remove('hidden-section');
+        fabCart.style.display = 'none'; // Ocultar carrito en proyectos
+        btnMainAdd.style.display = 'none'; // Ocultar botón + principal
+        fetchProjects(); // Cargar proyectos
+    } else {
+        viewCatalog.classList.remove('hidden-section');
+        viewProjects.classList.add('hidden-section');
+        fabCart.style.display = 'flex';
+        btnMainAdd.style.display = 'block';
+        const filtered = catalog.filter(p => p.tipo === currentView);
+        renderGrid(filtered);
+    }
 }
 
 async function callApi(action, payload = {}) {
@@ -63,7 +91,6 @@ async function callApi(action, payload = {}) {
     } catch (error) {
         console.error("Error API:", error);
         document.getElementById('connection-status').className = 'status-dot bg-danger';
-        document.getElementById('catalog-grid').innerHTML = '<div class="col-12 text-center text-danger mt-5"><i class="bi bi-wifi-off fs-1"></i><p>Error de conexión.</p></div>';
         return { success: false, error: error.message };
     }
 }
@@ -72,7 +99,9 @@ async function fetchCatalog() {
     const res = await callApi('getAdminCatalog');
     if (res.success) {
         catalog = res.data;
-        switchTab(currentView); 
+        if(currentView !== 'PROYECTOS') {
+             switchTab(currentView); 
+        }
     }
 }
 
@@ -85,9 +114,6 @@ function renderGrid(data) {
             <div class="col-12 text-center mt-5">
                 <i class="bi bi-box-seam text-secondary" style="font-size: 3rem;"></i>
                 <p class="text-muted">No hay ${currentView === 'PRODUCTO' ? 'productos' : 'servicios'} registrados.</p>
-                <button class="btn btn-outline-cyan btn-sm" onclick="openProductModal()">
-                    <i class="bi bi-plus-lg"></i> Crear Nuevo
-                </button>
             </div>`;
         return;
     }
@@ -123,6 +149,7 @@ function renderGrid(data) {
     });
 }
 
+// --- FUNCIONES DE CATALOGO (SIN CAMBIOS) ---
 function openProductModal() {
     document.getElementById('prodForm').reset();
     document.getElementById('p-uuid').value = "";
@@ -218,6 +245,7 @@ const toBase64 = file => new Promise((resolve, reject) => {
     reader.onerror = error => reject(error);
 });
 
+// --- FUNCIONES CARRITO (SIN CAMBIOS) ---
 function addToCart(uuid) {
     const p = catalog.find(x => x.uuid === uuid);
     const exist = cart.find(x => x.uuid === uuid);
@@ -281,13 +309,10 @@ function openCart() {
 }
 
 function sendWhatsApp() {
-    // CAMBIO: El nombre del cliente ya no es obligatorio para WhatsApp
     const clienteInput = document.getElementById('c-nombre').value;
     
-    // Solo validamos que haya items en el carrito
     if (cart.length === 0) return alert("El carrito está vacío. Agrega productos o servicios.");
 
-    // Saludo condicional: si no hay nombre, saludo genérico
     const saludo = clienteInput ? `Hola *${clienteInput}*` : `Hola`;
     
     let msg = `${saludo}, cotización preliminar *A.S.T.*:\n\n`;
@@ -313,7 +338,6 @@ function sendWhatsApp() {
 }
 
 async function generatePDF() {
-    // Para PDF sí mantenemos la validación estricta (Documento Formal)
     const cliente = {
         nombre: document.getElementById('c-nombre').value,
         nit: document.getElementById('c-nit').value,
@@ -350,5 +374,183 @@ async function generatePDF() {
         }
     } else {
         alert("Error: " + res.error);
+    }
+}
+
+// =========================================================
+// === NUEVA LÓGICA DE PROYECTOS (ESTRICTAMENTE AÑADIDA) ===
+// =========================================================
+
+async function fetchProjects() {
+    const list = document.getElementById('projects-list');
+    list.innerHTML = '<div class="text-center text-muted mt-5"><div class="spinner-border spinner-border-sm"></div> Cargando trabajos...</div>';
+    
+    const res = await callApi('getProjects');
+    list.innerHTML = '';
+
+    if (res.success) {
+        projects = res.data;
+        if (projects.length === 0) {
+            list.innerHTML = '<div class="text-center text-muted mt-5"><i class="bi bi-folder2-open fs-1"></i><p>No hay trabajos abiertos.</p></div>';
+            return;
+        }
+
+        projects.forEach(p => {
+            // Cálculo visual de márgenes
+            const utilClase = p.utilidad >= 0 ? 'text-profit' : 'text-loss';
+            
+            const html = `
+            <div class="project-card" onclick='openProjectDetails("${p.id}")'>
+                <div class="d-flex justify-content-between">
+                    <h6 class="text-white fw-bold mb-1">${p.cliente}</h6>
+                    <span class="badge bg-secondary">${p.estado}</span>
+                </div>
+                <small class="text-secondary d-block mb-2">${p.contacto || 'Sin contacto'}</small>
+                
+                <div class="row g-0 text-center bg-dark p-2 rounded">
+                    <div class="col-4 border-end border-secondary">
+                        <small class="text-muted" style="font-size:10px">COBRADO</small>
+                        <div class="text-white small fw-bold">${fmt.format(p.totalCobrado)}</div>
+                    </div>
+                    <div class="col-4 border-end border-secondary">
+                        <small class="text-muted" style="font-size:10px">GASTOS</small>
+                        <div class="text-danger small fw-bold">${fmt.format(p.totalCostos)}</div>
+                    </div>
+                    <div class="col-4">
+                        <small class="text-muted" style="font-size:10px">UTILIDAD</small>
+                        <div class="${utilClase} small fw-bold">${fmt.format(p.utilidad)}</div>
+                    </div>
+                </div>
+            </div>`;
+            list.innerHTML += html;
+        });
+    }
+}
+
+function openNewProjectModal() {
+    document.getElementById('np-cliente').value = "";
+    document.getElementById('np-contacto').value = "";
+    new bootstrap.Modal(document.getElementById('newProjectModal')).show();
+}
+
+async function createNewProject() {
+    const cliente = document.getElementById('np-cliente').value;
+    const contacto = document.getElementById('np-contacto').value;
+    
+    if(!cliente) return alert("Escribe el nombre del cliente");
+    
+    const btn = document.querySelector('#newProjectModal .btn-cyan');
+    btn.disabled = true; btn.innerText = "CREANDO...";
+    
+    const res = await callApi('createProject', { cliente, contacto });
+    
+    btn.disabled = false; btn.innerText = "CREAR CARPETA";
+    
+    if(res.success) {
+        bootstrap.Modal.getInstance(document.getElementById('newProjectModal')).hide();
+        fetchProjects();
+    }
+}
+
+async function openProjectDetails(id) {
+    currentProject = id;
+    const modal = new bootstrap.Modal(document.getElementById('projectDetailModal'));
+    modal.show();
+    
+    document.getElementById('pd-title').innerText = "Cargando...";
+    document.getElementById('pd-items-list').innerHTML = '<div class="text-center mt-5"><div class="spinner-border text-cyan"></div></div>';
+    
+    const res = await callApi('getProjectDetails', { id: id });
+    
+    if(res.success) {
+        const info = res.data.info;
+        const items = res.data.items;
+        
+        document.getElementById('pd-title').innerText = info.cliente;
+        document.getElementById('pd-subtitle').innerText = info.id + " | " + info.estado;
+        
+        document.getElementById('pd-cobrado').innerText = fmt.format(info.totalCobrado);
+        document.getElementById('pd-gastos').innerText = fmt.format(info.totalCostos);
+        document.getElementById('pd-utilidad').innerText = fmt.format(info.utilidad);
+        
+        // Render Items
+        const listDiv = document.getElementById('pd-items-list');
+        listDiv.innerHTML = '';
+        
+        if(items.length === 0) {
+            listDiv.innerHTML = '<p class="text-center text-muted mt-4">Carpeta vacía. Agrega gastos o servicios.</p>';
+        }
+        
+        items.forEach(item => {
+            const isCobrar = (item.esCobrar === true || item.esCobrar === 'TRUE');
+            const icon = isCobrar ? '<i class="bi bi-cash-coin text-success" title="Se cobra al cliente"></i>' : '<i class="bi bi-wallet2 text-danger" title="Gasto Interno"></i>';
+            
+            const html = `
+            <div class="border-bottom border-secondary py-2">
+                <div class="d-flex justify-content-between">
+                    <span class="text-white fw-bold small">${item.descripcion}</span>
+                    <span>${icon}</span>
+                </div>
+                <div class="d-flex justify-content-between small text-muted">
+                    <span>${item.cantidad} x ${fmt.format(item.costo)} (Costo)</span>
+                    <span class="${isCobrar ? 'text-cyan' : 'text-secondary text-decoration-line-through'}">
+                        ${fmt.format(item.venta * item.cantidad)}
+                    </span>
+                </div>
+            </div>`;
+            listDiv.innerHTML += html;
+        });
+    }
+}
+
+function openAddItemModal() {
+    // Resetear formulario
+    document.getElementById('ai-desc').value = "";
+    document.getElementById('ai-prov').value = "";
+    document.getElementById('ai-cant').value = "1";
+    document.getElementById('ai-costo').value = "0";
+    document.getElementById('ai-venta').value = "0";
+    document.getElementById('ai-cobrar').checked = true;
+    toggleVentaInput();
+    
+    new bootstrap.Modal(document.getElementById('addItemModal')).show();
+}
+
+function toggleVentaInput() {
+    const isChecked = document.getElementById('ai-cobrar').checked;
+    const div = document.getElementById('div-venta');
+    if(isChecked) {
+        div.style.display = 'block';
+    } else {
+        div.style.display = 'none';
+        document.getElementById('ai-venta').value = 0;
+    }
+}
+
+async function saveProjectItem() {
+    const desc = document.getElementById('ai-desc').value;
+    if(!desc) return alert("Falta descripción");
+
+    const payload = {
+        projectId: currentProject,
+        tipo: document.getElementById('ai-tipo').value,
+        descripcion: desc,
+        proveedor: document.getElementById('ai-prov').value,
+        cantidad: Number(document.getElementById('ai-cant').value),
+        costo: Number(document.getElementById('ai-costo').value),
+        venta: Number(document.getElementById('ai-venta').value),
+        esCobrar: document.getElementById('ai-cobrar').checked
+    };
+
+    const btn = document.querySelector('#addItemModal .btn-primary');
+    btn.disabled = true; btn.innerText = "...";
+
+    const res = await callApi('addProjectMovement', payload);
+    btn.disabled = false; btn.innerText = "REGISTRAR";
+
+    if(res.success) {
+        bootstrap.Modal.getInstance(document.getElementById('addItemModal')).hide();
+        openProjectDetails(currentProject); // Recargar detalles para ver totales actualizados
+        fetchProjects(); // Actualizar lista background
     }
 }
