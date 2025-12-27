@@ -6,8 +6,9 @@ let catalog = [];
 let cart = [];
 let projects = []; 
 let clients = []; // Memoria de Clientes
-let currentProject = null; // ID del proyecto activo
-let currentProjectData = null; // Datos completos del proyecto activo
+let currentProject = null; 
+let currentProjectData = null; 
+let currentProjectItems = []; // Memoria items actuales
 let currentView = 'PRODUCTO'; 
 let deferredPrompt; 
 
@@ -15,7 +16,7 @@ const fmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP',
 
 document.addEventListener('DOMContentLoaded', () => {
     fetchCatalog();
-    fetchClients(); // Cargar memoria de clientes
+    fetchClients(); 
     
     document.getElementById('search').addEventListener('input', (e) => {
         if(currentView === 'PROYECTOS') return; 
@@ -370,7 +371,6 @@ async function generatePDF() {
     if (res.success) {
         cart = []; updateCartUI();
         bootstrap.Modal.getInstance(document.getElementById('cartModal')).hide();
-        // Recargar clientes por si se creó uno nuevo
         fetchClients();
         if(confirm(`Documento ${res.data.consecutivo} Generado. ¿Abrir?`)) {
             window.open(res.data.url, '_blank');
@@ -381,7 +381,7 @@ async function generatePDF() {
 }
 
 // =========================================================
-// === GESTIÓN DE PROYECTOS Y CLIENTES (MEMORIA) ===
+// === GESTIÓN DE PROYECTOS Y CLIENTES ===
 // =========================================================
 
 async function fetchClients() {
@@ -401,11 +401,9 @@ async function fetchClients() {
 function autoFillClient(val, prefix) {
     const client = clients.find(c => c.nombre.toLowerCase() === val.toLowerCase());
     if (client) {
-        // Rellena telefono si existe el campo
         const telInput = document.getElementById(prefix + '-contacto') || document.getElementById(prefix + '-tel');
         if (telInput) telInput.value = client.telefono || '';
         
-        // Rellena NIT si existe el campo (solo en cotizaciones)
         const nitInput = document.getElementById(prefix + '-nit');
         if (nitInput) nitInput.value = client.nit || '';
     }
@@ -482,11 +480,9 @@ async function createNewProject() {
     if(res.success) {
         bootstrap.Modal.getInstance(document.getElementById('newProjectModal')).hide();
         fetchProjects();
-        fetchClients(); // Actualizar memoria
+        fetchClients(); 
     }
 }
-
-// --- EDICIÓN Y ELIMINACIÓN DE PROYECTOS ---
 
 async function openProjectDetails(id) {
     currentProject = id;
@@ -501,8 +497,9 @@ async function openProjectDetails(id) {
     
     if(res.success) {
         const info = res.data.info;
-        currentProjectData = info; // Guardar para edición
+        currentProjectData = info; 
         const items = res.data.items;
+        currentProjectItems = items; // Guardamos en memoria
         
         document.getElementById('pd-title').innerText = info.nombreProyecto || info.cliente;
         document.getElementById('pd-subtitle').innerText = info.cliente + " | " + info.estado;
@@ -522,17 +519,32 @@ async function openProjectDetails(id) {
             const isCobrar = (item.esCobrar === true || item.esCobrar === 'TRUE');
             const icon = isCobrar ? '<i class="bi bi-cash-coin text-success" title="Se cobra al cliente"></i>' : '<i class="bi bi-wallet2 text-danger" title="Gasto Interno"></i>';
             
+            // Botones de acción EDITAR y BORRAR por ITEM
+            const actions = `
+                <button class="btn btn-sm text-secondary" onclick='openEditItemModal("${item.idMov}")'><i class="bi bi-pencil"></i></button>
+                <button class="btn btn-sm text-danger" onclick='deleteProjectItem("${item.idMov}")'><i class="bi bi-trash"></i></button>
+            `;
+
             const html = `
             <div class="border-bottom border-secondary py-2">
-                <div class="d-flex justify-content-between">
-                    <span class="text-white fw-bold small">${item.descripcion}</span>
-                    <span>${icon}</span>
-                </div>
-                <div class="d-flex justify-content-between small text-muted">
-                    <span>${item.cantidad} x ${fmt.format(item.costo)} (Costo)</span>
-                    <span class="${isCobrar ? 'text-cyan' : 'text-secondary text-decoration-line-through'}">
-                        ${fmt.format(item.venta * item.cantidad)}
-                    </span>
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                         <div class="d-flex align-items-center gap-2">
+                            <span class="text-white fw-bold small">${item.descripcion}</span>
+                            <span>${icon}</span>
+                         </div>
+                         <div class="d-flex gap-3 small text-muted mt-1">
+                            <span>${item.cantidad} x ${fmt.format(item.costo)} <span class="text-danger" style="font-size:0.7em">(COSTO)</span></span>
+                         </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="${isCobrar ? 'text-cyan fw-bold small' : 'text-secondary text-decoration-line-through small'}">
+                            ${fmt.format(item.venta * item.cantidad)}
+                        </span>
+                        <div class="btn-group btn-group-sm ms-2">
+                           ${actions}
+                        </div>
+                    </div>
                 </div>
             </div>`;
             listDiv.innerHTML += html;
@@ -549,7 +561,6 @@ function openEditProjectModal() {
     document.getElementById('ep-contacto').value = currentProjectData.contacto;
     document.getElementById('ep-estado').value = currentProjectData.estado;
     
-    // Ocultar modal detalle y mostrar modal edición
     bootstrap.Modal.getInstance(document.getElementById('projectDetailModal')).hide();
     new bootstrap.Modal(document.getElementById('editProjectModal')).show();
 }
@@ -571,9 +582,9 @@ async function updateProject() {
     
     if(res.success) {
         bootstrap.Modal.getInstance(document.getElementById('editProjectModal')).hide();
-        fetchProjects(); // Recargar lista
-        fetchClients(); // Actualizar memoria clientes
-        openProjectDetails(payload.id); // Volver al detalle
+        fetchProjects(); 
+        fetchClients(); 
+        openProjectDetails(payload.id); 
     }
 }
 
@@ -590,7 +601,11 @@ async function deleteProject() {
     }
 }
 
+// --- EDICIÓN DE ITEMS ---
+
 function openAddItemModal() {
+    // Modo CREAR: Limpiamos ID y Formulario
+    document.getElementById('ai-id').value = ""; // Vacio = Crear
     document.getElementById('ai-desc').value = "";
     document.getElementById('ai-prov').value = "";
     document.getElementById('ai-cant').value = "1";
@@ -599,6 +614,27 @@ function openAddItemModal() {
     document.getElementById('ai-cobrar').checked = true;
     toggleVentaInput();
     
+    new bootstrap.Modal(document.getElementById('addItemModal')).show();
+}
+
+function openEditItemModal(idMov) {
+    // Buscar datos del item en memoria
+    const item = currentProjectItems.find(i => i.idMov === idMov);
+    if(!item) return;
+
+    // Modo EDITAR: Llenamos ID y Formulario
+    document.getElementById('ai-id').value = item.idMov;
+    document.getElementById('ai-tipo').value = item.tipo;
+    document.getElementById('ai-desc').value = item.descripcion;
+    document.getElementById('ai-prov').value = item.proveedor;
+    document.getElementById('ai-cant').value = item.cantidad;
+    document.getElementById('ai-costo').value = item.costo;
+    document.getElementById('ai-venta').value = item.venta;
+    
+    const isCobrar = (item.esCobrar === true || item.esCobrar === 'TRUE');
+    document.getElementById('ai-cobrar').checked = isCobrar;
+    toggleVentaInput();
+
     new bootstrap.Modal(document.getElementById('addItemModal')).show();
 }
 
@@ -615,10 +651,13 @@ function toggleVentaInput() {
 
 async function saveProjectItem() {
     const desc = document.getElementById('ai-desc').value;
+    const idEdit = document.getElementById('ai-id').value; // ID oculto
+    
     if(!desc) return alert("Falta descripción");
 
     const payload = {
         projectId: currentProject,
+        idMov: idEdit, // Si está vacio es nuevo, si tiene valor es update
         tipo: document.getElementById('ai-tipo').value,
         descripcion: desc,
         proveedor: document.getElementById('ai-prov').value,
@@ -631,12 +670,28 @@ async function saveProjectItem() {
     const btn = document.querySelector('#addItemModal .btn-primary');
     btn.disabled = true; btn.innerText = "...";
 
-    const res = await callApi('addProjectMovement', payload);
+    // Decidir acción
+    const action = idEdit ? 'updateProjectMovement' : 'addProjectMovement';
+    
+    const res = await callApi(action, payload);
     btn.disabled = false; btn.innerText = "REGISTRAR";
 
     if(res.success) {
         bootstrap.Modal.getInstance(document.getElementById('addItemModal')).hide();
         openProjectDetails(currentProject); 
         fetchProjects(); 
+    }
+}
+
+async function deleteProjectItem(idMov) {
+    if(!confirm("¿Borrar este ítem?")) return;
+    
+    // UI Feedback inmediato (opcional)
+    
+    const res = await callApi('deleteProjectMovement', { projectId: currentProject, idMov: idMov });
+    
+    if(res.success) {
+        openProjectDetails(currentProject);
+        fetchProjects();
     }
 }
