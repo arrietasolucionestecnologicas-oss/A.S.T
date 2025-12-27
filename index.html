@@ -110,6 +110,9 @@
         <span class="fab-badge" id="cart-count">0</span>
     </div>
 
+    <datalist id="clients-datalist">
+        </datalist>
+
     <div class="modal fade" id="prodModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content bg-dark-panel border-cyan">
@@ -207,7 +210,9 @@
                     <div class="p-3 mb-3 border border-secondary rounded bg-dark">
                         <h6 class="text-white mb-2">Datos del Cliente</h6>
                         <div class="row g-2">
-                            <div class="col-md-6"><input type="text" id="c-nombre" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Nombre / Razón Social (Opcional para WhatsApp)"></div>
+                            <div class="col-md-6">
+                                <input type="text" id="c-nombre" class="form-control form-control-sm bg-dark text-white border-secondary" list="clients-datalist" placeholder="Nombre / Razón Social" onchange="autoFillClient(this.value, 'c')">
+                            </div>
                             <div class="col-md-3"><input type="text" id="c-nit" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="NIT"></div>
                             <div class="col-md-3"><input type="text" id="c-tel" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Teléfono"></div>
                         </div>
@@ -253,8 +258,12 @@
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="text-muted small">Cliente</label>
-                        <input type="text" id="np-cliente" class="form-control bg-dark text-white border-secondary" placeholder="Nombre del Cliente o Empresa">
+                        <label class="text-cyan small fw-bold">Nombre del Trabajo / Proyecto</label>
+                        <input type="text" id="np-proyecto" class="form-control bg-dark text-white border-cyan" placeholder="Ej: Instalación 4 Cámaras">
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Cliente / Empresa</label>
+                        <input type="text" id="np-cliente" class="form-control bg-dark text-white border-secondary" list="clients-datalist" placeholder="Buscar Cliente..." onchange="autoFillClient(this.value, 'np')">
                     </div>
                     <div class="mb-3">
                         <label class="text-muted small">Contacto</label>
@@ -268,15 +277,59 @@
         </div>
     </div>
 
+    <div class="modal fade" id="editProjectModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark-panel border-cyan">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-white">Editar Trabajo</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="ep-id">
+                    <div class="mb-3">
+                        <label class="text-cyan small fw-bold">Nombre del Trabajo</label>
+                        <input type="text" id="ep-proyecto" class="form-control bg-dark text-white border-cyan">
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Cliente</label>
+                        <input type="text" id="ep-cliente" class="form-control bg-dark text-white border-secondary" list="clients-datalist">
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Contacto</label>
+                        <input type="text" id="ep-contacto" class="form-control bg-dark text-white border-secondary">
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Estado</label>
+                        <select id="ep-estado" class="form-select bg-dark text-white border-secondary">
+                            <option value="ABIERTO">ABIERTO</option>
+                            <option value="CERRADO">CERRADO / FINALIZADO</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button class="btn btn-cyan w-100" onclick="updateProject()">GUARDAR CAMBIOS</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="projectDetailModal" tabindex="-1">
         <div class="modal-dialog modal-fullscreen">
             <div class="modal-content bg-dark-panel">
                 <div class="modal-header border-bottom border-secondary">
-                    <div>
-                        <h5 class="modal-title text-cyan" id="pd-title">...</h5>
-                        <small class="text-muted" id="pd-subtitle">...</small>
+                    <div class="flex-grow-1 me-2 overflow-hidden">
+                        <h5 class="modal-title text-cyan text-truncate" id="pd-title">...</h5>
+                        <small class="text-muted text-truncate d-block" id="pd-subtitle">...</small>
                     </div>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="openEditProjectModal()">
+                            <i class="bi bi-pencil-fill"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteProject()">
+                            <i class="bi bi-trash-fill"></i>
+                        </button>
+                        <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="modal"></button>
+                    </div>
                 </div>
                 <div class="modal-body p-0">
                     <div class="row g-0 border-bottom border-secondary text-center">
@@ -301,7 +354,7 @@
                     <button class="btn btn-outline-light flex-grow-1" onclick="openAddItemModal()">
                         <i class="bi bi-tools"></i> Agregar Ítem/Gasto
                     </button>
-                    </div>
+                </div>
             </div>
         </div>
     </div>
