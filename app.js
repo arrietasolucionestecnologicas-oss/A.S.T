@@ -412,7 +412,7 @@ async function generatePDF() {
     cart.forEach(c => subtotal += (c.precio * c.cantidad));
     
     const applyIva = document.getElementById('check-iva').checked;
-    const showSpecs = document.getElementById('check-specs').checked; // NUEVO
+    const showSpecs = document.getElementById('check-specs').checked; 
     const ivaVal = applyIva ? (subtotal * 0.19) : 0;
 
     const payload = {
@@ -420,7 +420,7 @@ async function generatePDF() {
         cliente: cliente,
         items: cart.map(c => ({...c, subtotal: c.precio * c.cantidad})),
         totales: { subtotal: subtotal, iva: ivaVal, granTotal: subtotal + ivaVal },
-        opciones: { mostrarDesc: showSpecs } // NUEVO
+        opciones: { mostrarDesc: showSpecs } 
     };
 
     const res = await callApi('createDocument', payload);
@@ -429,11 +429,17 @@ async function generatePDF() {
     
     if (res.success) {
         cart = []; updateCartUI();
+        
+        // CORRECCIÓN PANTALLA OSCURA: CERRAR Y ESPERAR ANTES DE CONFIRM
         bootstrap.Modal.getInstance(document.getElementById('cartModal')).hide();
-        fetchClients();
-        if(confirm(`Documento ${res.data.consecutivo} Generado. ¿Abrir?`)) {
-            window.open(res.data.url, '_blank');
-        }
+        
+        setTimeout(() => {
+            fetchClients();
+            if(confirm(`Documento ${res.data.consecutivo} Generado. ¿Abrir?`)) {
+                window.open(res.data.url, '_blank');
+            }
+        }, 500); // 500ms para permitir que Bootstrap limpie el backdrop
+        
     } else {
         alert("Error: " + res.error);
     }
