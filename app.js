@@ -8,7 +8,7 @@ let projects = [];
 let clients = []; // Memoria de Clientes
 let currentProject = null; 
 let currentProjectData = null; 
-let currentProjectItems = []; // Memoria items actuales
+let currentProjectItems = []; 
 let currentView = 'PRODUCTO'; 
 let deferredPrompt; 
 
@@ -306,8 +306,65 @@ function updateCartItem(index, field, value) {
     updateCartUI();
 }
 
-function openCart() {
+async function openCart() {
+    // Cargar proyectos en el selector si está vacío
+    const select = document.getElementById('cart-import-project');
+    if (select.options.length <= 1) {
+        if(projects.length === 0) {
+            // Intentar cargar proyectos silenciosamente
+            const res = await callApi('getProjects');
+            if(res.success) projects = res.data;
+        }
+        
+        // Llenar select
+        projects.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.text = `${p.nombreProyecto} (${p.cliente})`;
+            select.appendChild(opt);
+        });
+    }
+
     new bootstrap.Modal(document.getElementById('cartModal')).show();
+}
+
+async function importFromProject() {
+    const projectId = document.getElementById('cart-import-project').value;
+    if(!projectId) return alert("Selecciona un proyecto primero");
+
+    const btn = document.querySelector('#cart-import-project + button');
+    btn.disabled = true; btn.innerText = "...";
+
+    const res = await callApi('getProjectDetails', { id: projectId });
+    btn.disabled = false; btn.innerText = "Importar";
+
+    if(res.success) {
+        const items = res.data.items;
+        let count = 0;
+        
+        items.forEach(item => {
+            // Solo importamos lo que es cobrable
+            const isCobrar = (item.esCobrar === true || item.esCobrar === 'TRUE');
+            if(isCobrar) {
+                cart.push({
+                    uuid: item.idMov, // Usamos el ID del movimiento como UUID temporal
+                    nombre: item.descripcion,
+                    tipo: item.tipo,
+                    specs: "Ítem importado de Proyecto", // Opcional
+                    precio: item.venta,
+                    cantidad: item.cantidad
+                });
+                count++;
+            }
+        });
+        
+        if(count > 0) {
+            updateCartUI();
+            alert(`${count} ítems importados al carrito.`);
+        } else {
+            alert("Este proyecto no tiene ítems marcados para cobrar.");
+        }
+    }
 }
 
 function sendWhatsApp() {
@@ -355,13 +412,15 @@ async function generatePDF() {
     cart.forEach(c => subtotal += (c.precio * c.cantidad));
     
     const applyIva = document.getElementById('check-iva').checked;
+    const showSpecs = document.getElementById('check-specs').checked; // NUEVO
     const ivaVal = applyIva ? (subtotal * 0.19) : 0;
 
     const payload = {
         tipoDoc: document.getElementById('doc-type').value,
         cliente: cliente,
         items: cart.map(c => ({...c, subtotal: c.precio * c.cantidad})),
-        totales: { subtotal: subtotal, iva: ivaVal, granTotal: subtotal + ivaVal }
+        totales: { subtotal: subtotal, iva: ivaVal, granTotal: subtotal + ivaVal },
+        opciones: { mostrarDesc: showSpecs } // NUEVO
     };
 
     const res = await callApi('createDocument', payload);
@@ -499,7 +558,7 @@ async function openProjectDetails(id) {
         const info = res.data.info;
         currentProjectData = info; 
         const items = res.data.items;
-        currentProjectItems = items; // Guardamos en memoria
+        currentProjectItems = items; 
         
         document.getElementById('pd-title').innerText = info.nombreProyecto || info.cliente;
         document.getElementById('pd-subtitle').innerText = info.cliente + " | " + info.estado;
@@ -519,7 +578,6 @@ async function openProjectDetails(id) {
             const isCobrar = (item.esCobrar === true || item.esCobrar === 'TRUE');
             const icon = isCobrar ? '<i class="bi bi-cash-coin text-success" title="Se cobra al cliente"></i>' : '<i class="bi bi-wallet2 text-danger" title="Gasto Interno"></i>';
             
-            // Botones de acción EDITAR y BORRAR por ITEM
             const actions = `
                 <button class="btn btn-sm text-secondary" onclick='openEditItemModal("${item.idMov}")'><i class="bi bi-pencil"></i></button>
                 <button class="btn btn-sm text-danger" onclick='deleteProjectItem("${item.idMov}")'><i class="bi bi-trash"></i></button>
@@ -604,8 +662,7 @@ async function deleteProject() {
 // --- EDICIÓN DE ITEMS ---
 
 function openAddItemModal() {
-    // Modo CREAR: Limpiamos ID y Formulario
-    document.getElementById('ai-id').value = ""; // Vacio = Crear
+    document.getElementById('ai-id').value = ""; 
     document.getElementById('ai-desc').value = "";
     document.getElementById('ai-prov').value = "";
     document.getElementById('ai-cant').value = "1";
@@ -618,11 +675,9 @@ function openAddItemModal() {
 }
 
 function openEditItemModal(idMov) {
-    // Buscar datos del item en memoria
     const item = currentProjectItems.find(i => i.idMov === idMov);
     if(!item) return;
 
-    // Modo EDITAR: Llenamos ID y Formulario
     document.getElementById('ai-id').value = item.idMov;
     document.getElementById('ai-tipo').value = item.tipo;
     document.getElementById('ai-desc').value = item.descripcion;
@@ -651,13 +706,13 @@ function toggleVentaInput() {
 
 async function saveProjectItem() {
     const desc = document.getElementById('ai-desc').value;
-    const idEdit = document.getElementById('ai-id').value; // ID oculto
+    const idEdit = document.getElementById('ai-id').value; 
     
     if(!desc) return alert("Falta descripción");
 
     const payload = {
         projectId: currentProject,
-        idMov: idEdit, // Si está vacio es nuevo, si tiene valor es update
+        idMov: idEdit, 
         tipo: document.getElementById('ai-tipo').value,
         descripcion: desc,
         proveedor: document.getElementById('ai-prov').value,
@@ -670,7 +725,6 @@ async function saveProjectItem() {
     const btn = document.querySelector('#addItemModal .btn-primary');
     btn.disabled = true; btn.innerText = "...";
 
-    // Decidir acción
     const action = idEdit ? 'updateProjectMovement' : 'addProjectMovement';
     
     const res = await callApi(action, payload);
@@ -685,8 +739,6 @@ async function saveProjectItem() {
 
 async function deleteProjectItem(idMov) {
     if(!confirm("¿Borrar este ítem?")) return;
-    
-    // UI Feedback inmediato (opcional)
     
     const res = await callApi('deleteProjectMovement', { projectId: currentProject, idMov: idMov });
     
