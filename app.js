@@ -6,6 +6,7 @@ let catalog = [];
 let cart = [];
 let projects = []; 
 let clients = []; // Memoria de Clientes
+let historyDocs = []; // Memoria de Historial
 let currentProject = null; 
 let currentProjectData = null; 
 let currentProjectItems = []; 
@@ -19,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchClients(); 
     
     document.getElementById('search').addEventListener('input', (e) => {
-        if(currentView === 'PROYECTOS') return; 
+        if(currentView === 'PROYECTOS' || currentView === 'HISTORIAL') return; 
         const term = e.target.value.toLowerCase();
         const filtered = catalog.filter(p => 
             p.tipo === currentView && 
@@ -51,30 +52,38 @@ async function installApp() {
 function switchTab(viewName) {
     currentView = viewName;
     
+    // Reset tabs
     document.getElementById('tab-prod').className = 'nav-link';
     document.getElementById('tab-serv').className = 'nav-link';
     document.getElementById('tab-proj').className = 'nav-link';
+    document.getElementById('tab-hist').className = 'nav-link';
 
+    // Set active
     if(viewName === 'PRODUCTO') document.getElementById('tab-prod').className = 'nav-link active';
     if(viewName === 'SERVICIO') document.getElementById('tab-serv').className = 'nav-link active';
     if(viewName === 'PROYECTOS') document.getElementById('tab-proj').className = 'nav-link active';
+    if(viewName === 'HISTORIAL') document.getElementById('tab-hist').className = 'nav-link active';
 
-    const viewCatalog = document.getElementById('view-catalog');
-    const viewProjects = document.getElementById('view-projects');
-    const fabCart = document.getElementById('fab-cart');
-    const btnMainAdd = document.getElementById('btn-main-add');
+    // Hide all views
+    document.getElementById('view-catalog').classList.add('hidden-section');
+    document.getElementById('view-projects').classList.add('hidden-section');
+    document.getElementById('view-history').classList.add('hidden-section');
+    document.getElementById('fab-cart').style.display = 'none';
+    document.getElementById('btn-main-add').style.display = 'none';
 
+    // Show selected view
     if (viewName === 'PROYECTOS') {
-        viewCatalog.classList.add('hidden-section');
-        viewProjects.classList.remove('hidden-section');
-        fabCart.style.display = 'none'; 
-        btnMainAdd.style.display = 'none'; 
+        document.getElementById('view-projects').classList.remove('hidden-section');
         fetchProjects(); 
-    } else {
-        viewCatalog.classList.remove('hidden-section');
-        viewProjects.classList.add('hidden-section');
-        fabCart.style.display = 'flex';
-        btnMainAdd.style.display = 'block';
+    } 
+    else if (viewName === 'HISTORIAL') {
+        document.getElementById('view-history').classList.remove('hidden-section');
+        fetchHistory();
+    }
+    else {
+        document.getElementById('view-catalog').classList.remove('hidden-section');
+        document.getElementById('fab-cart').style.display = 'flex';
+        document.getElementById('btn-main-add').style.display = 'block';
         const filtered = catalog.filter(p => p.tipo === currentView);
         renderGrid(filtered);
     }
@@ -101,7 +110,7 @@ async function fetchCatalog() {
     const res = await callApi('getAdminCatalog');
     if (res.success) {
         catalog = res.data;
-        if(currentView !== 'PROYECTOS') {
+        if(currentView !== 'PROYECTOS' && currentView !== 'HISTORIAL') {
              switchTab(currentView); 
         }
     }
@@ -115,7 +124,7 @@ function renderGrid(data) {
         grid.innerHTML = `
             <div class="col-12 text-center mt-5">
                 <i class="bi bi-box-seam text-secondary" style="font-size: 3rem;"></i>
-                <p class="text-muted">No hay ${currentView === 'PRODUCTO' ? 'productos' : 'servicios'} registrados.</p>
+                <p class="text-muted">No hay items registrados.</p>
             </div>`;
         return;
     }
@@ -156,7 +165,7 @@ function openProductModal() {
     document.getElementById('prodForm').reset();
     document.getElementById('p-uuid').value = "";
     document.getElementById('p-imagen-data').value = "";
-    document.getElementById('p-tipo').value = currentView;
+    document.getElementById('p-tipo').value = currentView === 'HISTORIAL' ? 'PRODUCTO' : currentView;
     toggleFormFields();
     new bootstrap.Modal(document.getElementById('prodModal')).show();
 }
@@ -254,6 +263,10 @@ function addToCart(uuid) {
     if(exist) exist.cantidad++;
     else cart.push({ ...p, cantidad: 1 });
     updateCartUI();
+    // Feedback visual opcional
+    const fab = document.getElementById('fab-cart');
+    fab.style.transform = "scale(1.2)";
+    setTimeout(()=>fab.style.transform = "scale(1)", 200);
 }
 
 function updateCartUI() {
@@ -307,16 +320,12 @@ function updateCartItem(index, field, value) {
 }
 
 async function openCart() {
-    // Cargar proyectos en el selector si está vacío
     const select = document.getElementById('cart-import-project');
     if (select.options.length <= 1) {
         if(projects.length === 0) {
-            // Intentar cargar proyectos silenciosamente
             const res = await callApi('getProjects');
             if(res.success) projects = res.data;
         }
-        
-        // Llenar select
         projects.forEach(p => {
             const opt = document.createElement('option');
             opt.value = p.id;
@@ -343,14 +352,13 @@ async function importFromProject() {
         let count = 0;
         
         items.forEach(item => {
-            // Solo importamos lo que es cobrable
             const isCobrar = (item.esCobrar === true || item.esCobrar === 'TRUE');
             if(isCobrar) {
                 cart.push({
-                    uuid: item.idMov, // Usamos el ID del movimiento como UUID temporal
+                    uuid: item.idMov,
                     nombre: item.descripcion,
                     tipo: item.tipo,
-                    specs: "Ítem importado de Proyecto", // Opcional
+                    specs: "Ítem importado de Proyecto", 
                     precio: item.venta,
                     cantidad: item.cantidad
                 });
@@ -430,7 +438,6 @@ async function generatePDF() {
     if (res.success) {
         cart = []; updateCartUI();
         
-        // CORRECCIÓN PANTALLA OSCURA: CERRAR Y ESPERAR ANTES DE CONFIRM
         bootstrap.Modal.getInstance(document.getElementById('cartModal')).hide();
         
         setTimeout(() => {
@@ -438,7 +445,7 @@ async function generatePDF() {
             if(confirm(`Documento ${res.data.consecutivo} Generado. ¿Abrir?`)) {
                 window.open(res.data.url, '_blank');
             }
-        }, 500); // 500ms para permitir que Bootstrap limpie el backdrop
+        }, 500); 
         
     } else {
         alert("Error: " + res.error);
@@ -446,7 +453,7 @@ async function generatePDF() {
 }
 
 // =========================================================
-// === GESTIÓN DE PROYECTOS Y CLIENTES ===
+// === GESTIÓN DE PROYECTOS, CLIENTES Y HISTORIAL ===
 // =========================================================
 
 async function fetchClients() {
@@ -474,6 +481,7 @@ function autoFillClient(val, prefix) {
     }
 }
 
+// --- PROYECTOS ---
 async function fetchProjects() {
     const list = document.getElementById('projects-list');
     list.innerHTML = '<div class="text-center text-muted mt-5"><div class="spinner-border spinner-border-sm"></div> Cargando trabajos...</div>';
@@ -518,6 +526,81 @@ async function fetchProjects() {
             </div>`;
             list.innerHTML += html;
         });
+    }
+}
+
+// --- HISTORIAL ---
+async function fetchHistory() {
+    const list = document.getElementById('history-list');
+    list.innerHTML = '<div class="text-center text-muted mt-5"><div class="spinner-border spinner-border-sm"></div> Cargando historial...</div>';
+    
+    const res = await callApi('getHistoryDocs');
+    list.innerHTML = '';
+
+    if (res.success) {
+        historyDocs = res.data;
+        if (historyDocs.length === 0) {
+            list.innerHTML = '<div class="text-center text-muted mt-5"><i class="bi bi-clock-history fs-1"></i><p>Sin documentos.</p></div>';
+            return;
+        }
+
+        historyDocs.forEach((doc, i) => {
+            // Evaluamos si podemos recargar (si tiene JSON)
+            const canReload = (doc.jsonData && doc.jsonData.length > 5);
+            const btnReload = canReload 
+                ? `<button class="btn btn-sm btn-cyan" onclick="restoreDocument(${i})">Recargar <i class="bi bi-pencil-square"></i></button>` 
+                : `<span class="badge bg-secondary">Sin datos</span>`;
+
+            const html = `
+            <div class="history-card">
+                <div class="d-flex justify-content-between mb-1">
+                    <h6 class="text-white fw-bold m-0">${doc.consecutivo}</h6>
+                    <span class="badge bg-secondary small">${new Date(doc.fecha).toLocaleDateString()}</span>
+                </div>
+                <div class="d-flex justify-content-between small text-muted mb-2">
+                    <span>${doc.cliente}</span>
+                    <span class="text-cyan fw-bold">${fmt.format(doc.total)}</span>
+                </div>
+                <div class="d-flex justify-content-between gap-2">
+                    <a href="${doc.url}" target="_blank" class="btn btn-sm btn-outline-light flex-grow-1"><i class="bi bi-eye"></i> Ver PDF</a>
+                    ${btnReload}
+                </div>
+            </div>`;
+            list.innerHTML += html;
+        });
+    }
+}
+
+function restoreDocument(index) {
+    const doc = historyDocs[index];
+    if(!doc || !doc.jsonData) return;
+
+    try {
+        const savedData = JSON.parse(doc.jsonData);
+        
+        // 1. Restaurar items al carrito global
+        cart = savedData.items.map(item => ({
+            uuid: item.uuid || 'restored-'+Math.random(),
+            nombre: item.nombre,
+            tipo: item.tipo,
+            specs: item.specs,
+            precio: item.precio,
+            cantidad: item.cantidad
+        }));
+        updateCartUI();
+
+        // 2. Restaurar datos cliente en el modal
+        document.getElementById('c-nombre').value = savedData.cliente.nombre || "";
+        document.getElementById('c-nit').value = savedData.cliente.nit || "";
+        document.getElementById('c-tel').value = savedData.cliente.telefono || "";
+        document.getElementById('doc-type').value = savedData.tipoDoc || "Cotización";
+
+        // 3. Abrir modal
+        new bootstrap.Modal(document.getElementById('cartModal')).show();
+
+    } catch (e) {
+        console.error(e);
+        alert("Error al restaurar datos del documento.");
     }
 }
 
