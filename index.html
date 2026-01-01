@@ -18,8 +18,13 @@
     
     <style>
         /* Ajuste Pestañas */
-        .nav-pills .nav-link { color: #aaa; border: 1px solid #333; margin-right: 5px; }
+        .nav-pills .nav-link { color: #aaa; border: 1px solid #333; margin-right: 5px; white-space: nowrap; }
         .nav-pills .nav-link.active { background-color: var(--ast-cyan); color: #000; font-weight: bold; }
+        
+        /* Ocultar barra de scroll en movil para estetica limpia */
+        .scroll-hide::-webkit-scrollbar { display: none; }
+        .scroll-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
         .hidden-section { display: none !important; }
         /* Botón instalar */
         #btn-install { display: none; }
@@ -59,8 +64,8 @@
     <div class="container-fluid py-4">
         
         <div class="row mb-3">
-            <div class="col-12 d-flex justify-content-center overflow-auto">
-                <ul class="nav nav-pills flex-nowrap">
+            <div class="col-12 overflow-auto scroll-hide">
+                <ul class="nav nav-pills flex-nowrap pb-1">
                     <li class="nav-item">
                         <button class="nav-link active" id="tab-prod" onclick="switchTab('PRODUCTO')">PRODUCTOS</button>
                     </li>
