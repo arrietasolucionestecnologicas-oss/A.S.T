@@ -320,8 +320,9 @@ function updateCartItem(index, field, value) {
 }
 
 async function openCart() {
-    const select = document.getElementById('cart-import-project');
-    if (select.options.length <= 1) {
+    // 1. Cargar Proyectos para el Selector de Exportar
+    const selectExport = document.getElementById('cart-export-project');
+    if (selectExport.options.length <= 1) { // Si solo tiene la opción por defecto
         if(projects.length === 0) {
             const res = await callApi('getProjects');
             if(res.success) projects = res.data;
@@ -330,7 +331,19 @@ async function openCart() {
             const opt = document.createElement('option');
             opt.value = p.id;
             opt.text = `${p.nombreProyecto} (${p.cliente})`;
-            select.appendChild(opt);
+            selectExport.appendChild(opt);
+        });
+    }
+
+    // 2. Cargar Proyectos para el Selector de Importar
+    const selectImport = document.getElementById('cart-import-project');
+    if (selectImport.options.length <= 1) {
+        // Reusamos la lista de proyectos ya cargada arriba
+        projects.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.text = `${p.nombreProyecto} (${p.cliente})`;
+            selectImport.appendChild(opt);
         });
     }
 
@@ -360,7 +373,8 @@ async function importFromProject() {
                     tipo: item.tipo,
                     specs: "Ítem importado de Proyecto", 
                     precio: item.venta,
-                    cantidad: item.cantidad
+                    cantidad: item.cantidad,
+                    costo: item.costo // Pasamos costo para mantener margen
                 });
                 count++;
             }
@@ -422,13 +436,17 @@ async function generatePDF() {
     const applyIva = document.getElementById('check-iva').checked;
     const showSpecs = document.getElementById('check-specs').checked; 
     const ivaVal = applyIva ? (subtotal * 0.19) : 0;
+    
+    // Capturamos el proyecto seleccionado para exportar
+    const projectIdToSync = document.getElementById('cart-export-project').value;
 
     const payload = {
         tipoDoc: document.getElementById('doc-type').value,
         cliente: cliente,
         items: cart.map(c => ({...c, subtotal: c.precio * c.cantidad})),
         totales: { subtotal: subtotal, iva: ivaVal, granTotal: subtotal + ivaVal },
-        opciones: { mostrarDesc: showSpecs } 
+        opciones: { mostrarDesc: showSpecs },
+        projectId: projectIdToSync // Enviamos ID del proyecto (o vacio)
     };
 
     const res = await callApi('createDocument', payload);
@@ -792,7 +810,7 @@ function openAddItemModal() {
     document.getElementById('ai-cobrar').checked = true;
     toggleVentaInput();
     
-    // Llenar datalist
+    // Llenar datalist (AUTOCOMPLETADO CATALOGO)
     const dl = document.getElementById('list-catalog-items');
     dl.innerHTML = '';
     catalog.forEach(p => {
