@@ -163,8 +163,7 @@
         <span class="fab-badge" id="cart-count">0</span>
     </div>
 
-    <datalist id="clients-datalist">
-        </datalist>
+    <datalist id="clients-datalist"></datalist>
 
     <div class="modal fade" id="prodModal" tabindex="-1">
         <div class="modal-dialog">
@@ -434,6 +433,15 @@
                 </div>
                 <div class="modal-body">
                     <input type="hidden" id="ai-id">
+
+                    <div class="mb-3 border-bottom border-secondary pb-3">
+                        <label class="small text-cyan fw-bold">Importar del Catálogo</label>
+                        <div class="input-group input-group-sm">
+                            <input class="form-control bg-dark text-white border-cyan" list="list-catalog-items" id="ai-search" onchange="fillItemFromCatalog(this.value)" placeholder="Escribe para buscar...">
+                            <button class="btn btn-outline-secondary" onclick="document.getElementById('ai-search').value=''"><i class="bi bi-x"></i></button>
+                        </div>
+                        <datalist id="list-catalog-items"></datalist>
+                    </div>
 
                     <div class="mb-2">
                         <label class="small text-muted">Descripción</label>
