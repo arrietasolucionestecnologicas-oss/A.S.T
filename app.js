@@ -5,8 +5,8 @@ const API_KEY = "AST_2025_SECURE";
 let catalog = [];
 let cart = [];
 let projects = []; 
-let clients = []; // Memoria de Clientes
-let historyDocs = []; // Memoria de Historial
+let clients = []; 
+let historyDocs = []; 
 let currentProject = null; 
 let currentProjectData = null; 
 let currentProjectItems = []; 
@@ -263,7 +263,7 @@ function addToCart(uuid) {
     if(exist) exist.cantidad++;
     else cart.push({ ...p, cantidad: 1 });
     updateCartUI();
-    // Feedback visual opcional
+    // Feedback visual
     const fab = document.getElementById('fab-cart');
     fab.style.transform = "scale(1.2)";
     setTimeout(()=>fab.style.transform = "scale(1)", 200);
@@ -437,16 +437,13 @@ async function generatePDF() {
     
     if (res.success) {
         cart = []; updateCartUI();
-        
         bootstrap.Modal.getInstance(document.getElementById('cartModal')).hide();
-        
         setTimeout(() => {
             fetchClients();
             if(confirm(`Documento ${res.data.consecutivo} Generado. ¿Abrir?`)) {
                 window.open(res.data.url, '_blank');
             }
         }, 500); 
-        
     } else {
         alert("Error: " + res.error);
     }
@@ -784,7 +781,9 @@ async function deleteProject() {
 // --- EDICIÓN DE ITEMS ---
 
 function openAddItemModal() {
+    // Resetear formulario
     document.getElementById('ai-id').value = ""; 
+    document.getElementById('ai-search').value = ""; // Limpiar buscador
     document.getElementById('ai-desc').value = "";
     document.getElementById('ai-prov').value = "";
     document.getElementById('ai-cant').value = "1";
@@ -793,7 +792,31 @@ function openAddItemModal() {
     document.getElementById('ai-cobrar').checked = true;
     toggleVentaInput();
     
+    // Llenar datalist
+    const dl = document.getElementById('list-catalog-items');
+    dl.innerHTML = '';
+    catalog.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.nombre;
+        dl.appendChild(opt);
+    });
+    
     new bootstrap.Modal(document.getElementById('addItemModal')).show();
+}
+
+function fillItemFromCatalog(name) {
+    const item = catalog.find(p => p.nombre === name);
+    if(item) {
+        document.getElementById('ai-desc').value = item.nombre;
+        document.getElementById('ai-costo').value = item.costo || 0;
+        document.getElementById('ai-venta').value = item.precio || 0;
+        
+        if(item.tipo === 'PRODUCTO') document.getElementById('ai-tipo').value = 'MATERIAL';
+        else document.getElementById('ai-tipo').value = 'MANO_OBRA';
+
+        document.getElementById('ai-cobrar').checked = true;
+        toggleVentaInput();
+    }
 }
 
 function openEditItemModal(idMov) {
@@ -801,6 +824,7 @@ function openEditItemModal(idMov) {
     if(!item) return;
 
     document.getElementById('ai-id').value = item.idMov;
+    document.getElementById('ai-search').value = ""; // No usamos buscador en edicion
     document.getElementById('ai-tipo').value = item.tipo;
     document.getElementById('ai-desc').value = item.descripcion;
     document.getElementById('ai-prov').value = item.proveedor;
