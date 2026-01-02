@@ -481,9 +481,10 @@ function autoFillClient(val, prefix) {
     }
 }
 
-// --- PROYECTOS ---
+// --- PROYECTOS Y DASHBOARD ---
 async function fetchProjects() {
     const list = document.getElementById('projects-list');
+    const dashboard = document.getElementById('projects-dashboard');
     list.innerHTML = '<div class="text-center text-muted mt-5"><div class="spinner-border spinner-border-sm"></div> Cargando trabajos...</div>';
     
     const res = await callApi('getProjects');
@@ -492,21 +493,57 @@ async function fetchProjects() {
     if (res.success) {
         projects = res.data;
         if (projects.length === 0) {
+            dashboard.classList.add('d-none'); // Ocultar dashboard si no hay datos
             list.innerHTML = '<div class="text-center text-muted mt-5"><i class="bi bi-folder2-open fs-1"></i><p>No hay trabajos abiertos.</p></div>';
             return;
         }
 
+        // CÁLCULO DASHBOARD GLOBAL
+        let gCobrado = 0, gGastos = 0, gUtilidad = 0;
+        
+        projects.forEach(p => {
+            gCobrado += p.totalCobrado;
+            gGastos += p.totalCostos;
+            gUtilidad += p.utilidad;
+        });
+
+        // Render Dashboard
+        dashboard.classList.remove('d-none');
+        document.getElementById('kpi-cobrado').innerText = fmt.format(gCobrado);
+        document.getElementById('kpi-gastos').innerText = fmt.format(gGastos);
+        document.getElementById('kpi-utilidad').innerText = fmt.format(gUtilidad);
+        
+        const margenGlobal = gCobrado > 0 ? ((gUtilidad / gCobrado) * 100).toFixed(1) : 0;
+        document.getElementById('kpi-margen').innerText = margenGlobal + "%";
+        // Color margen global
+        const kpiMargenEl = document.getElementById('kpi-margen');
+        if(margenGlobal > 30) kpiMargenEl.className = "fw-bold text-success";
+        else if(margenGlobal > 10) kpiMargenEl.className = "fw-bold text-warning";
+        else kpiMargenEl.className = "fw-bold text-danger";
+
+
+        // Render Lista Proyectos
         projects.forEach(p => {
             const utilClase = p.utilidad >= 0 ? 'text-profit' : 'text-loss';
+            
+            // Cálculo Margen Individual
+            const margen = p.totalCobrado > 0 ? ((p.utilidad / p.totalCobrado) * 100).toFixed(0) : 0;
+            let badgeColor = "bg-secondary";
+            if(p.totalCobrado > 0) {
+                if(margen > 30) badgeColor = "bg-success";
+                else if(margen > 10) badgeColor = "bg-warning text-dark";
+                else badgeColor = "bg-danger";
+            }
+
             const html = `
             <div class="project-card" onclick='openProjectDetails("${p.id}")'>
                 <div class="d-flex justify-content-between mb-1">
-                    <h6 class="text-cyan fw-bold m-0 text-truncate">${p.nombreProyecto || 'Trabajo sin nombre'}</h6>
-                    <span class="badge bg-secondary small" style="font-size:0.6rem">${p.estado}</span>
+                    <h6 class="text-cyan fw-bold m-0 text-truncate" style="max-width: 70%;">${p.nombreProyecto || 'Trabajo sin nombre'}</h6>
+                    <span class="badge ${badgeColor} small" style="font-size:0.6rem">${margen}% RENT.</span>
                 </div>
                 <div class="d-flex justify-content-between small text-muted mb-2">
                     <span>${p.cliente}</span>
-                    <span>${p.contacto || ''}</span>
+                    <span class="badge bg-dark border border-secondary">${p.estado}</span>
                 </div>
                 
                 <div class="row g-0 text-center bg-dark p-2 rounded">
@@ -545,7 +582,6 @@ async function fetchHistory() {
         }
 
         historyDocs.forEach((doc, i) => {
-            // Evaluamos si podemos recargar (si tiene JSON)
             const canReload = (doc.jsonData && doc.jsonData.length > 5);
             const btnReload = canReload 
                 ? `<button class="btn btn-sm btn-cyan" onclick="restoreDocument(${i})">Recargar <i class="bi bi-pencil-square"></i></button>` 
@@ -578,7 +614,6 @@ function restoreDocument(index) {
     try {
         const savedData = JSON.parse(doc.jsonData);
         
-        // 1. Restaurar items al carrito global
         cart = savedData.items.map(item => ({
             uuid: item.uuid || 'restored-'+Math.random(),
             nombre: item.nombre,
@@ -589,13 +624,11 @@ function restoreDocument(index) {
         }));
         updateCartUI();
 
-        // 2. Restaurar datos cliente en el modal
         document.getElementById('c-nombre').value = savedData.cliente.nombre || "";
         document.getElementById('c-nit').value = savedData.cliente.nit || "";
         document.getElementById('c-tel').value = savedData.cliente.telefono || "";
         document.getElementById('doc-type').value = savedData.tipoDoc || "Cotización";
 
-        // 3. Abrir modal
         new bootstrap.Modal(document.getElementById('cartModal')).show();
 
     } catch (e) {
