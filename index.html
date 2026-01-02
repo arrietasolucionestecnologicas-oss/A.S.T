@@ -21,7 +21,7 @@
         .nav-pills .nav-link { color: #aaa; border: 1px solid #333; margin-right: 5px; white-space: nowrap; }
         .nav-pills .nav-link.active { background-color: var(--ast-cyan); color: #000; font-weight: bold; }
         
-        /* Ocultar barra de scroll en movil para estetica limpia */
+        /* Ocultar barra de scroll en movil */
         .scroll-hide::-webkit-scrollbar { display: none; }
         .scroll-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
@@ -39,6 +39,17 @@
         }
         .text-profit { color: #00ff88; }
         .text-loss { color: #ff4d4d; }
+
+        /* Dashboard Cards */
+        .kpi-card {
+            background: #141414;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+        }
+        .kpi-value { font-size: 1.1rem; font-weight: bold; color: white; }
+        .kpi-label { font-size: 0.7rem; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
     </style>
 </head>
 <body>
@@ -101,8 +112,33 @@
         </div>
 
         <div id="view-projects" class="hidden-section">
+            
+            <div id="projects-dashboard" class="row g-2 mb-3 d-none">
+                <div class="col-4">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Facturado</div>
+                        <div class="kpi-value text-cyan" id="kpi-cobrado">$0</div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Gastos</div>
+                        <div class="kpi-value text-danger" id="kpi-gastos">$0</div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Utilidad</div>
+                        <div class="kpi-value text-profit" id="kpi-utilidad">$0</div>
+                    </div>
+                </div>
+                <div class="col-12 text-center mt-1">
+                    <small class="text-muted" style="font-size: 0.7rem;">MARGEN GLOBAL: <span id="kpi-margen" class="fw-bold text-white">0%</span></small>
+                </div>
+            </div>
+
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="text-white m-0">Gestión de Trabajos</h5>
+                <h5 class="text-white m-0">Trabajos Activos</h5>
                 <button class="btn btn-sm btn-cyan" onclick="openNewProjectModal()">
                     <i class="bi bi-folder-plus"></i> NUEVO
                 </button>
