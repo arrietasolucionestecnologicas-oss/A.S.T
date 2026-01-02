@@ -1,542 +1,509 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-bs-theme="dark">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Kingshop POS</title>
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#000000">
-  <link rel="icon" type="image/png" href="icon-192.png">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-
-  <style>
-    /* --- TEMA PREMIUM: KING'S SHOP BLACK & GOLD --- */
-    :root { 
-        --primary: #000000;      /* Negro Puro */
-        --gold: #d4af37;         /* Dorado Premium */
-        --gold-hover: #b59020;   /* Dorado Oscuro */
-        --light: #f8f9fa;        /* Gris suave */
-        --dark: #212529;         /* Texto oscuro */
-        --bg: #f4f4f9;
-        --s: #2ecc71; /* Verde éxito */
-        --d: #e74c3c; /* Rojo error */
-    }
-
-    body { 
-        background: var(--bg); 
-        padding-bottom: 90px; 
-        font-family: 'Montserrat', sans-serif; 
-        overflow-x: hidden; 
-        color: var(--dark); 
-    }
-
-    /* HEADER */
-    .header { 
-        background-color: var(--primary); 
-        color: white; 
-        padding: 15px 20px; 
-        border-radius: 0 0 20px 20px; 
-        box-shadow: 0 4px 20px rgba(0,0,0,0.4); 
-        display: flex; 
-        justify-content: space-between; 
-        align-items: center; 
-        border-bottom: 2px solid var(--gold);
-    }
-
-    /* LAYOUT VENTAS */
-    .main-layout { display: flex; gap: 20px; align-items: flex-start; padding: 15px; }
-    .list-column { flex: 1; }
-    .panel-column { width: 350px; position: sticky; top: 10px; display: none; } 
-    @media (min-width: 992px) { .panel-column { display: block; } }
-
-    /* --- ESTILO VENTA: LISTA COMPACTA (POS) --- */
-    .pos-row-lite {
-        background: white;
-        padding: 12px 15px;
-        margin-bottom: 8px;
-        border-radius: 8px;
-        border-left: 5px solid transparent;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        cursor: pointer;
-        display: flex; justify-content: space-between; align-items: center;
-        transition: 0.1s;
-    }
-    .pos-row-lite:hover { transform: translateX(3px); border-left-color: var(--gold); }
-    .pos-row-lite.active { border-left-color: var(--gold); background: #fffcf5; border-right: 1px solid var(--gold); }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>A.S.T. Admin Console</title>
     
-    .pos-row-lite .info { flex: 1; }
-    .pos-row-lite .name { font-weight: 700; color: var(--primary); font-size: 0.95rem; margin-bottom: 2px; }
-    .pos-row-lite .meta { font-size: 0.75rem; color: #888; }
-    .pos-row-lite .price { font-weight: 700; font-size: 1.1rem; color: var(--gold-hover); text-align: right; min-width: 80px; }
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="icon.png">
+    <link rel="apple-touch-icon" href="icon.png">
+    <meta name="theme-color" content="#0a0a0a">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="style.css">
     
-    /* --- ESTILO CATÁLOGO: GRID (STOCK) --- */
-    .catalog-grid {
-        display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
-    }
-    @media (min-width: 768px) {
-        .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; }
-    }
+    <style>
+        /* Ajuste Pestañas */
+        .nav-pills .nav-link { color: #aaa; border: 1px solid #333; margin-right: 5px; white-space: nowrap; }
+        .nav-pills .nav-link.active { background-color: var(--ast-cyan); color: #000; font-weight: bold; }
+        
+        /* Ocultar barra de scroll en movil */
+        .scroll-hide::-webkit-scrollbar { display: none; }
+        .scroll-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-    .card-catalog {
-        background: white; border-radius: 12px; overflow: hidden;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        border: 1px solid #eee;
-        display: flex; flex-direction: column;
-        transition: 0.2s;
-    }
-    .card-catalog:hover { border-color: var(--gold); box-shadow: 0 5px 15px rgba(212, 175, 55, 0.15); }
+        .hidden-section { display: none !important; }
+        /* Botón instalar */
+        #btn-install { display: none; }
+        
+        /* Estilos Proyectos y Historial */
+        .project-card, .history-card {
+            border-left: 4px solid var(--ast-cyan);
+            background: #1a1a1a;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .text-profit { color: #00ff88; }
+        .text-loss { color: #ff4d4d; }
 
-    .cat-img-box {
-        height: 120px; width: 100%; background: #f8f9fa;
-        display: flex; align-items: center; justify-content: center;
-        overflow: hidden; border-bottom: 1px solid #eee; position: relative;
-    }
-    .cat-img-box img { width: 100%; height: 100%; object-fit: cover; }
-    
-    /* Botón Editar Flotante */
-    .btn-edit-float {
-        position: absolute; top: 5px; right: 5px;
-        background: rgba(255,255,255,0.95); border-radius: 50%;
-        width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2); cursor: pointer; color: var(--primary); font-size: 0.8rem;
-        border: 1px solid transparent;
-    }
-    .btn-edit-float:hover { color: var(--gold); border-color: var(--gold); }
-
-    .cat-body { padding: 10px; flex: 1; display: flex; flex-direction: column; }
-    .cat-title { font-weight: 700; font-size: 0.85rem; line-height: 1.2; margin-bottom: 5px; color: var(--primary); height: 34px; overflow: hidden; }
-    .cat-price { color: var(--gold-hover); font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; }
-    
-    .cat-actions { 
-        background: #fcfcfc; padding: 5px; 
-        display: flex; justify-content: space-around; gap: 2px;
-        border-top: 1px solid #eee;
-    }
-    .btn-copy-mini {
-        border: 1px solid #ddd; background: white; color: #555;
-        border-radius: 4px; padding: 2px 0; width: 100%;
-        font-size: 0.7rem; text-align: center; cursor: pointer; transition: 0.2s;
-    }
-    .btn-copy-mini:hover { background: var(--primary); color: var(--gold); border-color: var(--primary); }
-
-    /* PANEL COTIZADOR */
-    .cotizador-panel { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); }
-    .input-line { border:none; border-bottom: 2px solid #eee; width:100%; text-align:center; font-weight:bold; outline:none; color: var(--primary); }
-
-    /* PANEL MOVIL */
-    .mobile-panel { position: fixed; bottom: 0; left: 0; width: 100%; background: white; z-index: 5000; border-radius: 20px 20px 0 0; padding: 20px; box-shadow: 0 -5px 30px rgba(0,0,0,0.3); transform: translateY(110%); transition: transform 0.3s; }
-    .mobile-panel.visible { transform: translateY(0); }
-
-    .card-k { background: white; border-radius: 15px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border: none; }
-    
-    .card-balance { 
-        padding: 25px; color: var(--gold); 
-        border-radius: 20px; text-align: center; 
-        background: linear-gradient(135deg, #1a1a1a, #000000); 
-        box-shadow: 0 4px 15px rgba(0,0,0,0.4); 
-        margin-bottom: 15px; border: 1px solid var(--gold); 
-    }
-    .card-balance h1 { color: white; }
-
-    /* NAVEGACIÓN INFERIOR */
-    .nav-btm { 
-        position: fixed; bottom: 0; width: 100%; background: white; 
-        display: flex; justify-content: space-between; 
-        padding: 8px 10px; border-top: 1px solid #eee; z-index: 1000; 
-        box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
-    }
-    .nav-btn { 
-        background: none; border: none; color: #aaa; 
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        font-size: 0.7rem; flex: 1; transition: 0.2s;
-    }
-    .nav-btn i { font-size: 1.3rem; margin-bottom: 3px; }
-    .nav-btn span { font-weight: 500; }
-    /* Activo: Dorado */
-    .nav-btn.active { color: var(--gold); transform: translateY(-2px); }
-    .nav-btn.active span { font-weight: 700; color: var(--primary); }
-
-    .file-upload-wrapper { position: relative; width: 100%; height: 200px; border: 2px dashed #ccc; border-radius: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #fafafa; overflow: hidden; }
-    .preview-img { position: absolute; width: 100%; height: 100%; object-fit: contain; z-index: 5; display: none; background: white; }
-    .file-input-overlay { position: absolute; top:0; left:0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 100; }
-    .placeholder-text { z-index: 1; pointer-events: none; }
-
-    #loader { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.95); z-index:9999; display:flex; flex-direction:column; justify-content:center; align-items:center; }
-
-    /* Botones Header Transparentes */
-    .btn-bi { background: rgba(255,255,255,0.1); border:1px solid rgba(212, 175, 55, 0.5); color:var(--gold); border-radius: 8px; padding: 5px 10px; font-size: 0.8rem; text-decoration: none; transition: 0.2s; }
-    .btn-bi:hover { background: var(--gold); color: var(--primary); border-color: var(--gold); }
-
-    #toast-container { position: fixed; top: 20px; right: 20px; z-index: 10000; }
-
-    .prov-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
-    .prov-item:last-child { border-bottom: none; }
-    .btn-wa-mini { background: #25D366; color: white; border: none; border-radius: 50%; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; text-decoration: none; }
-
-    .btn-xs { padding: 2px 8px; font-size: 0.75rem; border-radius: 4px; }
-    .card-debt { border-left: 4px solid var(--d); position: relative; }
-    .card-debt .badge-debt { background: var(--d); color: white; font-size: 0.7rem; padding: 3px 8px; border-radius: 10px; }
-
-    /* --- OVERRIDES DE COLORES BOOTSTRAP --- */
-    .btn-primary, .btn-dark { background-color: var(--primary) !important; border-color: var(--primary) !important; color: white !important; }
-    .btn-primary:hover, .btn-dark:hover { background-color: #333 !important; border-color: #333 !important; color: var(--gold) !important; }
-    
-    .btn-info { background-color: var(--gold) !important; border-color: var(--gold) !important; color: var(--primary) !important; font-weight: bold; }
-    .btn-info:hover { background-color: var(--gold-hover) !important; border-color: var(--gold-hover) !important; }
-
-    .text-primary { color: var(--primary) !important; }
-    .text-success { color: #198754 !important; } 
-    
-    #btn-float-cart { background-color: var(--gold); color: var(--primary); border: none; }
-    
-    .form-control:focus { box-shadow: 0 0 0 2px var(--gold) !important; border-color: var(--gold) !important; }
-    
-    .nav-pills .nav-link.active { background-color: var(--primary) !important; color: var(--gold) !important; }
-    .nav-pills .nav-link { color: var(--primary) !important; }
-  </style>
+        /* Dashboard Cards */
+        .kpi-card {
+            background: #141414;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+        }
+        .kpi-value { font-size: 1.1rem; font-weight: bold; color: white; }
+        .kpi-label { font-size: 0.7rem; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+    </style>
 </head>
 <body>
 
-  <div id="loader"><div class="spinner-border text-dark" role="status"></div><h6 class="mt-3 text-muted fw-bold">Conectando API...</h6></div>
-  
-  <div id="toast-container"></div>
-
-  <div class="header">
-    <div><h4 class="m-0 fw-bold" style="color: var(--gold); letter-spacing: 1px;">👑 KING'S SHOP</h4><small class="opacity-75" id="user-display">...</small></div>
-    <div class="d-flex gap-2">
-        <a class="btn-bi" href="dashboard.html"><i class="bi bi-graph-up-arrow"></i> Stats</a>
-        <button class="btn btn-light shadow-sm rounded-circle" style="width:45px; height:45px; color: var(--primary);" onclick="verBancos()"><i class="bi bi-bank2 fs-5"></i></button>
-    </div>
-  </div>
-
-  <div class="container-fluid px-3">
-    <div id="view-pos" class="view-sec">
-      <div class="main-layout">
-        <div class="list-column">
-           <div class="bg-white p-2 rounded mb-3 shadow-sm d-flex align-items-center border" style="border-color: #eee;">
-               <i class="fas fa-search text-muted ms-2 me-2"></i>
-               <input type="text" id="pos-search" class="form-control border-0 shadow-none" placeholder="Escribe para vender..." onkeyup="renderPos()" style="font-weight:bold;">
-           </div>
-           
-           <div id="pos-placeholder" class="text-center text-muted py-5">
-               <i class="fas fa-keyboard fs-1 mb-2 opacity-50" style="color: var(--gold);"></i>
-               <p>Escribe el nombre del producto<br>para agregarlo a la venta.</p>
-           </div>
-
-           <div id="pos-list"></div>
-        </div>
-        <div class="panel-column"><div id="desktop-cart-container"></div></div>
-      </div>
-    </div>
-
-    <div id="view-inv" class="view-sec" style="display:none; padding:15px;">
-      <div class="d-flex gap-2 mb-3">
-        <input type="text" id="inv-search" class="form-control" placeholder="🔍 Buscar..." onkeyup="renderInv()">
+    <nav class="navbar navbar-expand sticky-top px-3 border-bottom border-cyan">
+        <a class="navbar-brand fw-bold text-white" href="#">
+            <img src="icon.png" width="30" height="30" class="d-inline-block align-top rounded me-2" alt="">
+            A.S.T. <span class="text-cyan">SYSTEMS</span>
+        </a>
         
-        <select id="filter-prov" class="form-select" style="max-width: 150px; border-color: var(--gold);" onchange="renderInv()">
-            <option value="">Todos</option>
-        </select>
+        <button id="btn-install" class="btn btn-sm btn-outline-light ms-2 fw-bold" onclick="installApp()">
+            <i class="bi bi-download"></i> INSTALAR APP
+        </button>
 
-        <button class="btn btn-info" onclick="abrirModalProv()" title="Proveedores"><i class="fas fa-users"></i></button>
-        <button class="btn btn-success" onclick="abrirModalWA()" title="Importar WA"><i class="fab fa-whatsapp"></i></button>
-        <button class="btn btn-primary" onclick="abrirModalNuevo()">+ NUEVO</button>
-      </div>
-      <div id="inv-list" class="catalog-grid"></div>
-    </div>
-
-    <div id="view-web" class="view-sec" style="display:none; padding:15px;">
-        <h5 class="fw-bold mb-3 text-primary"><i class="fas fa-globe" style="color: var(--gold);"></i> Gestión Web</h5>
-        <input type="text" id="web-search" class="form-control mb-3" placeholder="🔍 Filtrar productos en web..." onkeyup="renderWeb()">
-        <div id="web-list"></div>
-    </div>
-
-    <div id="view-ped" class="view-sec" style="display:none; padding:15px;">
-      <button class="btn btn-primary w-100 mb-3" onclick="abrirModalPed()">+ Nuevo Pedido</button>
-      <div id="ped-list"></div>
-    </div>
-
-    <div id="view-cartera" class="view-sec" style="display:none; padding:15px;">
-        <div class="card-balance" style="background: linear-gradient(135deg, #e74c3c, #c0392b); border-color: #a93226;">
-            <small class="opacity-75" style="color:white;">Cartera Total (Por Cobrar)</small>
-            <h1 class="fw-bold display-4 my-1" id="bal-cartera">...</h1>
+        <div class="ms-auto d-flex gap-2 align-items-center">
+            <div id="connection-status" class="status-dot bg-secondary" title="Estado de Conexión"></div>
+            <button id="btn-main-add" class="btn btn-sm btn-outline-cyan" onclick="openProductModal()">
+                <i class="bi bi-plus-lg"></i>
+            </button>
         </div>
-        <h6 class="fw-bold text-muted mb-3">Listado de Deudores</h6>
-        <div id="cartera-list"></div>
-    </div>
+    </nav>
 
-    <div id="view-fin" class="view-sec" style="display:none; padding:15px;">
-      <div class="card-balance">
-          <small class="opacity-75">Saldo Disponible</small>
-          <h1 class="fw-bold display-4 my-1" id="bal-caja">...</h1>
-      </div>
-      <div class="row g-2 mb-3">
-         <div class="col-6"><div class="card-k p-2 text-center h-100"><small class="text-muted">Ventas Mes</small><h6 class="fw-bold mb-0" id="bal-ventas" style="color: var(--primary);">...</h6></div></div>
-         <div class="col-6"><div class="card-k p-2 text-center h-100"><small class="text-muted">Utilidad Real</small><h6 class="fw-bold text-success mb-0" id="bal-ganancia">...</h6></div></div>
-      </div>
-      <ul class="nav nav-pills nav-fill mb-3 bg-white rounded shadow-sm p-1">
-        <li class="nav-item"><a class="nav-link active" data-bs-toggle="pill" href="#f-abono">Cobrar</a></li>
-        <li class="nav-item"><a class="nav-link" data-bs-toggle="pill" href="#f-ingreso">Ingreso Extra</a></li>
-        <li class="nav-item"><a class="nav-link" data-bs-toggle="pill" href="#f-gasto">Gasto</a></li>
-        <li class="nav-item"><a class="nav-link" data-bs-toggle="pill" href="#f-hist">Historial</a></li>
-      </ul>
-      <div class="tab-content">
-         <div class="tab-pane fade show active" id="f-abono">
-            <div class="card-k">
-               <h6 class="text-success fw-bold">Registrar Pago (Abono)</h6>
-               <select id="ab-cli" class="form-select mb-2"></select>
-               <input type="number" id="ab-monto" class="form-control mb-2" placeholder="Monto">
-               <button class="btn btn-success w-100" onclick="doAbono()">REGISTRAR ABONO</button>
-            </div>
-         </div>
-         
-         <div class="tab-pane fade" id="f-ingreso">
-            <div class="card-k">
-               <h6 class="fw-bold" style="color: var(--primary);">Registrar Ingreso Extra</h6>
-               <input type="text" id="inc-desc" class="form-control mb-2" placeholder="Descripción (Ej: Préstamo Banco)">
-               <select id="inc-cat" class="form-select mb-2">
-                   <option value="Venta Externa">Venta Externa</option>
-                   <option value="Prestamo">Préstamo</option>
-                   <option value="Inyeccion Capital">Inyección Capital</option>
-                   <option value="Otros">Otros</option>
-               </select>
-               <input type="number" id="inc-monto" class="form-control mb-2" placeholder="Monto que entra">
-               <button class="btn btn-primary w-100" onclick="doIngresoExtra()">REGISTRAR INGRESO</button>
-            </div>
-         </div>
-
-         <div class="tab-pane fade" id="f-gasto">
-            <div class="card-k">
-               <h6 class="text-danger fw-bold">Registrar Gasto</h6>
-               <input type="text" id="g-desc" class="form-control mb-2" placeholder="Descripción (Ej: Mercancía)">
-               <select id="g-cat" class="form-select mb-2"><option>Transporte</option><option>Alimentación</option><option>Costo Mercancia</option><option>Servicios</option><option>Otros</option></select>
-               <input type="number" id="g-monto" class="form-control mb-2" placeholder="Valor (Ej: 4200000)">
-               <label class="small text-muted">Vincular a venta (Opcional):</label>
-               <select id="g-vinculo" class="form-select mb-2"><option value="">-- Ninguna --</option></select>
-               <button class="btn btn-danger w-100" onclick="doGasto()">REGISTRAR GASTO</button>
-            </div>
-         </div>
-         
-         <div class="tab-pane fade" id="f-hist"><div class="card-k" id="hist-list"></div></div>
-      </div>
-    </div>
-  </div>
-
-  <div id="mobile-cart" class="mobile-panel"></div>
-  <button id="btn-float-cart" class="btn shadow" style="position:fixed; bottom:80px; right:20px; width:60px; height:60px; z-index:4000; display:none; font-size:1.5rem;" onclick="toggleMobileCart()">🛒</button>
-
-  <div class="nav-btm">
-    <button class="nav-btn active" onclick="nav('pos',this)">
-        <i class="fas fa-store"></i>
-        <span>Ventas</span>
-    </button>
-    <button class="nav-btn" onclick="nav('inv',this)">
-        <i class="fas fa-boxes"></i>
-        <span>Catálogo</span>
-    </button>
-    <button class="nav-btn" onclick="nav('cartera',this)">
-        <i class="fas fa-wallet text-danger"></i>
-        <span class="text-danger">Cartera</span>
-    </button>
-    <button class="nav-btn" onclick="nav('ped',this)">
-        <i class="fas fa-clipboard-list"></i>
-        <span>Pedidos</span>
-    </button>
-    <button class="nav-btn" onclick="nav('fin',this)">
-        <i class="fas fa-chart-line"></i>
-        <span>Caja</span>
-    </button>
-    <button class="nav-btn" onclick="nav('web',this)">
-        <i class="fas fa-globe" style="color: var(--primary);"></i>
-        <span style="color: var(--primary);">Web</span>
-    </button>
-  </div>
-
-  <template id="tpl-cart">
-    <div class="cotizador-panel">
-       <div class="d-flex justify-content-between mb-2 align-items-center">
-         <h5 class="fw-bold m-0" style="color: var(--primary);">Cotización</h5>
-         <button class="btn btn-sm btn-outline-danger" onclick="clearCart()">🗑️</button>
-       </div>
-       <div class="d-flex justify-content-between gap-2 mb-2">
-         <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="c-iva" onchange="calcCart()"><label class="form-check-label small fw-bold" for="c-iva">IVA 19%</label></div>
-         <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="c-manual" onchange="toggleManual()"><label class="form-check-label small fw-bold" for="c-manual">Precio Manual</label></div>
-       </div>
-       <div id="cart-items-list" class="mb-3 small text-muted fst-italic" style="max-height:100px; overflow-y:auto; border-bottom:1px solid #eee; padding-bottom:5px;">Selecciona productos...</div>
-       <div class="row g-2 mb-3">
-         <div class="col-4 text-center"><small>Util %</small><input id="c-util" type="number" class="input-line" value="30" oninput="calcCart()"></div>
-         <div class="col-4 text-center"><small>Int %</small><input id="c-int" type="number" class="input-line" value="5" oninput="calcCart()"></div>
-         <div class="col-4 text-center"><small>Cuotas</small><input id="c-cuotas" type="number" class="input-line" value="1" oninput="calcCart()"></div>
-       </div>
-       
-       <label class="small fw-bold text-muted mt-2">Fecha de Venta:</label>
-       <input type="date" id="c-fecha" class="form-control mb-3" style="border-color: var(--gold);">
-
-       <div class="alert alert-light border text-center py-2 mb-3" style="background-color: #fffcf5; border-color: var(--gold) !important;">
-          <div class="d-flex justify-content-between align-items-center">
-             <span>Total:</span>
-             <div class="text-end">
-                <strong id="res-cont" class="fs-5" style="color: var(--primary);">$0</strong>
-                <input id="res-cont-input" type="number" class="form-control form-control-sm fw-bold text-end" style="display:none; color: var(--primary); border-color: var(--gold);" placeholder="Valor Manual" oninput="calcCart()">
-             </div>
-          </div>
-          <div id="row-cred" style="display:none; border-top:1px dashed var(--gold); margin-top:5px; padding-top:5px;">
-             <div class="d-flex justify-content-between" style="color: var(--primary);"><span>Inicial (30%):</span><strong id="res-ini">$0</strong></div>
-             <div class="d-flex justify-content-between mt-1" style="color: var(--gold-hover);"><span>Restante:</span><strong id="res-cuota-val">$0</strong> <small id="res-cuota-txt">x 1</small></div>
-          </div>
-       </div>
-       <input id="c-cliente" class="form-control mb-2" placeholder="Nombre Cliente">
-       <select id="c-metodo" class="form-select mb-2" onchange="toggleIni()"><option>Contado</option><option>Crédito</option></select>
-       <input id="c-inicial" type="number" class="form-control mb-3" placeholder="Inicial" disabled style="display:none; background:#e9ecef;">
-       <button class="btn btn-primary w-100 fw-bold py-2" onclick="finalizarVenta()" style="color: var(--gold);">✅ CONFIRMAR VENTA</button>
-    </div>
-  </template>
-
-  <div class="modal fade" id="modalProv" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-body"><h6 class="fw-bold mb-3" style="color: var(--primary);">👥 Gestión de Proveedores</h6><div class="input-group mb-3"><input id="new-prov-name" class="form-control" placeholder="Nuevo Prov"><input id="new-prov-tel" class="form-control" placeholder="WhatsApp"><button class="btn btn-primary" onclick="guardarProvManual()">💾</button></div><div id="list-provs" style="max-height:300px; overflow-y:auto;"></div></div></div></div></div>
-
-  <div class="modal fade" id="modalEdicion" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-body">
-                <h6 class="fw-bold mb-3" style="color: var(--primary);">Editar Producto</h6>
-                <div class="mb-2"><label class="small fw-bold">Nombre</label><input id="inp-edit-nombre" class="form-control fw-bold" style="color: var(--primary);"></div>
-                <div class="row g-2 mb-2">
-                    <div class="col-6">
-                        <label class="small fw-bold">Categoría</label>
-                        <input list="list-cats" id="inp-edit-categoria" class="form-control">
-                    </div>
-                    <div class="col-6"><label class="small fw-bold">Costo</label><input type="number" id="inp-edit-costo" class="form-control" oninput="calcGain('inp-edit-costo','inp-edit-publico')"></div>
-                </div>
-                <div class="mb-2 p-2 bg-light border rounded" style="border-color: var(--gold) !important;">
-                    <label class="small fw-bold" style="color: var(--primary);">Precio Público (Auto +30%)</label>
-                    <input type="number" id="inp-edit-publico" class="form-control" placeholder="0 = Usar formula automatica" style="border-color: var(--gold); color: var(--primary); font-weight: bold;">
-                </div>
-
-                <div class="mb-2"><label class="small fw-bold">Proveedor</label><input id="inp-edit-proveedor" class="form-control"></div>
-                <div class="mb-2"><label class="small fw-bold">Descripción</label><textarea id="inp-edit-desc" class="form-control"></textarea></div>
-                
-                <div class="p-3 bg-light rounded border my-3">
-                    <div class="form-check form-switch mb-2">
-                        <input class="form-check-input" type="checkbox" id="inp-edit-web" style="cursor:pointer;">
-                        <label class="form-check-label fw-bold small" for="inp-edit-web" style="color: var(--primary);">🌐 Mostrar en Página Web</label>
-                    </div>
-                    <label class="small fw-bold" style="color: var(--primary);">Categoría Web (Pública):</label>
-                    <select id="inp-edit-cat-web" class="form-select form-select-sm" style="border-color: var(--primary);">
-                        <option value="tecnologia">Tecnología</option>
-                        <option value="electro">Hogar y Electrodomésticos</option>
-                        <option value="juguetes">Juguetes</option>
-                        <option value="perfumes">Perfumes</option>
-                    </select>
-                </div>
-
-                <div class="mb-3 file-upload-wrapper">
-                    <input type="file" id="inp-file-foto" accept="image/*" onchange="previewFile()" class="file-input-overlay">
-                    <img id="img-preview-box" class="preview-img">
-                    <div class="placeholder-text text-center text-muted">
-                        <div style="font-size:2rem; color: var(--gold);">📷</div>
-                        <div>Toca para cambiar foto</div>
-                    </div>
-                </div>
-
-                <div class="d-grid gap-2"><button class="btn btn-primary" onclick="guardarCambiosAvanzado()">Guardar</button><button class="btn btn-outline-danger" onclick="eliminarProductoActual()">Eliminar</button></div>
+    <div class="container-fluid py-4">
+        
+        <div class="row mb-3">
+            <div class="col-12 overflow-auto scroll-hide">
+                <ul class="nav nav-pills flex-nowrap pb-1">
+                    <li class="nav-item">
+                        <button class="nav-link active" id="tab-prod" onclick="switchTab('PRODUCTO')">PRODUCTOS</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="tab-serv" onclick="switchTab('SERVICIO')">SERVICIOS</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="tab-proj" onclick="switchTab('PROYECTOS')">PROYECTOS</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="tab-hist" onclick="switchTab('HISTORIAL')">HISTORIAL</button>
+                    </li>
+                </ul>
             </div>
         </div>
+
+        <div id="view-catalog">
+            <div class="row justify-content-center mb-4">
+                <div class="col-12 col-md-6">
+                    <div class="input-group input-group-sm border-cyan-glow">
+                        <span class="input-group-text bg-dark border-secondary text-cyan"><i class="bi bi-search"></i></span>
+                        <input type="text" id="search" class="form-control bg-dark text-white border-secondary" placeholder="Buscar...">
+                    </div>
+                </div>
+            </div>
+
+            <div id="catalog-grid" class="row g-3">
+                <div class="col-12 text-center mt-5">
+                    <div class="spinner-border text-cyan" role="status"></div>
+                    <p class="text-muted mt-2">Cargando Sistema...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-projects" class="hidden-section">
+            
+            <div id="projects-dashboard" class="row g-2 mb-3 d-none">
+                <div class="col-4">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Facturado</div>
+                        <div class="kpi-value text-cyan" id="kpi-cobrado">$0</div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Gastos</div>
+                        <div class="kpi-value text-danger" id="kpi-gastos">$0</div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Utilidad</div>
+                        <div class="kpi-value text-profit" id="kpi-utilidad">$0</div>
+                    </div>
+                </div>
+                <div class="col-12 text-center mt-1">
+                    <small class="text-muted" style="font-size: 0.7rem;">MARGEN GLOBAL: <span id="kpi-margen" class="fw-bold text-white">0%</span></small>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="text-white m-0">Trabajos Activos</h5>
+                <button class="btn btn-sm btn-cyan" onclick="openNewProjectModal()">
+                    <i class="bi bi-folder-plus"></i> NUEVO
+                </button>
+            </div>
+            <div id="projects-list"></div>
+        </div>
+
+        <div id="view-history" class="hidden-section">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="text-white m-0">Historial Documentos</h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="fetchHistory()">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
+            <div id="history-list"></div>
+        </div>
+
     </div>
-  </div>
 
-  <div class="modal fade" id="modalNuevo" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-body">
-                <h6 class="fw-bold mb-3" style="color: var(--primary);">Nuevo Producto</h6>
-                <form onsubmit="event.preventDefault(); crearProducto();">
-                    <div class="mb-2"><label class="small fw-bold">Nombre</label><input id="new-nombre" class="form-control" required></div>
-                    <div class="row g-2 mb-2">
-                        <div class="col-6"><label class="small fw-bold">Categoría</label><input list="list-cats" id="new-categoria" class="form-control" onchange="generarIDAuto()"></div>
-                        <div class="col-6"><label class="small fw-bold">Costo</label><input type="number" id="new-costo" class="form-control" oninput="calcGain('new-costo','new-publico')"></div>
-                    </div>
-                    <div class="mb-2 p-2 bg-light border rounded" style="border-color: var(--gold) !important;">
-                        <label class="small fw-bold" style="color: var(--primary);">Precio Público (Auto +30%)</label>
-                        <input type="number" id="new-publico" class="form-control" style="border-color: var(--gold); color: var(--primary); font-weight: bold;">
-                    </div>
+    <div class="fab-cart" id="fab-cart" onclick="openCart()">
+        <i class="bi bi-file-earmark-pdf-fill"></i>
+        <span class="fab-badge" id="cart-count">0</span>
+    </div>
 
-                    <div class="mb-2"><label class="small fw-bold">Proveedor</label><input id="new-proveedor" class="form-control"></div>
-                    <div class="mb-2"><label class="small fw-bold">Descripción</label><textarea id="new-desc" class="form-control"></textarea></div>
-                    <div class="mb-3"><label class="small fw-bold">ID (Auto)</label><input id="new-id" class="form-control bg-light" readonly></div>
+    <datalist id="clients-datalist"></datalist>
 
-                    <div class="p-3 bg-light rounded border my-3">
-                        <div class="form-check form-switch mb-2">
-                            <input class="form-check-input" type="checkbox" id="new-web" style="cursor:pointer;">
-                            <label class="form-check-label fw-bold small" for="new-web" style="color: var(--primary);">🌐 Mostrar en Página Web</label>
+    <div class="modal fade" id="prodModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark-panel border-cyan">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-cyan" id="modal-title">Gestión</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="prodForm">
+                        <input type="hidden" id="p-uuid">
+                        
+                        <div class="mb-3">
+                            <label class="small text-secondary fw-bold">¿Qué deseas crear?</label>
+                            <select id="p-tipo" class="form-select bg-dark text-white border-cyan" onchange="toggleFormFields()">
+                                <option value="PRODUCTO">PRODUCTO FÍSICO</option>
+                                <option value="SERVICIO">SERVICIO / MANO DE OBRA</option>
+                            </select>
                         </div>
-                        <label class="small fw-bold" style="color: var(--primary);">Categoría Web:</label>
-                        <select id="new-cat-web" class="form-select form-select-sm" style="border-color: var(--primary);">
-                            <option value="tecnologia">Tecnología</option>
-                            <option value="electro">Hogar y Electrodomésticos</option>
-                            <option value="juguetes">Juguetes</option>
-                            <option value="perfumes">Perfumes</option>
+
+                        <div class="mb-3">
+                             <label class="small text-secondary">Imagen (Web / App)</label>
+                             <div class="input-group">
+                                 <input type="file" id="p-imagen-file" class="form-control form-control-sm bg-dark text-white border-secondary" accept="image/*">
+                                 <button class="btn btn-outline-secondary" type="button" onclick="document.getElementById('p-imagen-file').value = ''"><i class="bi bi-x"></i></button>
+                             </div>
+                             <input type="hidden" id="p-imagen-data"> 
+                        </div>
+
+                        <div id="fields-producto">
+                            <div class="mb-2">
+                                <label class="small text-cyan fw-bold">Categoría</label>
+                                <select id="p-categoria" class="form-select form-select-sm bg-dark text-white border-secondary">
+                                    <option value="AUTOMATIZACION_APPS">Automatización y Apps</option>
+                                    <option value="DOMOTICA_HOGAR">Domótica y Hogar</option>
+                                    <option value="ELECTRICIDAD_RESIDENCIAL">Electricidad Residencial</option>
+                                    <option value="MANTENIMIENTO_INDUSTRIAL">Mantenimiento Industrial</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-2">
+                                <label class="small text-secondary">Código</label>
+                                <input type="text" id="p-codigo" class="form-control form-control-sm bg-dark text-secondary border-secondary" placeholder="Autogenerado" readonly>
+                            </div>
+
+                            <div class="mb-2">
+                                <label class="small text-danger">Costo Interno (Privado)</label>
+                                <input type="number" id="p-costo" class="form-control form-control-sm bg-dark text-white border-danger">
+                            </div>
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="small text-secondary">Nombre del Ítem</label>
+                            <input type="text" id="p-nombre" class="form-control bg-dark text-white border-secondary" required>
+                        </div>
+                        <div class="mb-2">
+                            <label class="small text-secondary">Descripción / Detalles</label>
+                            <textarea id="p-specs" class="form-control form-control-sm bg-dark text-white border-secondary" rows="3"></textarea>
+                        </div>
+                        <div class="mb-2">
+                            <label class="small text-cyan fw-bold">Precio Público (Venta)</label>
+                            <input type="number" id="p-precio" class="form-control form-control-sm bg-dark text-white border-cyan">
+                        </div>
+                        
+                        <div class="form-check form-switch mt-2">
+                            <input class="form-check-input" type="checkbox" id="p-web">
+                            <label class="form-check-label small" for="p-web">Visible en Web Pública</label>
+                        </div>
+
+                    </form>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-cyan w-100" onclick="saveProduct()">GUARDAR DATOS</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="cartModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content bg-dark-panel border-cyan">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-cyan">Resumen del Pedido</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    
+                    <div class="input-group input-group-sm mb-3">
+                        <select id="cart-import-project" class="form-select bg-dark text-white border-secondary">
+                            <option value="">-- Importar ítems de un Proyecto --</option>
+                        </select>
+                        <button class="btn btn-outline-cyan" onclick="importFromProject()">Importar</button>
+                    </div>
+
+                    <div id="cart-items" class="mb-3"></div>
+                    
+                    <div class="d-flex justify-content-between mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="check-specs" checked>
+                            <label class="form-check-label text-white small" for="check-specs">Mostrar Descripción en PDF</label>
+                        </div>
+
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="check-iva" onchange="updateCartUI()">
+                            <label class="form-check-label text-white small fw-bold" for="check-iva">Cobrar IVA (19%)</label>
+                        </div>
+                    </div>
+
+                    <div class="p-3 mb-3 border border-secondary rounded bg-dark">
+                        <h6 class="text-white mb-2">Datos del Cliente</h6>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <input type="text" id="c-nombre" class="form-control form-control-sm bg-dark text-white border-secondary" list="clients-datalist" placeholder="Nombre / Razón Social" onchange="autoFillClient(this.value, 'c')">
+                            </div>
+                            <div class="col-md-3"><input type="text" id="c-nit" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="NIT"></div>
+                            <div class="col-md-3"><input type="text" id="c-tel" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Teléfono"></div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <select id="doc-type" class="form-select form-select-sm bg-dark text-white border-secondary w-50">
+                            <option value="Cotización">Cotización</option>
+                            <option value="Cuenta de Cobro">Cuenta de Cobro</option>
+                        </select>
+                        <div class="text-end">
+                            <small class="text-muted d-block" id="iva-display">IVA: $0</small>
+                            <h4 class="text-cyan m-0" id="cart-total">$0</h4>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-dark border-secondary p-2 mb-0">
+                        <div class="d-flex align-items-center">
+                            <label class="small text-warning fw-bold me-2">¿Vincular a un Trabajo?</label>
+                            <select id="cart-export-project" class="form-select form-select-sm bg-black text-white border-secondary">
+                                <option value="">No (Solo generar PDF)</option>
+                                </select>
+                        </div>
+                        <small class="text-muted" style="font-size:0.65rem">Si seleccionas un trabajo, los ítems se agregarán automáticamente a la carpeta del proyecto al generar el PDF.</small>
+                    </div>
+
+                </div>
+                
+                <div class="modal-footer border-secondary">
+                    <div class="row w-100">
+                        <div class="col-6">
+                            <button type="button" class="btn btn-outline-success w-100 fw-bold" onclick="sendWhatsApp()">
+                                <i class="bi bi-whatsapp"></i> WhatsApp
+                            </button>
+                        </div>
+                        <div class="col-6">
+                            <button type="button" class="btn btn-success w-100 fw-bold" onclick="generatePDF()">
+                                <i class="bi bi-file-earmark-pdf"></i> Generar PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="newProjectModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark-panel border-cyan">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-white">Nuevo Trabajo</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="text-cyan small fw-bold">Nombre del Trabajo / Proyecto</label>
+                        <input type="text" id="np-proyecto" class="form-control bg-dark text-white border-cyan" placeholder="Ej: Instalación 4 Cámaras">
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Cliente / Empresa</label>
+                        <input type="text" id="np-cliente" class="form-control bg-dark text-white border-secondary" list="clients-datalist" placeholder="Buscar Cliente..." onchange="autoFillClient(this.value, 'np')">
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Contacto</label>
+                        <input type="text" id="np-contacto" class="form-control bg-dark text-white border-secondary" placeholder="Teléfono o Email">
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button class="btn btn-cyan w-100" onclick="createNewProject()">CREAR CARPETA</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="editProjectModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark-panel border-cyan">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-white">Editar Trabajo</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="ep-id">
+                    <div class="mb-3">
+                        <label class="text-cyan small fw-bold">Nombre del Trabajo</label>
+                        <input type="text" id="ep-proyecto" class="form-control bg-dark text-white border-cyan">
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Cliente</label>
+                        <input type="text" id="ep-cliente" class="form-control bg-dark text-white border-secondary" list="clients-datalist">
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Contacto</label>
+                        <input type="text" id="ep-contacto" class="form-control bg-dark text-white border-secondary">
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Estado</label>
+                        <select id="ep-estado" class="form-select bg-dark text-white border-secondary">
+                            <option value="ABIERTO">ABIERTO</option>
+                            <option value="CERRADO">CERRADO / FINALIZADO</option>
                         </select>
                     </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button class="btn btn-cyan w-100" onclick="updateProject()">GUARDAR CAMBIOS</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-                    <div class="mb-3">
-                        <label class="small fw-bold">Foto:</label>
-                        <input type="file" id="new-file-foto" accept="image/*" class="form-control">
+    <div class="modal fade" id="projectDetailModal" tabindex="-1">
+        <div class="modal-dialog modal-fullscreen">
+            <div class="modal-content bg-dark-panel">
+                <div class="modal-header border-bottom border-secondary">
+                    <div class="flex-grow-1 me-2 overflow-hidden">
+                        <h5 class="modal-title text-cyan text-truncate" id="pd-title">...</h5>
+                        <small class="text-muted text-truncate d-block" id="pd-subtitle">...</small>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="openEditProjectModal()">
+                            <i class="bi bi-pencil-fill"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteProject()">
+                            <i class="bi bi-trash-fill"></i>
+                        </button>
+                        <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="modal"></button>
+                    </div>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="row g-0 border-bottom border-secondary text-center">
+                        <div class="col-4 p-2 border-end border-secondary">
+                            <small class="text-muted d-block">COBRADO</small>
+                            <span class="text-white fw-bold" id="pd-cobrado">$0</span>
+                        </div>
+                        <div class="col-4 p-2 border-end border-secondary">
+                            <small class="text-muted d-block">GASTOS</small>
+                            <span class="text-danger fw-bold" id="pd-gastos">$0</span>
+                        </div>
+                        <div class="col-4 p-2">
+                            <small class="text-muted d-block">UTILIDAD</small>
+                            <span class="text-success fw-bold" id="pd-utilidad">$0</span>
+                        </div>
                     </div>
 
-                    <button type="submit" class="btn btn-primary w-100" style="color: var(--gold);">Crear Producto</button>
-                </form>
+                    <div class="p-3" id="pd-items-list">
+                        </div>
+                </div>
+                <div class="modal-footer border-top border-secondary bg-dark">
+                    <button class="btn btn-outline-light flex-grow-1" onclick="openAddItemModal()">
+                        <i class="bi bi-tools"></i> Agregar Ítem/Gasto
+                    </button>
+                </div>
             </div>
         </div>
     </div>
-  </div>
 
-  <div class="modal fade" id="modalWA" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-body"><h6 class="fw-bold mb-3 text-success">Importar WhatsApp</h6><input id="wa-prov" class="form-control mb-2" placeholder="Proveedor"><input list="list-cats" id="wa-cat" class="form-control mb-2" placeholder="Categoría"><textarea id="wa-text" class="form-control mb-3" rows="5" placeholder="Pega el chat..."></textarea><button class="btn btn-success w-100" onclick="procesarWA()">Procesar</button></div></div></div></div>
+    <div class="modal fade" id="addItemModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark-panel border-secondary">
+                <div class="modal-header border-secondary py-2">
+                    <h6 class="modal-title text-white">Registrar Movimiento</h6>
+                    <button type="button" class="btn-close btn-close-white small" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="ai-id">
 
-  <div class="modal fade" id="modalPed" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-body">
-                <h6 class="fw-bold" style="color: var(--primary);">Nuevo Pedido</h6>
-                <label class="small fw-bold">Producto *</label>
-                <input list="list-prods-all" id="pe-prod" class="form-control mb-2" placeholder="Nombre del producto...">
-                <label class="small fw-bold">Proveedor</label>
-                <input id="pe-prov" class="form-control mb-2" placeholder="Proveedor">
-                <label class="small fw-bold">Costo Estimado (Opcional)</label>
-                <input type="number" id="pe-costo" class="form-control mb-2" placeholder="$">
-                <label class="small fw-bold">Notas</label>
-                <input id="pe-nota" class="form-control mb-2" placeholder="Detalles extra...">
-                <button class="btn btn-primary w-100" onclick="savePed()">Solicitar Pedido</button>
+                    <div class="mb-3 border-bottom border-secondary pb-3">
+                        <label class="small text-cyan fw-bold">Importar del Catálogo</label>
+                        <div class="input-group input-group-sm">
+                            <input class="form-control bg-dark text-white border-cyan" list="list-catalog-items" id="ai-search" onchange="fillItemFromCatalog(this.value)" placeholder="Escribe para buscar...">
+                            <button class="btn btn-outline-secondary" onclick="document.getElementById('ai-search').value=''"><i class="bi bi-x"></i></button>
+                        </div>
+                        <datalist id="list-catalog-items"></datalist>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="small text-muted">Descripción</label>
+                        <input type="text" id="ai-desc" class="form-control form-control-sm bg-dark text-white border-secondary">
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="small text-muted">Tipo</label>
+                            <select id="ai-tipo" class="form-select form-select-sm bg-dark text-white border-secondary">
+                                <option value="MATERIAL">Material / Insumo</option>
+                                <option value="MANO_OBRA">Mano de Obra</option>
+                                <option value="TRANSPORTE">Transporte / Viáticos</option>
+                                <option value="OTRO">Otro</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="small text-muted">Proveedor (Opcional)</label>
+                            <input type="text" id="ai-prov" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Lugar de compra">
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-4">
+                            <label class="small text-muted">Cant.</label>
+                            <input type="number" id="ai-cant" class="form-control form-control-sm bg-dark text-white border-secondary" value="1">
+                        </div>
+                        <div class="col-8">
+                            <label class="small text-danger">COSTO UNIT (Lo que pagas)</label>
+                            <input type="number" id="ai-costo" class="form-control form-control-sm bg-dark text-white border-danger" value="0">
+                        </div>
+                    </div>
+                    
+                    <hr class="border-secondary my-2">
+
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="ai-cobrar" checked onchange="toggleVentaInput()">
+                        <label class="form-check-label text-cyan small fw-bold" for="ai-cobrar">¿COBRAR AL CLIENTE?</label>
+                    </div>
+
+                    <div class="mb-2" id="div-venta">
+                        <label class="small text-cyan">PRECIO VENTA UNIT (Lo que cobras)</label>
+                        <input type="number" id="ai-venta" class="form-control form-control-sm bg-dark text-white border-cyan" value="0">
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary py-2">
+                    <button class="btn btn-primary w-100 btn-sm" onclick="saveProjectItem()">REGISTRAR</button>
+                </div>
             </div>
         </div>
     </div>
-  </div>
 
-  <div class="modal fade" id="modalEditPed" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-body">
-                <h6 class="fw-bold" style="color: var(--primary);">Editar Pedido</h6>
-                <label class="small fw-bold">Producto</label>
-                <input list="list-prods-all" id="ed-ped-prod" class="form-control mb-2">
-                <label class="small fw-bold">Proveedor</label>
-                <input id="ed-ped-prov" class="form-control mb-2">
-                <label class="small fw-bold">Costo Estimado</label>
-                <input type="number" id="ed-ped-costo" class="form-control mb-2">
-                <label class="small fw-bold">Notas</label>
-                <input id="ed-ped-nota" class="form-control mb-2">
-                <button class="btn btn-primary w-100" onclick="guardarEdicionPed()">Guardar Cambios</button>
-            </div>
-        </div>
-    </div>
-  </div>
-
-  <datalist id="list-cats"></datalist>
-  <datalist id="list-prods-all"></datalist>
-
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  <script src="app.js?v=54"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
