@@ -152,6 +152,7 @@ function renderGrid(data) {
                     <div class="btn-group">
                         <button class="btn btn-sm btn-outline-secondary" onclick='loadEditModal("${p.uuid}")'><i class="bi bi-pencil-fill"></i></button>
                         <button class="btn btn-sm btn-cyan" onclick='addToCart("${p.uuid}")'><i class="bi bi-plus-lg"></i></button>
+                        <button class="btn btn-sm btn-outline-light" onclick='shareProduct("${p.uuid}")'><i class="bi bi-share-fill"></i></button>
                     </div>
                 </div>
             </div>
@@ -320,9 +321,8 @@ function updateCartItem(index, field, value) {
 }
 
 async function openCart() {
-    // 1. Cargar Proyectos para el Selector de Exportar
     const selectExport = document.getElementById('cart-export-project');
-    if (selectExport.options.length <= 1) { // Si solo tiene la opción por defecto
+    if (selectExport.options.length <= 1) { 
         if(projects.length === 0) {
             const res = await callApi('getProjects');
             if(res.success) projects = res.data;
@@ -335,10 +335,8 @@ async function openCart() {
         });
     }
 
-    // 2. Cargar Proyectos para el Selector de Importar
     const selectImport = document.getElementById('cart-import-project');
     if (selectImport.options.length <= 1) {
-        // Reusamos la lista de proyectos ya cargada arriba
         projects.forEach(p => {
             const opt = document.createElement('option');
             opt.value = p.id;
@@ -374,7 +372,7 @@ async function importFromProject() {
                     specs: "Ítem importado de Proyecto", 
                     precio: item.venta,
                     cantidad: item.cantidad,
-                    costo: item.costo // Pasamos costo para mantener margen
+                    costo: item.costo 
                 });
                 count++;
             }
@@ -437,7 +435,6 @@ async function generatePDF() {
     const showSpecs = document.getElementById('check-specs').checked; 
     const ivaVal = applyIva ? (subtotal * 0.19) : 0;
     
-    // Capturamos el proyecto seleccionado para exportar
     const projectIdToSync = document.getElementById('cart-export-project').value;
 
     const payload = {
@@ -446,7 +443,7 @@ async function generatePDF() {
         items: cart.map(c => ({...c, subtotal: c.precio * c.cantidad})),
         totales: { subtotal: subtotal, iva: ivaVal, granTotal: subtotal + ivaVal },
         opciones: { mostrarDesc: showSpecs },
-        projectId: projectIdToSync // Enviamos ID del proyecto (o vacio)
+        projectId: projectIdToSync 
     };
 
     const res = await callApi('createDocument', payload);
@@ -508,12 +505,11 @@ async function fetchProjects() {
     if (res.success) {
         projects = res.data;
         if (projects.length === 0) {
-            dashboard.classList.add('d-none'); // Ocultar dashboard si no hay datos
+            dashboard.classList.add('d-none'); 
             list.innerHTML = '<div class="text-center text-muted mt-5"><i class="bi bi-folder2-open fs-1"></i><p>No hay trabajos abiertos.</p></div>';
             return;
         }
 
-        // CÁLCULO DASHBOARD GLOBAL
         let gCobrado = 0, gGastos = 0, gUtilidad = 0;
         
         projects.forEach(p => {
@@ -522,7 +518,6 @@ async function fetchProjects() {
             gUtilidad += p.utilidad;
         });
 
-        // Render Dashboard
         dashboard.classList.remove('d-none');
         document.getElementById('kpi-cobrado').innerText = fmt.format(gCobrado);
         document.getElementById('kpi-gastos').innerText = fmt.format(gGastos);
@@ -530,18 +525,16 @@ async function fetchProjects() {
         
         const margenGlobal = gCobrado > 0 ? ((gUtilidad / gCobrado) * 100).toFixed(1) : 0;
         document.getElementById('kpi-margen').innerText = margenGlobal + "%";
-        // Color margen global
+        
         const kpiMargenEl = document.getElementById('kpi-margen');
         if(margenGlobal > 30) kpiMargenEl.className = "fw-bold text-success";
         else if(margenGlobal > 10) kpiMargenEl.className = "fw-bold text-warning";
         else kpiMargenEl.className = "fw-bold text-danger";
 
 
-        // Render Lista Proyectos
         projects.forEach(p => {
             const utilClase = p.utilidad >= 0 ? 'text-profit' : 'text-loss';
             
-            // Cálculo Margen Individual
             const margen = p.totalCobrado > 0 ? ((p.utilidad / p.totalCobrado) * 100).toFixed(0) : 0;
             let badgeColor = "bg-secondary";
             if(p.totalCobrado > 0) {
@@ -910,4 +903,21 @@ async function deleteProjectItem(idMov) {
         openProjectDetails(currentProject);
         fetchProjects();
     }
+}
+
+// --- FUNCIÓN PARA COMPARTIR EN WHATSAPP ---
+function shareProduct(uuid) {
+    const p = catalog.find(x => x.uuid === uuid);
+    if(!p) return;
+
+    // URL DEL BACKEND (La misma que API_URL)
+    const backendUrl = API_URL; 
+    
+    // El enlace mágico que genera la vista previa
+    const shareLink = `${backendUrl}?shareId=${uuid}`;
+
+    const text = `Mira este producto de A.S.T.: *${p.nombre}*\n${shareLink}`;
+    
+    // Abrir WhatsApp
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
 }
