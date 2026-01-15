@@ -1,6 +1,6 @@
 // --- CONFIGURACIÓN ---
 // *** PEGA AQUÍ LA NUEVA URL QUE TE DIO GOOGLE APPS SCRIPT AL IMPLEMENTAR ***
-const API_URL = "https://script.google.com/macros/s/AKfycbxLayXPyMofzgr6sbh8o5dB57Gg_jKIJGlIo8peFhojmklaE1xkzSssXsH4dhIHMKbfgA/exec";
+const API_URL = "https://script.google.com/macros/library/d/1dLghVNWGfUAO0iOlXsHOrRR1tw2HIoiYwMFYzTq-Q8ISudAXhfwrIPWm/31";
 const API_KEY = "AST_2025_SECURE"; 
 
 let catalog = [];
