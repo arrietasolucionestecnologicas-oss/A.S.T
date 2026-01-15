@@ -235,8 +235,13 @@
 
                     </form>
                 </div>
-                <div class="modal-footer border-secondary">
-                    <button type="button" class="btn btn-cyan w-100" onclick="saveProduct()">GUARDAR DATOS</button>
+                <div class="modal-footer border-secondary d-flex flex-column gap-2">
+                    <button type="button" class="btn btn-cyan w-100 fw-bold" onclick="saveProduct()">
+                        <i class="bi bi-save"></i> GUARDAR DATOS
+                    </button>
+                    <button id="btn-github-publish" type="button" class="btn btn-outline-warning w-100 btn-sm fw-bold" onclick="publishToGitHub()" style="display:none;">
+                        <i class="bi bi-cloud-upload"></i> PUBLICAR EN WEB PÚBLICA (GitHub)
+                    </button>
                 </div>
             </div>
         </div>
@@ -299,7 +304,7 @@
                             <label class="small text-warning fw-bold me-2">¿Vincular a un Trabajo?</label>
                             <select id="cart-export-project" class="form-select form-select-sm bg-black text-white border-secondary">
                                 <option value="">No (Solo generar PDF)</option>
-                                </select>
+                            </select>
                         </div>
                         <small class="text-muted" style="font-size:0.65rem">Si seleccionas un trabajo, los ítems se agregarán automáticamente a la carpeta del proyecto al generar el PDF.</small>
                     </div>
