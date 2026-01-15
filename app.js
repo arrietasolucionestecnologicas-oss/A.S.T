@@ -1,6 +1,6 @@
 // --- CONFIGURACIÓN ---
 // *** PEGA AQUÍ LA NUEVA URL QUE TE DIO GOOGLE APPS SCRIPT AL IMPLEMENTAR ***
-const API_URL = "https://script.google.com/macros/s/AKfycbwqPQBBG8sHV3mLmY1K5E0bnKlAMRZEYz4hpsq1GSTSwgd2MmpCkVkIKWrRft4uCXSOig/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxLayXPyMofzgr6sbh8o5dB57Gg_jKIJGlIo8peFhojmklaE1xkzSssXsH4dhIHMKbfgA/exec";
 const API_KEY = "AST_2025_SECURE"; 
 
 let catalog = [];
@@ -266,7 +266,7 @@ async function publishToGitHub() {
             }
         });
     } else {
-        alert("Error al publicar: " + res.error);
+        alert("Error al publicar: " + (res.error || "Desconocido. Revisa si creaste la carpeta 'share' en GitHub."));
     }
 }
 
