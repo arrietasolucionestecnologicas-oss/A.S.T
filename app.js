@@ -905,18 +905,22 @@ async function deleteProjectItem(idMov) {
     }
 }
 
-// --- FUNCIÓN PARA COMPARTIR EN WHATSAPP ---
+// --- FUNCIÓN PARA COMPARTIR EN WHATSAPP (ACTUALIZADA) ---
 function shareProduct(uuid) {
     const p = catalog.find(x => x.uuid === uuid);
     if(!p) return;
 
     // URL DEL BACKEND (La misma que API_URL)
+    // Usamos el Backend para generar el enlace con FOTO para redes sociales
     const backendUrl = API_URL; 
     
     // El enlace mágico que genera la vista previa
-    const shareLink = `${backendUrl}?shareId=${uuid}`;
+    const smartLink = `${backendUrl}?shareId=${uuid}`;
+    
+    // Limpieza de nombre
+    const cleanName = p.nombre.replace(/[^\w\s\sáéíóúÁÉÍÓÚñÑüÜ.,-]/g, '').trim();
 
-    const text = `Mira este producto de A.S.T.: *${p.nombre}*\n${shareLink}`;
+    const text = `Mira esta solución de A.S.T.:\n*${cleanName}*\n${smartLink}`;
     
     // Abrir WhatsApp
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
