@@ -1,6 +1,6 @@
 // --- CONFIGURACIÓN ---
 // *** PEGA AQUÍ LA NUEVA URL QUE TE DIO GOOGLE APPS SCRIPT AL IMPLEMENTAR ***
-const API_URL = "https://script.google.com/macros/s/AKfycbwRAAfM7Ymmi8wV3JNeZv44t014Dc5fCJ4ZZXbeJX_7V3hJi94YMpFEUq5Za3EUteyILg/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwqPQBBG8sHV3mLmY1K5E0bnKlAMRZEYz4hpsq1GSTSwgd2MmpCkVkIKWrRft4uCXSOig/exec";
 const API_KEY = "AST_2025_SECURE"; 
 
 let catalog = [];
@@ -148,7 +148,7 @@ function openProductModal() {
     document.getElementById('p-uuid').value = "";
     document.getElementById('p-imagen-data').value = "";
     document.getElementById('p-tipo').value = currentView === 'HISTORIAL' ? 'PRODUCTO' : currentView;
-    document.getElementById('btn-github-publish').style.display = "none"; // Ocultar si es nuevo
+    document.getElementById('btn-github-publish').style.display = "none"; 
     toggleFormFields();
     new bootstrap.Modal(document.getElementById('prodModal')).show();
 }
@@ -181,7 +181,6 @@ function loadEditModal(uuid) {
         document.getElementById('p-costo').value = p.costo;
     }
     
-    // Mostrar botón de publicar solo al editar
     document.getElementById('btn-github-publish').style.display = "block";
     
     new bootstrap.Modal(document.getElementById('prodModal')).show();
@@ -230,7 +229,6 @@ async function saveProduct() {
     }
 }
 
-// --- FUNCIÓN DE PUBLICACIÓN AUTOMÁTICA EN GITHUB ---
 async function publishToGitHub() {
     const uuid = document.getElementById('p-uuid').value;
     const nombre = document.getElementById('p-nombre').value;
@@ -262,8 +260,6 @@ async function publishToGitHub() {
 
     if (res.success) {
         const finalUrl = res.data.url;
-        
-        // Copiar y preguntar si compartir
         navigator.clipboard.writeText(finalUrl).then(() => {
             if(confirm("✅ ¡Publicado en GitHub!\nEnlace copiado. ¿Compartir en WhatsApp ahora?")) {
                  window.open(`https://wa.me/?text=${encodeURIComponent("Mira este producto:\n" + finalUrl)}`, '_blank');
@@ -281,7 +277,6 @@ const toBase64 = file => new Promise((resolve, reject) => {
     reader.onerror = error => reject(error);
 });
 
-// --- FUNCIONES CARRITO Y DEMÁS (SIN CAMBIOS) ---
 function addToCart(uuid) {
     const p = catalog.find(x => x.uuid === uuid);
     const exist = cart.find(x => x.uuid === uuid);
