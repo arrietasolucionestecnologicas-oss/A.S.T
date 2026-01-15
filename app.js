@@ -905,23 +905,20 @@ async function deleteProjectItem(idMov) {
     }
 }
 
-// --- FUNCIÓN PARA COMPARTIR EN WHATSAPP (ACTUALIZADA) ---
+// --- FUNCIÓN PARA COMPARTIR EN WHATSAPP (ACTUALIZADA - UNICODE SEGURO) ---
 function shareProduct(uuid) {
     const p = catalog.find(x => x.uuid === uuid);
     if(!p) return;
 
-    // URL DEL BACKEND (La misma que API_URL)
-    // Usamos el Backend para generar el enlace con FOTO para redes sociales
+    // Generar enlace inteligente
     const backendUrl = API_URL; 
-    
-    // El enlace mágico que genera la vista previa
     const smartLink = `${backendUrl}?shareId=${uuid}`;
     
-    // Limpieza de nombre
-    const cleanName = p.nombre.replace(/[^\w\s\sáéíóúÁÉÍÓÚñÑüÜ.,-]/g, '').trim();
+    // Limpieza de nombre segura para URL
+    const cleanName = p.nombre.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑüÜ\s\.,\-\(\)]/g, '').trim();
 
-    const text = `Mira esta solución de A.S.T.:\n*${cleanName}*\n${smartLink}`;
+    // Mensaje con Unicode Seguro
+    const text = `Mira esta soluci\u00F3n de A.S.T.:\n*${cleanName}*\n${smartLink}`;
     
-    // Abrir WhatsApp
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
 }
