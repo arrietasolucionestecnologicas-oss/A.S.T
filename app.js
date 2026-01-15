@@ -258,9 +258,7 @@ async function publishToGitHub() {
     btn.innerHTML = originalText;
 
     if (res.success) {
-        // CORRECCIÓN: La API devuelve la URL directamente en 'res.data.url'
         const finalUrl = res.data.url;
-        
         navigator.clipboard.writeText(finalUrl).then(() => {
             if(confirm("✅ ¡Publicado en GitHub!\nEnlace copiado. ¿Compartir en WhatsApp ahora?")) {
                  window.open(`https://wa.me/?text=${encodeURIComponent("Mira este producto:\n" + finalUrl)}`, '_blank');
