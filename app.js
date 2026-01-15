@@ -1,5 +1,5 @@
 // --- CONFIGURACIÓN ---
-const API_URL = "https://script.google.com/macros/s/AKfycbxcWc83WPaNd0v0QnsuyH0h-6hZNIxFpk61A0pbYBiegyKLPwfsCQ3uqxggRv1uTsw4hw/exec"; // <--- ACTUALIZA ESTO CON LA URL NUEVA
+const API_URL = "https://script.google.com/macros/s/AKfycbxpCp7aY4L48znjtqH_1svYzY6MjVY58bXxt3iZvyuPQwBBt0u7S32aXxxt9VVgtaHd/exec"; // <--- ACTUALIZA ESTO CON LA URL NUEVA
 const API_KEY = "AST_2025_SECURE"; 
 
 
