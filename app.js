@@ -108,6 +108,326 @@ async function fetchCatalog() {
     }
 }
 
+// --- GESTIÓN DE CLIENTES ---
+async function fetchClients() {
+    const res = await callApi('getClients');
+    if (res.success) {
+        clients = res.data;
+        const datalist = document.getElementById('clients-datalist');
+        datalist.innerHTML = '';
+        clients.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.nombre;
+            datalist.appendChild(opt);
+        });
+    }
+}
+
+function autoFillClient(name, prefix) {
+    const client = clients.find(c => c.nombre === name);
+    if (client) {
+        if (prefix === 'c') { // Carrito
+            document.getElementById('c-nit').value = client.nit;
+            document.getElementById('c-tel').value = client.telefono;
+        } 
+        // Puedes agregar lógica para otros prefijos si es necesario
+    }
+}
+
+// --- GESTIÓN DE PROYECTOS (ESTO FALTABA) ---
+async function fetchProjects() {
+    const container = document.getElementById('projects-list');
+    container.innerHTML = '<div class="text-center mt-5"><div class="spinner-border text-cyan"></div></div>';
+    
+    const res = await callApi('getProjects');
+    
+    if(res.success) {
+        projects = res.data;
+        renderProjects();
+        calculateDashboard();
+    } else {
+        container.innerHTML = `<div class="text-danger text-center">Error al cargar proyectos</div>`;
+    }
+}
+
+function renderProjects() {
+    const container = document.getElementById('projects-list');
+    container.innerHTML = '';
+    
+    if (projects.length === 0) {
+        container.innerHTML = '<div class="text-muted text-center mt-5">No hay trabajos activos.</div>';
+        return;
+    }
+
+    projects.forEach(p => {
+        const estadoClass = p.estado === 'ABIERTO' ? 'text-success' : 'text-secondary';
+        const card = `
+        <div class="project-card" onclick="openProjectDetail('${p.id}')">
+            <div class="d-flex justify-content-between">
+                <h6 class="text-white fw-bold mb-1">${p.nombreProyecto}</h6>
+                <span class="badge bg-dark border border-secondary ${estadoClass}">${p.estado}</span>
+            </div>
+            <small class="text-cyan d-block mb-2">${p.cliente}</small>
+            <div class="row g-0 text-center" style="font-size:0.75rem;">
+                <div class="col-4 border-end border-secondary">
+                    <span class="text-muted">COBRADO</span><br>
+                    <span class="text-white">${fmt.format(p.totalCobrado)}</span>
+                </div>
+                <div class="col-4 border-end border-secondary">
+                    <span class="text-muted">COSTOS</span><br>
+                    <span class="text-danger">${fmt.format(p.totalCostos)}</span>
+                </div>
+                <div class="col-4">
+                    <span class="text-muted">UTILIDAD</span><br>
+                    <span class="${p.utilidad >= 0 ? 'text-profit' : 'text-loss'}">${fmt.format(p.utilidad)}</span>
+                </div>
+            </div>
+        </div>`;
+        container.innerHTML += card;
+    });
+}
+
+function calculateDashboard() {
+    let cobrado = 0, gastos = 0, utilidad = 0;
+    projects.forEach(p => {
+        if(p.estado === 'ABIERTO') {
+            cobrado += p.totalCobrado;
+            gastos += p.totalCostos;
+            utilidad += p.utilidad;
+        }
+    });
+    
+    document.getElementById('kpi-cobrado').innerText = fmt.format(cobrado);
+    document.getElementById('kpi-gastos').innerText = fmt.format(gastos);
+    document.getElementById('kpi-utilidad').innerText = fmt.format(utilidad);
+    
+    const margen = cobrado > 0 ? ((utilidad / cobrado) * 100).toFixed(1) : 0;
+    document.getElementById('kpi-margen').innerText = margen + "%";
+    document.getElementById('projects-dashboard').classList.remove('d-none');
+}
+
+function openNewProjectModal() {
+    document.getElementById('np-proyecto').value = "";
+    document.getElementById('np-cliente').value = "";
+    document.getElementById('np-contacto').value = "";
+    new bootstrap.Modal(document.getElementById('newProjectModal')).show();
+}
+
+async function createNewProject() {
+    const payload = {
+        nombreProyecto: document.getElementById('np-proyecto').value,
+        cliente: document.getElementById('np-cliente').value,
+        contacto: document.getElementById('np-contacto').value
+    };
+    
+    if(!payload.nombreProyecto || !payload.cliente) return alert("Nombre y Cliente obligatorios");
+    
+    const btn = document.querySelector('#newProjectModal .btn-cyan');
+    btn.disabled = true; btn.innerText = "...";
+    
+    const res = await callApi('createProject', payload);
+    btn.disabled = false; btn.innerText = "CREAR CARPETA";
+    
+    if(res.success) {
+        bootstrap.Modal.getInstance(document.getElementById('newProjectModal')).hide();
+        fetchProjects();
+    }
+}
+
+// --- DETALLE DE PROYECTO ---
+async function openProjectDetail(id) {
+    currentProject = id;
+    const modal = new bootstrap.Modal(document.getElementById('projectDetailModal'));
+    modal.show();
+    
+    const res = await callApi('getProjectDetails', { id: id });
+    if(res.success) {
+        currentProjectData = res.data.info;
+        currentProjectItems = res.data.items;
+        renderProjectItems();
+    }
+}
+
+function renderProjectItems() {
+    document.getElementById('pd-title').innerText = currentProjectData.nombreProyecto;
+    document.getElementById('pd-subtitle').innerText = currentProjectData.cliente;
+    
+    document.getElementById('pd-cobrado').innerText = fmt.format(currentProjectData.totalCobrado);
+    document.getElementById('pd-gastos').innerText = fmt.format(currentProjectData.totalCostos);
+    document.getElementById('pd-utilidad').innerText = fmt.format(currentProjectData.utilidad);
+    
+    const list = document.getElementById('pd-items-list');
+    list.innerHTML = '';
+    
+    currentProjectItems.forEach(item => {
+        const isCobrar = (item.esCobrar === true || item.esCobrar === 'TRUE');
+        const badge = isCobrar ? '<span class="badge bg-success">COBRABLE</span>' : '<span class="badge bg-secondary">NO COBRABLE</span>';
+        
+        const html = `
+        <div class="d-flex justify-content-between align-items-center border-bottom border-secondary py-2">
+            <div class="overflow-hidden me-2">
+                <div class="text-white small fw-bold text-truncate">${item.descripcion}</div>
+                <div class="text-muted" style="font-size:0.7rem;">${item.tipo} | ${item.proveedor || '-'}</div>
+                ${badge}
+            </div>
+            <div class="text-end" style="min-width: 80px;">
+                <div class="text-danger small">-${fmt.format(item.costo * item.cantidad)}</div>
+                ${isCobrar ? `<div class="text-success small">+${fmt.format(item.venta * item.cantidad)}</div>` : ''}
+            </div>
+            <button class="btn btn-sm text-secondary" onclick="deleteProjectMovement('${item.idMov}')"><i class="bi bi-trash"></i></button>
+        </div>`;
+        list.innerHTML += html;
+    });
+}
+
+function openEditProjectModal() {
+    if(!currentProjectData) return;
+    document.getElementById('ep-id').value = currentProjectData.id;
+    document.getElementById('ep-proyecto').value = currentProjectData.nombreProyecto;
+    document.getElementById('ep-cliente').value = currentProjectData.cliente;
+    document.getElementById('ep-contacto').value = currentProjectData.contacto;
+    document.getElementById('ep-estado').value = currentProjectData.estado;
+    new bootstrap.Modal(document.getElementById('editProjectModal')).show();
+}
+
+async function updateProject() {
+    const payload = {
+        id: document.getElementById('ep-id').value,
+        nombreProyecto: document.getElementById('ep-proyecto').value,
+        cliente: document.getElementById('ep-cliente').value,
+        contacto: document.getElementById('ep-contacto').value,
+        estado: document.getElementById('ep-estado').value
+    };
+    await callApi('updateProject', payload);
+    bootstrap.Modal.getInstance(document.getElementById('editProjectModal')).hide();
+    openProjectDetail(payload.id); // Recargar
+    fetchProjects(); // Actualizar lista atrás
+}
+
+async function deleteProject() {
+    if(confirm("¿Eliminar este proyecto y todo su historial?")) {
+        await callApi('deleteProject', { id: currentProject });
+        bootstrap.Modal.getInstance(document.getElementById('projectDetailModal')).hide();
+        fetchProjects();
+    }
+}
+
+// --- ITEMS DE PROYECTO ---
+function openAddItemModal() {
+    document.getElementById('ai-id').value = "";
+    document.getElementById('ai-desc').value = "";
+    document.getElementById('ai-prov').value = "";
+    document.getElementById('ai-cant').value = 1;
+    document.getElementById('ai-costo').value = 0;
+    document.getElementById('ai-venta').value = 0;
+    
+    // Llenar datalist del catálogo
+    const dl = document.getElementById('list-catalog-items');
+    dl.innerHTML = '';
+    catalog.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.nombre;
+        dl.appendChild(opt);
+    });
+    
+    new bootstrap.Modal(document.getElementById('addItemModal')).show();
+}
+
+function fillItemFromCatalog(name) {
+    const item = catalog.find(p => p.nombre === name);
+    if(item) {
+        document.getElementById('ai-desc').value = item.nombre;
+        document.getElementById('ai-costo').value = item.costo || 0;
+        document.getElementById('ai-venta').value = item.precio || 0;
+        
+        const tipoSelect = document.getElementById('ai-tipo');
+        if(item.tipo === 'SERVICIO') tipoSelect.value = 'MANO_OBRA';
+        else tipoSelect.value = 'MATERIAL';
+    }
+}
+
+function toggleVentaInput() {
+    const isChecked = document.getElementById('ai-cobrar').checked;
+    const div = document.getElementById('div-venta');
+    if(isChecked) div.style.display = 'block';
+    else div.style.display = 'none';
+}
+
+async function saveProjectItem() {
+    const payload = {
+        projectId: currentProject,
+        tipo: document.getElementById('ai-tipo').value,
+        descripcion: document.getElementById('ai-desc').value,
+        proveedor: document.getElementById('ai-prov').value,
+        cantidad: Number(document.getElementById('ai-cant').value),
+        costo: Number(document.getElementById('ai-costo').value),
+        venta: Number(document.getElementById('ai-venta').value),
+        esCobrar: document.getElementById('ai-cobrar').checked
+    };
+    
+    if(!payload.descripcion) return alert("Descripción requerida");
+    
+    const res = await callApi('addProjectMovement', payload);
+    if(res.success) {
+        bootstrap.Modal.getInstance(document.getElementById('addItemModal')).hide();
+        openProjectDetail(currentProject);
+        fetchProjects();
+    }
+}
+
+async function deleteProjectMovement(idMov) {
+    if(confirm("¿Borrar movimiento?")) {
+        await callApi('deleteProjectMovement', { idMov: idMov, projectId: currentProject });
+        openProjectDetail(currentProject);
+        fetchProjects();
+    }
+}
+
+// --- HISTORIAL ---
+async function fetchHistory() {
+    const container = document.getElementById('history-list');
+    container.innerHTML = '<div class="text-center mt-5"><div class="spinner-border text-cyan"></div></div>';
+    
+    const res = await callApi('getHistoryDocs');
+    
+    if(res.success) {
+        historyDocs = res.data;
+        renderHistory();
+    } else {
+        container.innerHTML = `<div class="text-danger text-center">Error historial</div>`;
+    }
+}
+
+function renderHistory() {
+    const container = document.getElementById('history-list');
+    container.innerHTML = '';
+    
+    if (historyDocs.length === 0) {
+        container.innerHTML = '<div class="text-muted text-center mt-5">Sin documentos generados.</div>';
+        return;
+    }
+
+    historyDocs.forEach(h => {
+        const date = new Date(h.fecha).toLocaleDateString();
+        const html = `
+        <div class="history-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="text-cyan fw-bold">${h.consecutivo}</div>
+                    <div class="text-white small">${h.cliente}</div>
+                    <div class="text-muted" style="font-size:0.7rem;">${date} | ${h.tipo}</div>
+                </div>
+                <div class="text-end">
+                    <div class="text-white fw-bold">${fmt.format(h.total)}</div>
+                    <a href="${h.url}" target="_blank" class="btn btn-sm btn-outline-light mt-1"><i class="bi bi-file-earmark-pdf"></i> Ver</a>
+                </div>
+            </div>
+        </div>`;
+        container.innerHTML += html;
+    });
+}
+
+// --- RENDER GRID (PRODUCTOS/CATALOGO) ---
 function renderGrid(data) {
     const grid = document.getElementById('catalog-grid');
     grid.innerHTML = '';
