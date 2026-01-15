@@ -2,6 +2,7 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbxcWc83WPaNd0v0QnsuyH0h-6hZNIxFpk61A0pbYBiegyKLPwfsCQ3uqxggRv1uTsw4hw/exec"; // <--- ACTUALIZA ESTO CON LA URL NUEVA
 const API_KEY = "AST_2025_SECURE"; 
 
+
 let catalog = [];
 let cart = [];
 let projects = []; 
