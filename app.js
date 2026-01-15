@@ -1,6 +1,5 @@
 // --- CONFIGURACIÓN ---
-// *** PEGA AQUÍ LA NUEVA URL QUE TE DIO GOOGLE APPS SCRIPT AL IMPLEMENTAR ***
-const API_URL = "https://script.google.com/macros/s/AKfycbxcWc83WPaNd0v0QnsuyH0h-6hZNIxFpk61A0pbYBiegyKLPwfsCQ3uqxggRv1uTsw4hw/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxcWc83WPaNd0v0QnsuyH0h-6hZNIxFpk61A0pbYBiegyKLPwfsCQ3uqxggRv1uTsw4hw/exec"; // <--- ACTUALIZA ESTO CON LA URL NUEVA
 const API_KEY = "AST_2025_SECURE"; 
 
 let catalog = [];
@@ -259,7 +258,9 @@ async function publishToGitHub() {
     btn.innerHTML = originalText;
 
     if (res.success) {
+        // CORRECCIÓN: La API devuelve la URL directamente en 'res.data.url'
         const finalUrl = res.data.url;
+        
         navigator.clipboard.writeText(finalUrl).then(() => {
             if(confirm("✅ ¡Publicado en GitHub!\nEnlace copiado. ¿Compartir en WhatsApp ahora?")) {
                  window.open(`https://wa.me/?text=${encodeURIComponent("Mira este producto:\n" + finalUrl)}`, '_blank');
