@@ -136,7 +136,7 @@ function autoFillClient(name, prefix) {
     }
 }
 
-// --- GESTIÓN DE PROYECTOS (ESTO FALTABA) ---
+// --- GESTIÓN DE PROYECTOS ---
 async function fetchProjects() {
     const container = document.getElementById('projects-list');
     container.innerHTML = '<div class="text-center mt-5"><div class="spinner-border text-cyan"></div></div>';
@@ -385,7 +385,7 @@ async function deleteProjectMovement(idMov) {
     }
 }
 
-// --- HISTORIAL ---
+// --- HISTORIAL (CON FUNCIÓN DE EDICIÓN AGREGADA) ---
 async function fetchHistory() {
     const container = document.getElementById('history-list');
     container.innerHTML = '<div class="text-center mt-5"><div class="spinner-border text-cyan"></div></div>';
@@ -409,8 +409,9 @@ function renderHistory() {
         return;
     }
 
-    historyDocs.forEach(h => {
+    historyDocs.forEach((h, index) => {
         const date = new Date(h.fecha).toLocaleDateString();
+        // === CAMBIO CLAVE: Se agregó el botón con el lápiz (reloadOrderFromHistory) ===
         const html = `
         <div class="history-card">
             <div class="d-flex justify-content-between align-items-center">
@@ -419,14 +420,63 @@ function renderHistory() {
                     <div class="text-white small">${h.cliente}</div>
                     <div class="text-muted" style="font-size:0.7rem;">${date} | ${h.tipo}</div>
                 </div>
-                <div class="text-end">
+                <div class="text-end d-flex flex-column align-items-end gap-1">
                     <div class="text-white fw-bold">${fmt.format(h.total)}</div>
-                    <a href="${h.url}" target="_blank" class="btn btn-sm btn-outline-light mt-1"><i class="bi bi-file-earmark-pdf"></i> Ver</a>
+                    <div class="btn-group btn-group-sm">
+                        <a href="${h.url}" target="_blank" class="btn btn-outline-light" title="Ver PDF"><i class="bi bi-eye"></i></a>
+                        <button class="btn btn-outline-warning" onclick="reloadOrderFromHistory(${index})" title="Editar / Cargar al Carrito"><i class="bi bi-pencil-square"></i></button>
+                    </div>
                 </div>
             </div>
         </div>`;
         container.innerHTML += html;
     });
+}
+
+// === NUEVA FUNCIÓN LÓGICA PARA RECUPERAR PEDIDO ===
+function reloadOrderFromHistory(index) {
+    const doc = historyDocs[index];
+    // 1. Verificamos si existe el respaldo oculto
+    if(!doc.jsonData) return alert("Este documento es antiguo y no tiene datos recuperables.");
+
+    // 2. Advertencia de seguridad
+    if(cart.length > 0) {
+        if(!confirm("⚠️ Tu carrito actual se borrará para cargar esta cotización. ¿Continuar?")) return;
+    }
+
+    try {
+        const orderData = JSON.parse(doc.jsonData);
+        
+        // 3. Restaurar ítems al carrito
+        cart = orderData.items || [];
+        
+        // 4. Restaurar datos del cliente al formulario
+        if(orderData.cliente) {
+            document.getElementById('c-nombre').value = orderData.cliente.nombre || "";
+            document.getElementById('c-nit').value = orderData.cliente.nit || "";
+            document.getElementById('c-tel').value = orderData.cliente.telefono || "";
+        }
+
+        // 5. Restaurar opciones visuales
+        if(orderData.opciones) {
+            document.getElementById('check-specs').checked = orderData.opciones.mostrarDesc;
+        }
+        
+        // 6. Actualizar totales y abrir modal
+        updateCartUI();
+        openCart();
+        
+        // Feedback visual
+        const toast = document.createElement('div');
+        toast.className = "alert alert-success position-fixed top-0 start-50 translate-middle-x mt-3 z-3";
+        toast.innerText = `Cotización ${doc.consecutivo} cargada. Puedes editarla ahora.`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+
+    } catch(e) {
+        console.error(e);
+        alert("Error al leer los datos del historial.");
+    }
 }
 
 // --- RENDER GRID (PRODUCTOS/CATALOGO) ---
