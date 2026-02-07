@@ -1,7 +1,7 @@
 // ==========================================
-// A.S.T. ADMIN FRONTEND (V25.3 - LECTOR BLINDADO ANTI-ERROR)
+// A.S.T. ADMIN FRONTEND (V26.2 - BLINDAJE DE INTERFAZ)
 // ==========================================
-// *** PEGA AQUÍ TU URL DEL SCRIPT ***
+// *** PEGA AQUÍ TU URL DEL SCRIPT (VERIFICA QUE SEA LA V26) ***
 const API_URL = "https://script.google.com/macros/s/AKfycbxpCp7aY4L48znjtqH_1svYzY6MjVY58bXxt3iZvyuPQwBBt0u7S32aXxxt9VVgtaHd/exec";
 const API_KEY = "AST_2025_SECURE"; 
 
@@ -412,13 +412,12 @@ function renderHistory() {
     });
 }
 
-// === SOLUCIÓN REAL: FUNCIÓN BLINDADA V25.3 ===
+// === FUNCIÓN CORREGIDA PARA NO DAR ERROR SI FALTA HTML ===
 function reloadOrderFromHistory(index) {
     const doc = historyDocs[index];
     
-    // VALIDACIÓN 1: ¿Hay datos?
     if(!doc.jsonData || doc.jsonData === "" || doc.jsonData === "undefined") {
-        return alert("⚠️ Este documento es muy antiguo y no tiene respaldo de datos para editar. Tendrás que crearlo de nuevo.");
+        return alert("⚠️ Este documento es antiguo y no tiene datos recuperables.");
     }
 
     if(cart.length > 0) {
@@ -426,26 +425,13 @@ function reloadOrderFromHistory(index) {
     }
 
     try {
-        // LIMPIEZA AGRESIVA DE ERRORES DE EXCEL
-        // Convertimos a string por seguridad
         let safeJson = String(doc.jsonData);
-        
-        // 1. Quitar comillas dobles externas que agrega CSV/Excel (Ej: "{...}")
         if (safeJson.startsWith('"') && safeJson.endsWith('"')) {
-            safeJson = safeJson.slice(1, -1);
-            // Revertir doble comilla ("") a comilla simple (")
-            safeJson = safeJson.replace(/""/g, '"');
+            safeJson = safeJson.slice(1, -1).replace(/""/g, '"');
         }
-
-        // 2. ELIMINAR SALTOS DE LÍNEA REALES (EL ASESINO DE JSON)
-        // Excel guarda saltos de línea físicos (\n) que rompen JSON.parse
-        // Los reemplazamos por un espacio seguro.
         safeJson = safeJson.replace(/[\r\n]+/g, " ");
 
-        // INTENTO DE LECTURA
         const orderData = JSON.parse(safeJson);
-        
-        // Carga de datos exitosa
         cart = orderData.items || [];
         
         if(orderData.cliente) {
@@ -453,30 +439,38 @@ function reloadOrderFromHistory(index) {
             document.getElementById('c-nit').value = orderData.cliente.nit || "";
             document.getElementById('c-tel').value = orderData.cliente.telefono || "";
         }
+        
+        // --- AQUÍ ESTABA EL ERROR: VERIFICAMOS SI EXISTE EL BOTÓN ANTES DE USARLO ---
         if(orderData.opciones) {
-            document.getElementById('check-specs').checked = orderData.opciones.mostrarDesc;
+            const checkSpecs = document.getElementById('check-specs');
+            if(checkSpecs) checkSpecs.checked = orderData.opciones.mostrarDesc;
+            
             if(orderData.opciones.terminos) {
-                document.getElementById('check-terms').checked = true;
-                document.getElementById('terms-area').style.display = 'block';
-                document.getElementById('terms-area').value = orderData.opciones.terminos;
+                const checkTerms = document.getElementById('check-terms');
+                const termsArea = document.getElementById('terms-area');
+                
+                if(checkTerms && termsArea) {
+                    checkTerms.checked = true;
+                    termsArea.style.display = 'block';
+                    termsArea.value = orderData.opciones.terminos;
+                }
             }
         }
+        // --------------------------------------------------------------------------
         
         updateCartUI();
         openCart();
         
-        // Notificación de éxito
         const toast = document.createElement('div');
         toast.className = "alert alert-success position-fixed top-0 start-50 translate-middle-x mt-3 z-3";
-        toast.innerText = `✅ Cotización ${doc.consecutivo} recuperada con éxito.`;
+        toast.innerText = `✅ Cotización ${doc.consecutivo} cargada.`;
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 3000);
 
     } catch(e) {
-        console.error("Error al leer JSON:", e);
-        // Si falla todo, cargamos al menos el nombre del cliente para ayudar
+        console.error("Error leyendo JSON:", e);
         document.getElementById('c-nombre').value = doc.cliente || "";
-        alert("⚠️ Error: Los datos de los productos están dañados en el historial, pero recuperé el nombre del cliente. Por favor agrega los productos manualmente.");
+        alert("⚠️ Hubo un detalle cargando los productos, pero recuperé el cliente.");
     }
 }
 
@@ -747,8 +741,18 @@ async function generatePDF() {
     const ivaVal = applyIva ? (subtotal * 0.19) : 0;
     const projectIdToSync = document.getElementById('cart-export-project').value;
     
-    const includeTerms = document.getElementById('check-terms').checked;
-    const termsText = includeTerms ? document.getElementById('terms-area').value : "";
+    // VERIFICACIÓN SEGURA DE TÉRMINOS
+    let includeTerms = false;
+    let termsText = "";
+    
+    const termsCheck = document.getElementById('check-terms');
+    if (termsCheck) {
+        includeTerms = termsCheck.checked;
+        if(includeTerms) {
+            const termsArea = document.getElementById('terms-area');
+            if(termsArea) termsText = termsArea.value;
+        }
+    }
 
     const payload = { 
         tipoDoc: document.getElementById('doc-type').value, 
@@ -774,6 +778,7 @@ async function generatePDF() {
         const modalEl = document.getElementById('cartModal');
         const modalInstance = bootstrap.Modal.getInstance(modalEl);
         if(modalInstance) modalInstance.hide();
+        
         setTimeout(() => { fetchClients(); if(confirm(`Documento ${res.data.consecutivo} Generado. ¿Abrir?`)) { window.open(res.data.url, '_blank'); } }, 500); 
     } else { alert("Error: " + res.error); }
 }
