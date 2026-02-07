@@ -1,8 +1,8 @@
 // ==========================================
-// A.S.T. ADMIN FRONTEND (V22 - FULL RESTORATION)
+// A.S.T. ADMIN FRONTEND (V24 - EDICIÓN LIVE Y TÉRMINOS)
 // ==========================================
 // *** PEGA AQUÍ LA NUEVA URL DE GOOGLE APPS SCRIPT AL IMPLEMENTAR ***
-const API_URL = "https://script.google.com/macros/s/AKfycbxpCp7aY4L48znjtqH_1svYzY6MjVY58bXxt3iZvyuPQwBBt0u7S32aXxxt9VVgtaHd/exec";
+const API_URL = "AQUI_PEGA_TU_NUEVA_URL_DEL_SCRIPT";
 const API_KEY = "AST_2025_SECURE"; 
 
 let catalog = [];
@@ -129,7 +129,7 @@ async function fetchClients() {
 function autoFillClient(name, prefix) {
     const client = clients.find(c => c.nombre === name);
     if (client) {
-        if (prefix === 'c') { // Carrito
+        if (prefix === 'c') { 
             document.getElementById('c-nit').value = client.nit;
             document.getElementById('c-tel').value = client.telefono;
         } 
@@ -140,9 +140,7 @@ function autoFillClient(name, prefix) {
 async function fetchProjects() {
     const container = document.getElementById('projects-list');
     container.innerHTML = '<div class="text-center mt-5"><div class="spinner-border text-cyan"></div></div>';
-    
     const res = await callApi('getProjects');
-    
     if(res.success) {
         projects = res.data;
         renderProjects();
@@ -155,12 +153,10 @@ async function fetchProjects() {
 function renderProjects() {
     const container = document.getElementById('projects-list');
     container.innerHTML = '';
-    
     if (projects.length === 0) {
         container.innerHTML = '<div class="text-muted text-center mt-5">No hay trabajos activos.</div>';
         return;
     }
-
     projects.forEach(p => {
         const estadoClass = p.estado === 'ABIERTO' ? 'text-success' : 'text-secondary';
         const card = `
@@ -198,11 +194,9 @@ function calculateDashboard() {
             utilidad += p.utilidad;
         }
     });
-    
     document.getElementById('kpi-cobrado').innerText = fmt.format(cobrado);
     document.getElementById('kpi-gastos').innerText = fmt.format(gastos);
     document.getElementById('kpi-utilidad').innerText = fmt.format(utilidad);
-    
     const margen = cobrado > 0 ? ((utilidad / cobrado) * 100).toFixed(1) : 0;
     document.getElementById('kpi-margen').innerText = margen + "%";
     document.getElementById('projects-dashboard').classList.remove('d-none');
@@ -221,15 +215,11 @@ async function createNewProject() {
         cliente: document.getElementById('np-cliente').value,
         contacto: document.getElementById('np-contacto').value
     };
-    
     if(!payload.nombreProyecto || !payload.cliente) return alert("Nombre y Cliente obligatorios");
-    
     const btn = document.querySelector('#newProjectModal .btn-cyan');
     btn.disabled = true; btn.innerText = "...";
-    
     const res = await callApi('createProject', payload);
     btn.disabled = false; btn.innerText = "CREAR CARPETA";
-    
     if(res.success) {
         bootstrap.Modal.getInstance(document.getElementById('newProjectModal')).hide();
         fetchProjects();
@@ -241,7 +231,6 @@ async function openProjectDetail(id) {
     currentProject = id;
     const modal = new bootstrap.Modal(document.getElementById('projectDetailModal'));
     modal.show();
-    
     const res = await callApi('getProjectDetails', { id: id });
     if(res.success) {
         currentProjectData = res.data.info;
@@ -253,7 +242,6 @@ async function openProjectDetail(id) {
 function renderProjectItems() {
     document.getElementById('pd-title').innerText = currentProjectData.nombreProyecto;
     document.getElementById('pd-subtitle').innerText = currentProjectData.cliente;
-    
     document.getElementById('pd-cobrado').innerText = fmt.format(currentProjectData.totalCobrado);
     document.getElementById('pd-gastos').innerText = fmt.format(currentProjectData.totalCostos);
     document.getElementById('pd-utilidad').innerText = fmt.format(currentProjectData.utilidad);
@@ -302,8 +290,8 @@ async function updateProject() {
     };
     await callApi('updateProject', payload);
     bootstrap.Modal.getInstance(document.getElementById('editProjectModal')).hide();
-    openProjectDetail(payload.id); // Recargar
-    fetchProjects(); // Actualizar lista atrás
+    openProjectDetail(payload.id);
+    fetchProjects(); 
 }
 
 async function deleteProject() {
@@ -323,7 +311,6 @@ function openAddItemModal() {
     document.getElementById('ai-costo').value = 0;
     document.getElementById('ai-venta').value = 0;
     
-    // Llenar datalist del catálogo
     const dl = document.getElementById('list-catalog-items');
     dl.innerHTML = '';
     catalog.forEach(p => {
@@ -341,7 +328,6 @@ function fillItemFromCatalog(name) {
         document.getElementById('ai-desc').value = item.nombre;
         document.getElementById('ai-costo').value = item.costo || 0;
         document.getElementById('ai-venta').value = item.precio || 0;
-        
         const tipoSelect = document.getElementById('ai-tipo');
         if(item.tipo === 'SERVICIO') tipoSelect.value = 'MANO_OBRA';
         else tipoSelect.value = 'MATERIAL';
@@ -366,9 +352,7 @@ async function saveProjectItem() {
         venta: Number(document.getElementById('ai-venta').value),
         esCobrar: document.getElementById('ai-cobrar').checked
     };
-    
     if(!payload.descripcion) return alert("Descripción requerida");
-    
     const res = await callApi('addProjectMovement', payload);
     if(res.success) {
         bootstrap.Modal.getInstance(document.getElementById('addItemModal')).hide();
@@ -385,13 +369,11 @@ async function deleteProjectMovement(idMov) {
     }
 }
 
-// --- HISTORIAL (CON FUNCIÓN DE EDICIÓN AGREGADA) ---
+// --- HISTORIAL ---
 async function fetchHistory() {
     const container = document.getElementById('history-list');
     container.innerHTML = '<div class="text-center mt-5"><div class="spinner-border text-cyan"></div></div>';
-    
     const res = await callApi('getHistoryDocs');
-    
     if(res.success) {
         historyDocs = res.data;
         renderHistory();
@@ -403,15 +385,12 @@ async function fetchHistory() {
 function renderHistory() {
     const container = document.getElementById('history-list');
     container.innerHTML = '';
-    
     if (historyDocs.length === 0) {
         container.innerHTML = '<div class="text-muted text-center mt-5">Sin documentos generados.</div>';
         return;
     }
-
     historyDocs.forEach((h, index) => {
         const date = new Date(h.fecha).toLocaleDateString();
-        // === CAMBIO CLAVE: Se agregó el botón con el lápiz (reloadOrderFromHistory) ===
         const html = `
         <div class="history-card">
             <div class="d-flex justify-content-between align-items-center">
@@ -433,66 +412,47 @@ function renderHistory() {
     });
 }
 
-// === NUEVA FUNCIÓN LÓGICA PARA RECUPERAR PEDIDO ===
 function reloadOrderFromHistory(index) {
     const doc = historyDocs[index];
-    // 1. Verificamos si existe el respaldo oculto
     if(!doc.jsonData) return alert("Este documento es antiguo y no tiene datos recuperables.");
-
-    // 2. Advertencia de seguridad
     if(cart.length > 0) {
         if(!confirm("⚠️ Tu carrito actual se borrará para cargar esta cotización. ¿Continuar?")) return;
     }
-
     try {
         const orderData = JSON.parse(doc.jsonData);
-        
-        // 3. Restaurar ítems al carrito
         cart = orderData.items || [];
-        
-        // 4. Restaurar datos del cliente al formulario
         if(orderData.cliente) {
             document.getElementById('c-nombre').value = orderData.cliente.nombre || "";
             document.getElementById('c-nit').value = orderData.cliente.nit || "";
             document.getElementById('c-tel').value = orderData.cliente.telefono || "";
         }
-
-        // 5. Restaurar opciones visuales
         if(orderData.opciones) {
             document.getElementById('check-specs').checked = orderData.opciones.mostrarDesc;
         }
-        
-        // 6. Actualizar totales y abrir modal
         updateCartUI();
         openCart();
-        
-        // Feedback visual
         const toast = document.createElement('div');
         toast.className = "alert alert-success position-fixed top-0 start-50 translate-middle-x mt-3 z-3";
-        toast.innerText = `Cotización ${doc.consecutivo} cargada. Puedes editarla ahora.`;
+        toast.innerText = `Cotización ${doc.consecutivo} cargada.`;
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 3000);
-
     } catch(e) {
         console.error(e);
         alert("Error al leer los datos del historial.");
     }
 }
 
-// --- RENDER GRID (PRODUCTOS/CATALOGO) ---
+// --- RENDER GRID ---
 function renderGrid(data) {
     const grid = document.getElementById('catalog-grid');
     grid.innerHTML = '';
-    
     if(data.length === 0) {
         grid.innerHTML = `<div class="col-12 text-center mt-5"><i class="bi bi-box-seam text-secondary" style="font-size: 3rem;"></i><p class="text-muted">No hay items registrados.</p></div>`;
         return;
     }
-
     data.forEach(p => {
         const imgHtml = p.imagen ? `<div style="height:140px; overflow:hidden; border-radius:4px; margin-bottom:10px; background:#000;"><img src="${p.imagen}" style="width:100%; height:100%; object-fit:cover;"></div>` : '';
         const badgeCode = p.tipo === 'PRODUCTO' ? `<span class="badge bg-info text-dark">${p.codigo}</span>` : `<span class="badge bg-warning text-dark">SERVICIO</span>`;
-
         const html = `
         <div class="col-12 col-md-6 col-lg-4">
             <div class="product-card h-100 p-3 d-flex flex-column">
@@ -534,36 +494,29 @@ function toggleFormFields() {
 function loadEditModal(uuid) {
     const p = catalog.find(x => x.uuid === uuid);
     if (!p) return;
-
     document.getElementById('p-uuid').value = p.uuid;
     document.getElementById('p-tipo').value = p.tipo;
     toggleFormFields();
-
     document.getElementById('p-nombre').value = p.nombre;
     document.getElementById('p-specs').value = p.specs;
     document.getElementById('p-precio').value = p.precio;
     document.getElementById('p-web').checked = p.visibleWeb;
     document.getElementById('p-imagen-data').value = p.imagen;
     document.getElementById('p-imagen-file').value = "";
-
     if (p.tipo === 'PRODUCTO') {
         document.getElementById('p-categoria').value = p.categoria || "AUTOMATIZACION_APPS";
         document.getElementById('p-codigo').value = p.codigo;
         document.getElementById('p-costo').value = p.costo;
     }
-    
     document.getElementById('btn-github-publish').style.display = "block";
-    
     new bootstrap.Modal(document.getElementById('prodModal')).show();
 }
 
 async function saveProduct() {
     const btn = document.querySelector('#prodModal .btn-cyan');
     btn.disabled = true; btn.innerText = "PROCESANDO...";
-
     const fileInput = document.getElementById('p-imagen-file');
     let finalImage = document.getElementById('p-imagen-data').value; 
-
     if (fileInput && fileInput.files.length > 0) {
         try {
             btn.innerText = "SUBIENDO FOTO...";
@@ -572,9 +525,7 @@ async function saveProduct() {
             alert("Error imagen"); btn.disabled = false; return;
         }
     }
-
     const tipo = document.getElementById('p-tipo').value;
-    
     const payload = {
         uuid: document.getElementById('p-uuid').value,
         tipo: tipo,
@@ -588,10 +539,8 @@ async function saveProduct() {
         costo: tipo==='PRODUCTO' ? Number(document.getElementById('p-costo').value) : 0,
         iva: 19 
     };
-
     const res = await callApi('upsertProduct', payload);
     btn.disabled = false; btn.innerText = "GUARDAR DATOS";
-
     if (res.success) {
         bootstrap.Modal.getInstance(document.getElementById('prodModal')).hide();
         fetchCatalog(); 
@@ -606,16 +555,12 @@ async function publishToGitHub() {
     const precio = Number(document.getElementById('p-precio').value);
     const specs = document.getElementById('p-specs').value;
     let imagen = document.getElementById('p-imagen-data').value;
-
     if (!uuid) return alert("Primero guarda el producto.");
-
     const btn = document.getElementById('btn-github-publish');
     const originalText = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> PUBLICANDO EN GITHUB...';
-
     const precioFmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(precio);
-
     const payload = {
         uuid: uuid,
         nombre: nombre,
@@ -623,12 +568,9 @@ async function publishToGitHub() {
         specs: specs,
         imagen: imagen
     };
-
     const res = await callApi('publishToGitHub', payload);
-
     btn.disabled = false;
     btn.innerHTML = originalText;
-
     if (res.success) {
         const finalUrl = res.data.url;
         navigator.clipboard.writeText(finalUrl).then(() => {
@@ -658,88 +600,116 @@ function addToCart(uuid) {
     fab.style.transform = "scale(1.2)";
     setTimeout(()=>fab.style.transform = "scale(1)", 200);
 }
+
+// === MODIFICACIÓN CRÍTICA V24: EDICIÓN EN CALIENTE ===
 function updateCartUI() {
     document.getElementById('cart-count').innerText = cart.length;
     const container = document.getElementById('cart-items');
     container.innerHTML = '';
     let subtotal = 0;
+    
     cart.forEach((item, i) => {
         subtotal += (item.precio * item.cantidad);
-        container.innerHTML += `<div class="row align-items-center border-bottom border-secondary py-2 g-2"><div class="col-12 text-white small"><strong>${item.nombre}</strong> <span class="badge bg-secondary">${item.tipo}</span></div><div class="col-3"><input type="number" class="form-control form-control-sm bg-dark text-white border-secondary p-1 text-center" value="${item.cantidad}" onchange="updateCartItem(${i}, 'qty', this.value)"></div><div class="col-4"><input type="number" class="form-control form-control-sm bg-dark text-cyan border-secondary p-1 text-end" value="${item.precio}" onchange="updateCartItem(${i}, 'price', this.value)"></div><div class="col-3 text-end text-muted small">${fmt.format(item.precio * item.cantidad)}</div><div class="col-2 text-end"><button class="btn btn-sm text-danger" onclick="cart.splice(${i},1);updateCartUI()"><i class="bi bi-trash"></i></button></div></div>`;
+        
+        // Ahora usamos INPUTS en lugar de texto estático para la descripción
+        const specsVal = item.specs || "";
+        
+        container.innerHTML += `
+        <div class="border-bottom border-secondary py-2">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <div class="text-white fw-bold small">${item.nombre}</div>
+                <button class="btn btn-sm text-danger p-0" onclick="cart.splice(${i},1);updateCartUI()"><i class="bi bi-trash"></i></button>
+            </div>
+            
+            <input type="text" class="form-control form-control-sm bg-dark text-secondary border-secondary mb-2" 
+                   value="${specsVal}" placeholder="Descripción personalizada..." 
+                   onchange="cart[${i}].specs = this.value">
+                   
+            <div class="row g-1">
+                <div class="col-4">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-secondary border-secondary text-white p-1">Cant</span>
+                        <input type="number" class="form-control bg-dark text-white border-secondary text-center p-1" 
+                               value="${item.cantidad}" onchange="updateCartItem(${i}, 'qty', this.value)">
+                    </div>
+                </div>
+                <div class="col-5">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-secondary border-secondary text-white p-1">$</span>
+                        <input type="number" class="form-control bg-dark text-cyan border-secondary text-end p-1" 
+                               value="${item.precio}" onchange="updateCartItem(${i}, 'price', this.value)">
+                    </div>
+                </div>
+                <div class="col-3 text-end align-self-center">
+                    <small class="text-muted">${fmt.format(item.precio * item.cantidad)}</small>
+                </div>
+            </div>
+        </div>`;
     });
+    
     const applyIva = document.getElementById('check-iva').checked;
     const ivaVal = applyIva ? (subtotal * 0.19) : 0;
     const total = subtotal + ivaVal;
     document.getElementById('iva-display').innerText = `IVA: ${fmt.format(ivaVal)}`;
     document.getElementById('cart-total').innerText = fmt.format(total);
 }
+
 function updateCartItem(index, field, value) {
     const val = Number(value);
     if (field === 'qty') { if (val <= 0) cart.splice(index, 1); else cart[index].cantidad = val; } 
     else if (field === 'price') { cart[index].precio = val; }
     updateCartUI();
 }
-async function openCart() {
-    const selectExport = document.getElementById('cart-export-project');
-    if (selectExport.options.length <= 1) { 
-        if(projects.length === 0) { const res = await callApi('getProjects'); if(res.success) projects = res.data; }
-        projects.forEach(p => { const opt = document.createElement('option'); opt.value = p.id; opt.text = `${p.nombreProyecto} (${p.cliente})`; selectExport.appendChild(opt); });
-    }
-    const selectImport = document.getElementById('cart-import-project');
-    if (selectImport.options.length <= 1) {
-        projects.forEach(p => { const opt = document.createElement('option'); opt.value = p.id; opt.text = `${p.nombreProyecto} (${p.cliente})`; selectImport.appendChild(opt); });
-    }
-    new bootstrap.Modal(document.getElementById('cartModal')).show();
-}
-async function importFromProject() {
-    const projectId = document.getElementById('cart-import-project').value;
-    if(!projectId) return alert("Selecciona un proyecto primero");
-    const btn = document.querySelector('#cart-import-project + button');
-    btn.disabled = true; btn.innerText = "...";
-    const res = await callApi('getProjectDetails', { id: projectId });
-    btn.disabled = false; btn.innerText = "Importar";
-    if(res.success) {
-        const items = res.data.items;
-        let count = 0;
-        items.forEach(item => {
-            const isCobrar = (item.esCobrar === true || item.esCobrar === 'TRUE');
-            if(isCobrar) { cart.push({ uuid: item.idMov, nombre: item.descripcion, tipo: item.tipo, specs: "Ítem importado", precio: item.venta, cantidad: item.cantidad, costo: item.costo }); count++; }
-        });
-        if(count > 0) { updateCartUI(); alert(`${count} ítems importados.`); } else { alert("Este proyecto no tiene ítems para cobrar."); }
+
+function toggleTerms() {
+    const check = document.getElementById('check-terms');
+    const area = document.getElementById('terms-area');
+    if (check.checked) {
+        area.style.display = 'block';
+        if(area.value === '') {
+            area.value = "VALIDEZ DE LA OFERTA: 15 DÍAS.\nTIEMPO DE ENTREGA: A CONVENIR.\nFORMA DE PAGO: 50% ANTICIPO, 50% CONTRA ENTREGA.\nGARANTÍA: 12 MESES POR DEFECTOS DE FÁBRICA.";
+        }
+    } else {
+        area.style.display = 'none';
     }
 }
-function sendWhatsApp() {
-    const clienteInput = document.getElementById('c-nombre').value;
-    if (cart.length === 0) return alert("Carrito vacío.");
-    const saludo = clienteInput ? `Hola *${clienteInput}*` : `Hola`;
-    let msg = `${saludo}, cotización preliminar *A.S.T.*:\n\n`;
-    let subtotal = 0;
-    cart.forEach(item => {
-        const sub = item.precio * item.cantidad;
-        subtotal += sub;
-        msg += `▪ ${item.cantidad}x ${item.nombre}\n   $${item.precio.toLocaleString()} = $${sub.toLocaleString()}\n`;
-    });
-    const applyIva = document.getElementById('check-iva').checked;
-    const ivaVal = applyIva ? (subtotal * 0.19) : 0;
-    const granTotal = subtotal + ivaVal;
-    if (applyIva) { msg += `\nSubtotal: $${subtotal.toLocaleString()}\nIVA (19%): $${ivaVal.toLocaleString()}`; }
-    msg += `\n*TOTAL: $${granTotal.toLocaleString()}*`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
-}
+
 async function generatePDF() {
     const cliente = { nombre: document.getElementById('c-nombre').value, nit: document.getElementById('c-nit').value, telefono: document.getElementById('c-tel').value };
     if(!cliente.nombre || cart.length === 0) return alert("Falta nombre cliente o carrito vacío.");
+    
     const btn = document.querySelector('#cartModal .btn-success');
     btn.disabled = true; btn.innerHTML = "GENERANDO...";
+    
     let subtotal = 0;
     cart.forEach(c => subtotal += (c.precio * c.cantidad));
     const applyIva = document.getElementById('check-iva').checked;
-    const showSpecs = document.getElementById('check-specs').checked; 
     const ivaVal = applyIva ? (subtotal * 0.19) : 0;
     const projectIdToSync = document.getElementById('cart-export-project').value;
-    const payload = { tipoDoc: document.getElementById('doc-type').value, cliente: cliente, items: cart.map(c => ({...c, subtotal: c.precio * c.cantidad})), totales: { subtotal: subtotal, iva: ivaVal, granTotal: subtotal + ivaVal }, opciones: { mostrarDesc: showSpecs }, projectId: projectIdToSync };
+    
+    // Captura de términos
+    const includeTerms = document.getElementById('check-terms').checked;
+    const termsText = includeTerms ? document.getElementById('terms-area').value : "";
+
+    const payload = { 
+        tipoDoc: document.getElementById('doc-type').value, 
+        cliente: cliente, 
+        items: cart.map(c => ({
+            ...c, 
+            specs: c.specs, // Se envía la descripción editada
+            subtotal: c.precio * c.cantidad
+        })), 
+        totales: { subtotal: subtotal, iva: ivaVal, granTotal: subtotal + ivaVal }, 
+        opciones: { 
+            mostrarDesc: true,
+            terminos: termsText // Se envían los términos al backend
+        }, 
+        projectId: projectIdToSync 
+    };
+    
     const res = await callApi('createDocument', payload);
     btn.disabled = false; btn.innerHTML = '<i class="bi bi-file-earmark-pdf"></i> Generar PDF';
+    
     if (res.success) {
         cart = []; updateCartUI();
         bootstrap.Modal.getInstance(document.getElementById('cartModal')).hide();
