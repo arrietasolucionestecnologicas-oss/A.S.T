@@ -1,7 +1,7 @@
 // ==========================================
-// A.S.T. ADMIN FRONTEND (V25.1 - ROBUST MODE)
+// A.S.T. ADMIN FRONTEND (V25.3 - LECTOR BLINDADO ANTI-ERROR)
 // ==========================================
-// *** PEGA AQUÍ TU URL DEL SCRIPT (VERIFICA QUE SEA LA V25) ***
+// *** PEGA AQUÍ TU URL DEL SCRIPT ***
 const API_URL = "https://script.google.com/macros/s/AKfycbxpCp7aY4L48znjtqH_1svYzY6MjVY58bXxt3iZvyuPQwBBt0u7S32aXxxt9VVgtaHd/exec";
 const API_KEY = "AST_2025_SECURE"; 
 
@@ -412,13 +412,13 @@ function renderHistory() {
     });
 }
 
-// === LÓGICA DE RECUPERACIÓN V25.2 (BLINDADA CONTRA ERRORES) ===
+// === SOLUCIÓN REAL: FUNCIÓN BLINDADA V25.3 ===
 function reloadOrderFromHistory(index) {
     const doc = historyDocs[index];
     
-    // 1. Verificar si hay datos
+    // VALIDACIÓN 1: ¿Hay datos?
     if(!doc.jsonData || doc.jsonData === "" || doc.jsonData === "undefined") {
-        return alert("⚠️ Lo sentimos, este documento es antiguo y no tiene datos guardados para editar. Debes crearlo de nuevo.");
+        return alert("⚠️ Este documento es muy antiguo y no tiene respaldo de datos para editar. Tendrás que crearlo de nuevo.");
     }
 
     if(cart.length > 0) {
@@ -426,16 +426,26 @@ function reloadOrderFromHistory(index) {
     }
 
     try {
-        // 2. Limpieza de datos corruptos por Excel/CSV
-        let safeJson = doc.jsonData;
-        // Si empieza y termina con comillas dobles (error típico de CSV), las quitamos
+        // LIMPIEZA AGRESIVA DE ERRORES DE EXCEL
+        // Convertimos a string por seguridad
+        let safeJson = String(doc.jsonData);
+        
+        // 1. Quitar comillas dobles externas que agrega CSV/Excel (Ej: "{...}")
         if (safeJson.startsWith('"') && safeJson.endsWith('"')) {
-            safeJson = safeJson.substring(1, safeJson.length - 1);
-            // Reemplazamos comillas dobles escapadas "" por una sola "
+            safeJson = safeJson.slice(1, -1);
+            // Revertir doble comilla ("") a comilla simple (")
             safeJson = safeJson.replace(/""/g, '"');
         }
 
+        // 2. ELIMINAR SALTOS DE LÍNEA REALES (EL ASESINO DE JSON)
+        // Excel guarda saltos de línea físicos (\n) que rompen JSON.parse
+        // Los reemplazamos por un espacio seguro.
+        safeJson = safeJson.replace(/[\r\n]+/g, " ");
+
+        // INTENTO DE LECTURA
         const orderData = JSON.parse(safeJson);
+        
+        // Carga de datos exitosa
         cart = orderData.items || [];
         
         if(orderData.cliente) {
@@ -445,7 +455,6 @@ function reloadOrderFromHistory(index) {
         }
         if(orderData.opciones) {
             document.getElementById('check-specs').checked = orderData.opciones.mostrarDesc;
-            // Cargar términos si existen
             if(orderData.opciones.terminos) {
                 document.getElementById('check-terms').checked = true;
                 document.getElementById('terms-area').style.display = 'block';
@@ -456,14 +465,18 @@ function reloadOrderFromHistory(index) {
         updateCartUI();
         openCart();
         
+        // Notificación de éxito
         const toast = document.createElement('div');
         toast.className = "alert alert-success position-fixed top-0 start-50 translate-middle-x mt-3 z-3";
-        toast.innerText = `Cotización ${doc.consecutivo} cargada.`;
+        toast.innerText = `✅ Cotización ${doc.consecutivo} recuperada con éxito.`;
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 3000);
+
     } catch(e) {
-        console.error("Error detallado:", e);
-        alert("Error: Los datos de este historial están corruptos en la base de datos y no se pueden leer automáticamente.");
+        console.error("Error al leer JSON:", e);
+        // Si falla todo, cargamos al menos el nombre del cliente para ayudar
+        document.getElementById('c-nombre').value = doc.cliente || "";
+        alert("⚠️ Error: Los datos de los productos están dañados en el historial, pero recuperé el nombre del cliente. Por favor agrega los productos manualmente.");
     }
 }
 
@@ -638,7 +651,6 @@ async function openCart() {
         projects.forEach(p => { const opt = document.createElement('option'); opt.value = p.id; opt.text = `${p.nombreProyecto} (${p.cliente})`; selectImport.appendChild(opt); });
     }
     
-    // IMPORTANTE: Verificar si el modal ya está abierto para no reabrirlo
     const modalEl = document.getElementById('cartModal');
     if (!modalEl.classList.contains('show')) {
         new bootstrap.Modal(modalEl).show();
@@ -654,7 +666,6 @@ function updateCartUI() {
     cart.forEach((item, i) => {
         subtotal += (item.precio * item.cantidad);
         const descValue = item.specs || "";
-        // FIX: Sanitización de comillas dobles para que no rompan el HTML
         const safeDescValue = descValue.replace(/"/g, '&quot;');
         
         container.innerHTML += `
@@ -760,11 +771,9 @@ async function generatePDF() {
     
     if (res.success) {
         cart = []; updateCartUI();
-        // Cierre seguro del modal
         const modalEl = document.getElementById('cartModal');
         const modalInstance = bootstrap.Modal.getInstance(modalEl);
         if(modalInstance) modalInstance.hide();
-        
         setTimeout(() => { fetchClients(); if(confirm(`Documento ${res.data.consecutivo} Generado. ¿Abrir?`)) { window.open(res.data.url, '_blank'); } }, 500); 
     } else { alert("Error: " + res.error); }
 }
