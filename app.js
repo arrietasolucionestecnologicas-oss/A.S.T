@@ -2,7 +2,7 @@
 // A.S.T. ADMIN FRONTEND (V24.1 - FIX CARRITO & EDICIÓN)
 // ==========================================
 // *** PEGA AQUÍ TU URL DEL SCRIPT (ASEGÚRATE DE QUE ESTÉ ENTRE COMILLAS " ") ***
-const API_URL = "AQUI_PEGA_TU_NUEVA_URL_DEL_SCRIPT";
+const API_URL = "https://script.google.com/macros/s/AKfycbxpCp7aY4L48znjtqH_1svYzY6MjVY58bXxt3iZvyuPQwBBt0u7S32aXxxt9VVgtaHd/exec";
 const API_KEY = "AST_2025_SECURE"; 
 
 let catalog = [];
