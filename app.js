@@ -412,14 +412,13 @@ function renderHistory() {
     });
 }
 
-// === VERSIÓN ROBUSTA: DETECCIÓN DE ERRORES Y LIMPIEZA ===
+// === LÓGICA DE RECUPERACIÓN V25.2 (BLINDADA CONTRA ERRORES) ===
 function reloadOrderFromHistory(index) {
     const doc = historyDocs[index];
-    if(!doc.jsonData) return alert("Este documento es antiguo y no tiene datos recuperables.");
     
-    // VALIDACIÓN PREVIA DE SEGURIDAD
-    if (typeof doc.jsonData !== 'string' || !doc.jsonData.startsWith('{')) {
-        return alert("Error: Los datos de este historial están corruptos en la hoja de cálculo. No se pueden cargar.");
+    // 1. Verificar si hay datos
+    if(!doc.jsonData || doc.jsonData === "" || doc.jsonData === "undefined") {
+        return alert("⚠️ Lo sentimos, este documento es antiguo y no tiene datos guardados para editar. Debes crearlo de nuevo.");
     }
 
     if(cart.length > 0) {
@@ -427,7 +426,16 @@ function reloadOrderFromHistory(index) {
     }
 
     try {
-        const orderData = JSON.parse(doc.jsonData);
+        // 2. Limpieza de datos corruptos por Excel/CSV
+        let safeJson = doc.jsonData;
+        // Si empieza y termina con comillas dobles (error típico de CSV), las quitamos
+        if (safeJson.startsWith('"') && safeJson.endsWith('"')) {
+            safeJson = safeJson.substring(1, safeJson.length - 1);
+            // Reemplazamos comillas dobles escapadas "" por una sola "
+            safeJson = safeJson.replace(/""/g, '"');
+        }
+
+        const orderData = JSON.parse(safeJson);
         cart = orderData.items || [];
         
         if(orderData.cliente) {
@@ -437,6 +445,12 @@ function reloadOrderFromHistory(index) {
         }
         if(orderData.opciones) {
             document.getElementById('check-specs').checked = orderData.opciones.mostrarDesc;
+            // Cargar términos si existen
+            if(orderData.opciones.terminos) {
+                document.getElementById('check-terms').checked = true;
+                document.getElementById('terms-area').style.display = 'block';
+                document.getElementById('terms-area').value = orderData.opciones.terminos;
+            }
         }
         
         updateCartUI();
@@ -448,8 +462,8 @@ function reloadOrderFromHistory(index) {
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 3000);
     } catch(e) {
-        console.error(e);
-        alert("Error crítico al procesar el historial. Revisa que la columna 'JSON' en tu hoja de cálculo no tenga errores.");
+        console.error("Error detallado:", e);
+        alert("Error: Los datos de este historial están corruptos en la base de datos y no se pueden leer automáticamente.");
     }
 }
 
@@ -612,7 +626,7 @@ function addToCart(uuid) {
     setTimeout(()=>fab.style.transform = "scale(1)", 200);
 }
 
-// === FIX: FUNCIÓN QUE DEFINE OPENCART Y EDITA EL CARRITO ===
+// === FUNCIÓN CART (Con protección de carrito abierto) ===
 async function openCart() {
     const selectExport = document.getElementById('cart-export-project');
     if (selectExport.options.length <= 1) { 
@@ -623,7 +637,12 @@ async function openCart() {
     if (selectImport.options.length <= 1) {
         projects.forEach(p => { const opt = document.createElement('option'); opt.value = p.id; opt.text = `${p.nombreProyecto} (${p.cliente})`; selectImport.appendChild(opt); });
     }
-    new bootstrap.Modal(document.getElementById('cartModal')).show();
+    
+    // IMPORTANTE: Verificar si el modal ya está abierto para no reabrirlo
+    const modalEl = document.getElementById('cartModal');
+    if (!modalEl.classList.contains('show')) {
+        new bootstrap.Modal(modalEl).show();
+    }
 }
 
 function updateCartUI() {
@@ -635,8 +654,7 @@ function updateCartUI() {
     cart.forEach((item, i) => {
         subtotal += (item.precio * item.cantidad);
         const descValue = item.specs || "";
-        
-        // FIX: Reemplazar comillas para evitar romper el HTML
+        // FIX: Sanitización de comillas dobles para que no rompan el HTML
         const safeDescValue = descValue.replace(/"/g, '&quot;');
         
         container.innerHTML += `
@@ -742,7 +760,11 @@ async function generatePDF() {
     
     if (res.success) {
         cart = []; updateCartUI();
-        bootstrap.Modal.getInstance(document.getElementById('cartModal')).hide();
+        // Cierre seguro del modal
+        const modalEl = document.getElementById('cartModal');
+        const modalInstance = bootstrap.Modal.getInstance(modalEl);
+        if(modalInstance) modalInstance.hide();
+        
         setTimeout(() => { fetchClients(); if(confirm(`Documento ${res.data.consecutivo} Generado. ¿Abrir?`)) { window.open(res.data.url, '_blank'); } }, 500); 
     } else { alert("Error: " + res.error); }
 }
