@@ -1,8 +1,8 @@
 // ==========================================
-// A.S.T. ADMIN FRONTEND (V24 - EDICIÓN LIVE Y TÉRMINOS)
+// A.S.T. ADMIN FRONTEND (V24.1 - FIX CARRITO & EDICIÓN)
 // ==========================================
-// *** PEGA AQUÍ LA NUEVA URL DE GOOGLE APPS SCRIPT AL IMPLEMENTAR ***
-const API_URL = "https://script.google.com/macros/s/AKfycbxpCp7aY4L48znjtqH_1svYzY6MjVY58bXxt3iZvyuPQwBBt0u7S32aXxxt9VVgtaHd/exec";
+// *** PEGA AQUÍ TU URL DEL SCRIPT (ASEGÚRATE DE QUE ESTÉ ENTRE COMILLAS " ") ***
+const API_URL = "AQUI_PEGA_TU_NUEVA_URL_DEL_SCRIPT";
 const API_KEY = "AST_2025_SECURE"; 
 
 let catalog = [];
@@ -601,7 +601,20 @@ function addToCart(uuid) {
     setTimeout(()=>fab.style.transform = "scale(1)", 200);
 }
 
-// === MODIFICACIÓN CRÍTICA V24: EDICIÓN EN CALIENTE ===
+// === FIX: FUNCIÓN QUE DEFINE OPENCART Y EDITA EL CARRITO ===
+async function openCart() {
+    const selectExport = document.getElementById('cart-export-project');
+    if (selectExport.options.length <= 1) { 
+        if(projects.length === 0) { const res = await callApi('getProjects'); if(res.success) projects = res.data; }
+        projects.forEach(p => { const opt = document.createElement('option'); opt.value = p.id; opt.text = `${p.nombreProyecto} (${p.cliente})`; selectExport.appendChild(opt); });
+    }
+    const selectImport = document.getElementById('cart-import-project');
+    if (selectImport.options.length <= 1) {
+        projects.forEach(p => { const opt = document.createElement('option'); opt.value = p.id; opt.text = `${p.nombreProyecto} (${p.cliente})`; selectImport.appendChild(opt); });
+    }
+    new bootstrap.Modal(document.getElementById('cartModal')).show();
+}
+
 function updateCartUI() {
     document.getElementById('cart-count').innerText = cart.length;
     const container = document.getElementById('cart-items');
@@ -610,9 +623,8 @@ function updateCartUI() {
     
     cart.forEach((item, i) => {
         subtotal += (item.precio * item.cantidad);
-        
-        // Ahora usamos INPUTS en lugar de texto estático para la descripción
-        const specsVal = item.specs || "";
+        // Se asegura de que exista el campo specs o pone vacío
+        const descValue = item.specs || "";
         
         container.innerHTML += `
         <div class="border-bottom border-secondary py-2">
@@ -622,8 +634,8 @@ function updateCartUI() {
             </div>
             
             <input type="text" class="form-control form-control-sm bg-dark text-secondary border-secondary mb-2" 
-                   value="${specsVal}" placeholder="Descripción personalizada..." 
-                   onchange="cart[${i}].specs = this.value">
+                   value="${descValue}" placeholder="Descripción personalizada..." 
+                   onchange="updateCartSpec(${i}, this.value)">
                    
             <div class="row g-1">
                 <div class="col-4">
@@ -652,6 +664,13 @@ function updateCartUI() {
     const total = subtotal + ivaVal;
     document.getElementById('iva-display').innerText = `IVA: ${fmt.format(ivaVal)}`;
     document.getElementById('cart-total').innerText = fmt.format(total);
+}
+
+// Nueva función helper para evitar errores de sintaxis en el HTML
+function updateCartSpec(index, value) {
+    if(cart[index]) {
+        cart[index].specs = value;
+    }
 }
 
 function updateCartItem(index, field, value) {
@@ -687,7 +706,6 @@ async function generatePDF() {
     const ivaVal = applyIva ? (subtotal * 0.19) : 0;
     const projectIdToSync = document.getElementById('cart-export-project').value;
     
-    // Captura de términos
     const includeTerms = document.getElementById('check-terms').checked;
     const termsText = includeTerms ? document.getElementById('terms-area').value : "";
 
@@ -696,13 +714,13 @@ async function generatePDF() {
         cliente: cliente, 
         items: cart.map(c => ({
             ...c, 
-            specs: c.specs, // Se envía la descripción editada
+            specs: c.specs, 
             subtotal: c.precio * c.cantidad
         })), 
         totales: { subtotal: subtotal, iva: ivaVal, granTotal: subtotal + ivaVal }, 
         opciones: { 
             mostrarDesc: true,
-            terminos: termsText // Se envían los términos al backend
+            terminos: termsText 
         }, 
         projectId: projectIdToSync 
     };
