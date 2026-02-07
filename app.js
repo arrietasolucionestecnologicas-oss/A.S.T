@@ -1,7 +1,7 @@
 // ==========================================
-// A.S.T. ADMIN FRONTEND (V24.1 - FIX CARRITO & EDICIÓN)
+// A.S.T. ADMIN FRONTEND (V25.1 - ROBUST MODE)
 // ==========================================
-// *** PEGA AQUÍ TU URL DEL SCRIPT (ASEGÚRATE DE QUE ESTÉ ENTRE COMILLAS " ") ***
+// *** PEGA AQUÍ TU URL DEL SCRIPT (VERIFICA QUE SEA LA V25) ***
 const API_URL = "https://script.google.com/macros/s/AKfycbxpCp7aY4L48znjtqH_1svYzY6MjVY58bXxt3iZvyuPQwBBt0u7S32aXxxt9VVgtaHd/exec";
 const API_KEY = "AST_2025_SECURE"; 
 
@@ -412,15 +412,24 @@ function renderHistory() {
     });
 }
 
+// === VERSIÓN ROBUSTA: DETECCIÓN DE ERRORES Y LIMPIEZA ===
 function reloadOrderFromHistory(index) {
     const doc = historyDocs[index];
     if(!doc.jsonData) return alert("Este documento es antiguo y no tiene datos recuperables.");
+    
+    // VALIDACIÓN PREVIA DE SEGURIDAD
+    if (typeof doc.jsonData !== 'string' || !doc.jsonData.startsWith('{')) {
+        return alert("Error: Los datos de este historial están corruptos en la hoja de cálculo. No se pueden cargar.");
+    }
+
     if(cart.length > 0) {
         if(!confirm("⚠️ Tu carrito actual se borrará para cargar esta cotización. ¿Continuar?")) return;
     }
+
     try {
         const orderData = JSON.parse(doc.jsonData);
         cart = orderData.items || [];
+        
         if(orderData.cliente) {
             document.getElementById('c-nombre').value = orderData.cliente.nombre || "";
             document.getElementById('c-nit').value = orderData.cliente.nit || "";
@@ -429,8 +438,10 @@ function reloadOrderFromHistory(index) {
         if(orderData.opciones) {
             document.getElementById('check-specs').checked = orderData.opciones.mostrarDesc;
         }
+        
         updateCartUI();
         openCart();
+        
         const toast = document.createElement('div');
         toast.className = "alert alert-success position-fixed top-0 start-50 translate-middle-x mt-3 z-3";
         toast.innerText = `Cotización ${doc.consecutivo} cargada.`;
@@ -438,7 +449,7 @@ function reloadOrderFromHistory(index) {
         setTimeout(() => toast.remove(), 3000);
     } catch(e) {
         console.error(e);
-        alert("Error al leer los datos del historial.");
+        alert("Error crítico al procesar el historial. Revisa que la columna 'JSON' en tu hoja de cálculo no tenga errores.");
     }
 }
 
@@ -623,8 +634,10 @@ function updateCartUI() {
     
     cart.forEach((item, i) => {
         subtotal += (item.precio * item.cantidad);
-        // Se asegura de que exista el campo specs o pone vacío
         const descValue = item.specs || "";
+        
+        // FIX: Reemplazar comillas para evitar romper el HTML
+        const safeDescValue = descValue.replace(/"/g, '&quot;');
         
         container.innerHTML += `
         <div class="border-bottom border-secondary py-2">
@@ -634,7 +647,7 @@ function updateCartUI() {
             </div>
             
             <input type="text" class="form-control form-control-sm bg-dark text-secondary border-secondary mb-2" 
-                   value="${descValue}" placeholder="Descripción personalizada..." 
+                   value="${safeDescValue}" placeholder="Descripción personalizada..." 
                    onchange="updateCartSpec(${i}, this.value)">
                    
             <div class="row g-1">
@@ -666,7 +679,6 @@ function updateCartUI() {
     document.getElementById('cart-total').innerText = fmt.format(total);
 }
 
-// Nueva función helper para evitar errores de sintaxis en el HTML
 function updateCartSpec(index, value) {
     if(cart[index]) {
         cart[index].specs = value;
