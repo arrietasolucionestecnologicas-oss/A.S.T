@@ -1,5 +1,5 @@
 // ==========================================
-// A.S.T. ADMIN FRONTEND (V26.3 - CONVERSIÓN A PROYECTOS INTEGRADA)
+// A.S.T. ADMIN FRONTEND (V26.4 - EDICIÓN DE ÍTEMS EN PROYECTO)
 // ==========================================
 // *** PEGA AQUÍ TU URL DEL SCRIPT (VERIFICA QUE SEA LA V26) ***
 const API_URL = "https://script.google.com/macros/s/AKfycbxpCp7aY4L48znjtqH_1svYzY6MjVY58bXxt3iZvyuPQwBBt0u7S32aXxxt9VVgtaHd/exec";
@@ -264,7 +264,10 @@ function renderProjectItems() {
                 <div class="text-danger small">-${fmt.format(item.costo * item.cantidad)}</div>
                 ${isCobrar ? `<div class="text-success small">+${fmt.format(item.venta * item.cantidad)}</div>` : ''}
             </div>
-            <button class="btn btn-sm text-secondary" onclick="deleteProjectMovement('${item.idMov}')"><i class="bi bi-trash"></i></button>
+            <div class="d-flex flex-column align-items-end ms-2 gap-1">
+                <button class="btn btn-sm text-warning p-0" onclick="openEditItemModal('${item.idMov}')" title="Editar Movimiento"><i class="bi bi-pencil-square"></i></button>
+                <button class="btn btn-sm text-danger p-0" onclick="deleteProjectMovement('${item.idMov}')" title="Eliminar Movimiento"><i class="bi bi-trash"></i></button>
+            </div>
         </div>`;
         list.innerHTML += html;
     });
@@ -311,6 +314,12 @@ function openAddItemModal() {
     document.getElementById('ai-costo').value = 0;
     document.getElementById('ai-venta').value = 0;
     
+    document.getElementById('ai-cobrar').checked = true;
+    toggleVentaInput();
+    
+    document.querySelector('#addItemModal .modal-title').innerText = "Registrar Movimiento";
+    document.querySelector('#addItemModal .btn-primary').innerText = "REGISTRAR";
+    
     const dl = document.getElementById('list-catalog-items');
     dl.innerHTML = '';
     catalog.forEach(p => {
@@ -319,6 +328,32 @@ function openAddItemModal() {
         dl.appendChild(opt);
     });
     
+    new bootstrap.Modal(document.getElementById('addItemModal')).show();
+}
+
+function openEditItemModal(idMov) {
+    const item = currentProjectItems.find(x => x.idMov === idMov);
+    if(!item) return;
+
+    document.getElementById('ai-id').value = item.idMov;
+    document.getElementById('ai-desc').value = item.descripcion;
+    document.getElementById('ai-prov').value = item.proveedor || "";
+    document.getElementById('ai-cant').value = item.cantidad;
+    document.getElementById('ai-costo').value = item.costo;
+    document.getElementById('ai-venta').value = item.venta;
+    
+    const tipoSelect = document.getElementById('ai-tipo');
+    if (tipoSelect.querySelector(`option[value="${item.tipo}"]`)) {
+        tipoSelect.value = item.tipo;
+    }
+
+    const checkCobrar = document.getElementById('ai-cobrar');
+    checkCobrar.checked = (item.esCobrar === true || item.esCobrar === 'TRUE');
+    toggleVentaInput();
+
+    document.querySelector('#addItemModal .modal-title').innerText = "Editar Movimiento";
+    document.querySelector('#addItemModal .btn-primary').innerText = "GUARDAR CAMBIOS";
+
     new bootstrap.Modal(document.getElementById('addItemModal')).show();
 }
 
@@ -342,6 +377,8 @@ function toggleVentaInput() {
 }
 
 async function saveProjectItem() {
+    const idMov = document.getElementById('ai-id').value;
+    
     const payload = {
         projectId: currentProject,
         tipo: document.getElementById('ai-tipo').value,
@@ -352,12 +389,31 @@ async function saveProjectItem() {
         venta: Number(document.getElementById('ai-venta').value),
         esCobrar: document.getElementById('ai-cobrar').checked
     };
+    
     if(!payload.descripcion) return alert("Descripción requerida");
-    const res = await callApi('addProjectMovement', payload);
+    
+    let action = 'addProjectMovement';
+    if (idMov && idMov !== "") {
+        payload.idMov = idMov;
+        action = 'updateProjectMovement';
+    }
+    
+    const btn = document.querySelector('#addItemModal .btn-primary');
+    const originalText = btn.innerText;
+    btn.disabled = true; 
+    btn.innerText = "...";
+    
+    const res = await callApi(action, payload);
+    
+    btn.disabled = false; 
+    btn.innerText = originalText;
+    
     if(res.success) {
         bootstrap.Modal.getInstance(document.getElementById('addItemModal')).hide();
         openProjectDetail(currentProject);
         fetchProjects();
+    } else {
+        alert("Error: " + res.error);
     }
 }
 
@@ -392,7 +448,6 @@ function renderHistory() {
     historyDocs.forEach((h, index) => {
         const date = new Date(h.fecha).toLocaleDateString();
         
-        // --- INTEGRACIÓN: BOTÓN CONVERTIR A PROYECTO ---
         let btnConvertir = '';
         if (h.tipo === 'Cotización') {
             btnConvertir = `<button class="btn btn-outline-info" onclick="convertQuoteToProject(${index})" title="Convertir a Trabajo/Proyecto"><i class="bi bi-briefcase-fill"></i></button>`;
@@ -420,7 +475,6 @@ function renderHistory() {
     });
 }
 
-// === FUNCIÓN CORREGIDA PARA NO DAR ERROR SI FALTA HTML ===
 function reloadOrderFromHistory(index) {
     const doc = historyDocs[index];
     
@@ -448,7 +502,6 @@ function reloadOrderFromHistory(index) {
             document.getElementById('c-tel').value = orderData.cliente.telefono || "";
         }
         
-        // --- AQUÍ ESTABA EL ERROR: VERIFICAMOS SI EXISTE EL BOTÓN ANTES DE USARLO ---
         if(orderData.opciones) {
             const checkSpecs = document.getElementById('check-specs');
             if(checkSpecs) checkSpecs.checked = orderData.opciones.mostrarDesc;
@@ -464,7 +517,6 @@ function reloadOrderFromHistory(index) {
                 }
             }
         }
-        // --------------------------------------------------------------------------
         
         updateCartUI();
         openCart();
@@ -482,7 +534,6 @@ function reloadOrderFromHistory(index) {
     }
 }
 
-// --- NUEVA FUNCIÓN MAESTRA: CONVERTIR COTIZACIÓN A PROYECTO ---
 async function convertQuoteToProject(index) {
     const doc = historyDocs[index];
     
