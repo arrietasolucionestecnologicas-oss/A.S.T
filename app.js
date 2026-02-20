@@ -1,5 +1,5 @@
 // ==========================================
-// A.S.T. ADMIN FRONTEND (V26.2 - BLINDAJE DE INTERFAZ)
+// A.S.T. ADMIN FRONTEND (V26.3 - CONVERSIÓN A PROYECTOS INTEGRADA)
 // ==========================================
 // *** PEGA AQUÍ TU URL DEL SCRIPT (VERIFICA QUE SEA LA V26) ***
 const API_URL = "https://script.google.com/macros/s/AKfycbxpCp7aY4L48znjtqH_1svYzY6MjVY58bXxt3iZvyuPQwBBt0u7S32aXxxt9VVgtaHd/exec";
@@ -391,6 +391,13 @@ function renderHistory() {
     }
     historyDocs.forEach((h, index) => {
         const date = new Date(h.fecha).toLocaleDateString();
+        
+        // --- INTEGRACIÓN: BOTÓN CONVERTIR A PROYECTO ---
+        let btnConvertir = '';
+        if (h.tipo === 'Cotización') {
+            btnConvertir = `<button class="btn btn-outline-info" onclick="convertQuoteToProject(${index})" title="Convertir a Trabajo/Proyecto"><i class="bi bi-briefcase-fill"></i></button>`;
+        }
+        
         const html = `
         <div class="history-card">
             <div class="d-flex justify-content-between align-items-center">
@@ -404,6 +411,7 @@ function renderHistory() {
                     <div class="btn-group btn-group-sm">
                         <a href="${h.url}" target="_blank" class="btn btn-outline-light" title="Ver PDF"><i class="bi bi-eye"></i></a>
                         <button class="btn btn-outline-warning" onclick="reloadOrderFromHistory(${index})" title="Editar / Cargar al Carrito"><i class="bi bi-pencil-square"></i></button>
+                        ${btnConvertir}
                     </div>
                 </div>
             </div>
@@ -471,6 +479,61 @@ function reloadOrderFromHistory(index) {
         console.error("Error leyendo JSON:", e);
         document.getElementById('c-nombre').value = doc.cliente || "";
         alert("⚠️ Hubo un detalle cargando los productos, pero recuperé el cliente.");
+    }
+}
+
+// --- NUEVA FUNCIÓN MAESTRA: CONVERTIR COTIZACIÓN A PROYECTO ---
+async function convertQuoteToProject(index) {
+    const doc = historyDocs[index];
+    
+    if(!doc.jsonData || doc.jsonData === "" || doc.jsonData === "undefined") {
+        return alert("⚠️ Esta cotización es muy antigua y no tiene el detalle interno para poder convertirse automáticamente.");
+    }
+
+    if(!confirm(`¿Estás seguro de que el cliente aprobó la Cotización ${doc.consecutivo}?\n\nSe creará un Trabajo Activo con todos sus ítems.`)) return;
+
+    try {
+        let safeJson = String(doc.jsonData);
+        if (safeJson.startsWith('"') && safeJson.endsWith('"')) {
+            safeJson = safeJson.slice(1, -1).replace(/""/g, '"');
+        }
+        safeJson = safeJson.replace(/[\r\n]+/g, " ");
+
+        const orderData = JSON.parse(safeJson);
+        
+        const payload = {
+            nombreProyecto: `Ejecución ${doc.consecutivo}`,
+            cliente: orderData.cliente ? orderData.cliente.nombre : doc.cliente,
+            contacto: orderData.cliente ? orderData.cliente.telefono : "",
+            items: orderData.items || []
+        };
+
+        const toast = document.createElement('div');
+        toast.className = "alert alert-info position-fixed top-0 start-50 translate-middle-x mt-3 z-3";
+        toast.innerText = `⏳ Creando proyecto desde ${doc.consecutivo}...`;
+        document.body.appendChild(toast);
+
+        const res = await callApi('convertQuoteToProject', payload);
+        toast.remove();
+
+        if (res.success) {
+            const toast2 = document.createElement('div');
+            toast2.className = "alert alert-success position-fixed top-0 start-50 translate-middle-x mt-3 z-3";
+            toast2.innerText = `✅ Proyecto creado exitosamente.`;
+            document.body.appendChild(toast2);
+            setTimeout(() => toast2.remove(), 3000);
+            
+            switchTab('PROYECTOS');
+            await fetchProjects();
+            openProjectDetail(res.data.projectId);
+            
+        } else {
+            alert("Error al convertir la cotización: " + res.error);
+        }
+
+    } catch(e) {
+        console.error("Error leyendo JSON para conversión:", e);
+        alert("⚠️ Error: Los datos internos de esta cotización están dañados y no se pueden migrar de forma automática.");
     }
 }
 
@@ -726,6 +789,25 @@ function toggleTerms() {
     } else {
         area.style.display = 'none';
     }
+}
+
+function sendWhatsApp() {
+    const clienteInput = document.getElementById('c-nombre').value;
+    if (cart.length === 0) return alert("Carrito vacío.");
+    const saludo = clienteInput ? `Hola *${clienteInput}*` : `Hola`;
+    let msg = `${saludo}, cotización preliminar *A.S.T.*:\n\n`;
+    let subtotal = 0;
+    cart.forEach(item => {
+        const sub = item.precio * item.cantidad;
+        subtotal += sub;
+        msg += `▪ ${item.cantidad}x ${item.nombre}\n   $${item.precio.toLocaleString()} = $${sub.toLocaleString()}\n`;
+    });
+    const applyIva = document.getElementById('check-iva').checked;
+    const ivaVal = applyIva ? (subtotal * 0.19) : 0;
+    const granTotal = subtotal + ivaVal;
+    if (applyIva) { msg += `\nSubtotal: $${subtotal.toLocaleString()}\nIVA (19%): $${ivaVal.toLocaleString()}`; }
+    msg += `\n*TOTAL: $${granTotal.toLocaleString()}*`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
 async function generatePDF() {
