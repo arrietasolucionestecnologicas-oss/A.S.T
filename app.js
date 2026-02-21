@@ -1,5 +1,5 @@
 // ==========================================
-// A.S.T. ADMIN FRONTEND (V28 - FIX PANTALLA NEGRA MODAL)
+// A.S.T. ADMIN FRONTEND (V29 - FLUIDEZ EXTREMA & OPTIMISTIC UI)
 // ==========================================
 // *** PEGA AQUÍ TU URL DEL SCRIPT ***
 const API_URL = "https://script.google.com/macros/s/AKfycbxpCp7aY4L48znjtqH_1svYzY6MjVY58bXxt3iZvyuPQwBBt0u7S32aXxxt9VVgtaHd/exec";
@@ -34,9 +34,101 @@ window.addEventListener('popstate', function (event) {
 });
 // -------------------------------------------------------------------------
 
+// --- SISTEMA DE FLUIDEZ EXTREMA (CACHÉ Y SINCRONIZACIÓN) ---
+function loadLocalCache() {
+    try {
+        const c = localStorage.getItem('ast_catalog');
+        const p = localStorage.getItem('ast_projects');
+        const cl = localStorage.getItem('ast_clients');
+        const h = localStorage.getItem('ast_history');
+        
+        if (c) catalog = JSON.parse(c);
+        if (p) projects = JSON.parse(p);
+        if (cl) clients = JSON.parse(cl);
+        if (h) historyDocs = JSON.parse(h);
+    } catch (e) {
+        console.error("Error reading cache", e);
+    }
+}
+
+async function fetchAllDataBackground() {
+    showSyncIndicator();
+    const res = await callApi('getAllData');
+    if (res.success) {
+        catalog = res.data.catalog || [];
+        projects = res.data.projects || [];
+        clients = res.data.clients || [];
+        historyDocs = res.data.historyDocs || [];
+        
+        localStorage.setItem('ast_catalog', JSON.stringify(catalog));
+        localStorage.setItem('ast_projects', JSON.stringify(projects));
+        localStorage.setItem('ast_clients', JSON.stringify(clients));
+        localStorage.setItem('ast_history', JSON.stringify(historyDocs));
+        
+        if (currentView === 'PROYECTOS') { renderProjects(); calculateDashboard(); }
+        else if (currentView === 'HISTORIAL') { renderHistory(); }
+        else { 
+            const filtered = catalog.filter(p => p.tipo === currentView);
+            renderGrid(filtered); 
+        }
+        updateClientsDatalist();
+    }
+    hideSyncIndicator();
+}
+
+function showSyncIndicator() {
+    let ind = document.getElementById('sync-indicator');
+    if (!ind) {
+        ind = document.createElement('div');
+        ind.id = 'sync-indicator';
+        ind.style.position = 'fixed';
+        ind.style.top = '10px';
+        ind.style.left = '50%';
+        ind.style.transform = 'translateX(-50%)';
+        ind.style.background = 'rgba(0, 164, 228, 0.9)';
+        ind.style.color = '#fff';
+        ind.style.padding = '4px 12px';
+        ind.style.borderRadius = '20px';
+        ind.style.fontSize = '11px';
+        ind.style.zIndex = '9999';
+        ind.style.boxShadow = '0 2px 10px rgba(0,0,0,0.3)';
+        ind.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width: 0.8rem; height: 0.8rem; border-width: 0.15em;"></span> Sincronizando...';
+        document.body.appendChild(ind);
+    }
+    ind.style.display = 'block';
+}
+
+function hideSyncIndicator() {
+    const ind = document.getElementById('sync-indicator');
+    if (ind) ind.style.display = 'none';
+}
+
+function showToast(msg, type = 'info') {
+    const existing = document.getElementById('ast-toast');
+    if (existing) existing.remove();
+    
+    const toast = document.createElement('div');
+    toast.id = 'ast-toast';
+    toast.className = `alert alert-${type} position-fixed top-0 start-50 translate-middle-x mt-3 z-3`;
+    toast.style.boxShadow = "0 4px 12px rgba(0,0,0,0.5)";
+    toast.innerText = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => { if (document.getElementById('ast-toast')) toast.remove() }, 3000);
+}
+// -----------------------------------------------------------
+
 document.addEventListener('DOMContentLoaded', () => {
-    fetchCatalog();
-    fetchClients(); 
+    loadLocalCache(); 
+    updateClientsDatalist(); 
+    
+    if(currentView === 'PROYECTOS') { renderProjects(); calculateDashboard(); }
+    else if(currentView === 'HISTORIAL') { renderHistory(); }
+    else {
+        const filtered = catalog.filter(p => p.tipo === currentView);
+        renderGrid(filtered);
+    }
+    
+    fetchAllDataBackground(); 
     
     document.getElementById('search').addEventListener('input', (e) => {
         if(currentView === 'PROYECTOS' || currentView === 'HISTORIAL') return; 
@@ -118,28 +210,25 @@ async function callApi(action, payload = {}) {
 }
 
 async function fetchCatalog() {
-    const res = await callApi('getAdminCatalog');
-    if (res.success) {
-        catalog = res.data;
-        if(currentView !== 'PROYECTOS' && currentView !== 'HISTORIAL') {
-             switchTab(currentView); 
-        }
+    if(catalog.length > 0 && currentView !== 'PROYECTOS' && currentView !== 'HISTORIAL') {
+         switchTab(currentView); 
     }
 }
 
 // --- GESTIÓN DE CLIENTES ---
 async function fetchClients() {
-    const res = await callApi('getClients');
-    if (res.success) {
-        clients = res.data;
-        const datalist = document.getElementById('clients-datalist');
-        datalist.innerHTML = '';
-        clients.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.nombre;
-            datalist.appendChild(opt);
-        });
-    }
+    updateClientsDatalist();
+}
+
+function updateClientsDatalist() {
+    const datalist = document.getElementById('clients-datalist');
+    if (!datalist) return;
+    datalist.innerHTML = '';
+    clients.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.nombre;
+        datalist.appendChild(opt);
+    });
 }
 
 function autoFillClient(name, prefix) {
@@ -154,16 +243,8 @@ function autoFillClient(name, prefix) {
 
 // --- GESTIÓN DE PROYECTOS ---
 async function fetchProjects() {
-    const container = document.getElementById('projects-list');
-    container.innerHTML = '<div class="text-center mt-5"><div class="spinner-border text-cyan"></div></div>';
-    const res = await callApi('getProjects');
-    if(res.success) {
-        projects = res.data;
-        renderProjects();
-        calculateDashboard();
-    } else {
-        container.innerHTML = `<div class="text-danger text-center">Error al cargar proyectos</div>`;
-    }
+    renderProjects();
+    calculateDashboard();
 }
 
 function renderProjects() {
@@ -234,11 +315,18 @@ async function createNewProject() {
     if(!payload.nombreProyecto || !payload.cliente) return alert("Nombre y Cliente obligatorios");
     const btn = document.querySelector('#newProjectModal .btn-cyan');
     btn.disabled = true; btn.innerText = "...";
-    const res = await callApi('createProject', payload);
+    
+    const modalInstance = bootstrap.Modal.getInstance(document.getElementById('newProjectModal'));
+    if(modalInstance) modalInstance.hide();
+    showToast("⏳ Creando carpeta de proyecto...", "info");
     btn.disabled = false; btn.innerText = "CREAR CARPETA";
+    
+    const res = await callApi('createProject', payload);
     if(res.success) {
-        bootstrap.Modal.getInstance(document.getElementById('newProjectModal')).hide();
-        fetchProjects();
+        showToast("✅ Proyecto creado.", "success");
+        fetchAllDataBackground();
+    } else {
+        alert("Error: " + res.error);
     }
 }
 
@@ -247,6 +335,17 @@ async function openProjectDetail(id) {
     currentProject = id;
     const modal = new bootstrap.Modal(document.getElementById('projectDetailModal'));
     modal.show();
+    
+    const pInfo = projects.find(p => p.id === id);
+    if (pInfo) {
+        document.getElementById('pd-title').innerText = pInfo.nombreProyecto;
+        document.getElementById('pd-subtitle').innerText = pInfo.cliente;
+        document.getElementById('pd-cobrado').innerText = fmt.format(pInfo.totalCobrado);
+        document.getElementById('pd-gastos').innerText = fmt.format(pInfo.totalCostos);
+        document.getElementById('pd-utilidad').innerText = fmt.format(pInfo.utilidad);
+        document.getElementById('pd-items-list').innerHTML = '<div class="text-center mt-3"><div class="spinner-border text-cyan spinner-border-sm"></div><div class="small text-muted mt-1">Cargando movimientos...</div></div>';
+    }
+    
     const res = await callApi('getProjectDetails', { id: id });
     if(res.success) {
         currentProjectData = res.data.info;
@@ -307,17 +406,26 @@ async function updateProject() {
         contacto: document.getElementById('ep-contacto').value,
         estado: document.getElementById('ep-estado').value
     };
+    
+    const modalInstance = bootstrap.Modal.getInstance(document.getElementById('editProjectModal'));
+    if(modalInstance) modalInstance.hide();
+    showToast("⏳ Actualizando proyecto...", "info");
+    
     await callApi('updateProject', payload);
-    bootstrap.Modal.getInstance(document.getElementById('editProjectModal')).hide();
+    showToast("✅ Proyecto actualizado.", "success");
     openProjectDetail(payload.id);
-    fetchProjects(); 
+    fetchAllDataBackground(); 
 }
 
 async function deleteProject() {
     if(confirm("¿Eliminar este proyecto y todo su historial?")) {
+        const modalInstance = bootstrap.Modal.getInstance(document.getElementById('projectDetailModal'));
+        if(modalInstance) modalInstance.hide();
+        showToast("⏳ Eliminando proyecto...", "info");
+        
         await callApi('deleteProject', { id: currentProject });
-        bootstrap.Modal.getInstance(document.getElementById('projectDetailModal')).hide();
-        fetchProjects();
+        showToast("✅ Proyecto eliminado.", "success");
+        fetchAllDataBackground();
     }
 }
 
@@ -416,8 +524,10 @@ async function saveProjectItem() {
     
     const btn = document.querySelector('#addItemModal .btn-primary');
     const originalText = btn.innerText;
-    btn.disabled = true; 
-    btn.innerText = "...";
+    
+    const modalInstance = bootstrap.Modal.getInstance(document.getElementById('addItemModal'));
+    if(modalInstance) modalInstance.hide();
+    showToast("⏳ Registrando movimiento...", "info");
     
     const res = await callApi(action, payload);
     
@@ -425,9 +535,9 @@ async function saveProjectItem() {
     btn.innerText = originalText;
     
     if(res.success) {
-        bootstrap.Modal.getInstance(document.getElementById('addItemModal')).hide();
+        showToast("✅ Movimiento guardado.", "success");
         openProjectDetail(currentProject);
-        fetchProjects();
+        fetchAllDataBackground();
     } else {
         alert("Error: " + res.error);
     }
@@ -435,23 +545,17 @@ async function saveProjectItem() {
 
 async function deleteProjectMovement(idMov) {
     if(confirm("¿Borrar movimiento?")) {
+        showToast("⏳ Borrando movimiento...", "info");
         await callApi('deleteProjectMovement', { idMov: idMov, projectId: currentProject });
+        showToast("✅ Movimiento borrado.", "success");
         openProjectDetail(currentProject);
-        fetchProjects();
+        fetchAllDataBackground();
     }
 }
 
 // --- HISTORIAL ---
 async function fetchHistory() {
-    const container = document.getElementById('history-list');
-    container.innerHTML = '<div class="text-center mt-5"><div class="spinner-border text-cyan"></div></div>';
-    const res = await callApi('getHistoryDocs');
-    if(res.success) {
-        historyDocs = res.data;
-        renderHistory();
-    } else {
-        container.innerHTML = `<div class="text-danger text-center">Error historial</div>`;
-    }
+    renderHistory();
 }
 
 function renderHistory() {
@@ -537,11 +641,7 @@ function reloadOrderFromHistory(index) {
         updateCartUI();
         openCart();
         
-        const toast = document.createElement('div');
-        toast.className = "alert alert-success position-fixed top-0 start-50 translate-middle-x mt-3 z-3";
-        toast.innerText = `✅ Cotización ${doc.consecutivo} cargada.`;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
+        showToast(`✅ Cotización ${doc.consecutivo} cargada.`, "success");
 
     } catch(e) {
         console.error("Error leyendo JSON:", e);
@@ -575,24 +675,16 @@ async function convertQuoteToProject(index) {
             items: orderData.items || []
         };
 
-        const toast = document.createElement('div');
-        toast.className = "alert alert-info position-fixed top-0 start-50 translate-middle-x mt-3 z-3";
-        toast.innerText = `⏳ Creando proyecto desde ${doc.consecutivo}...`;
-        document.body.appendChild(toast);
+        showToast(`⏳ Creando proyecto desde ${doc.consecutivo}...`, "info");
 
         const res = await callApi('convertQuoteToProject', payload);
-        toast.remove();
 
         if (res.success) {
-            const toast2 = document.createElement('div');
-            toast2.className = "alert alert-success position-fixed top-0 start-50 translate-middle-x mt-3 z-3";
-            toast2.innerText = `✅ Proyecto creado exitosamente.`;
-            document.body.appendChild(toast2);
-            setTimeout(() => toast2.remove(), 3000);
-            
+            showToast(`✅ Proyecto creado exitosamente.`, "success");
             switchTab('PROYECTOS');
-            await fetchProjects();
-            openProjectDetail(res.data.projectId);
+            fetchAllDataBackground().then(() => {
+                openProjectDetail(res.data.projectId);
+            });
             
         } else {
             alert("Error al convertir la cotización: " + res.error);
@@ -700,11 +792,16 @@ async function saveProduct() {
         costo: tipo==='PRODUCTO' ? Number(document.getElementById('p-costo').value) : 0,
         iva: 19 
     };
-    const res = await callApi('upsertProduct', payload);
+    
+    const modalInstance = bootstrap.Modal.getInstance(document.getElementById('prodModal'));
+    if(modalInstance) modalInstance.hide();
+    showToast("⏳ Guardando producto en nube...", "info");
     btn.disabled = false; btn.innerText = "GUARDAR DATOS";
+    
+    const res = await callApi('upsertProduct', payload);
     if (res.success) {
-        bootstrap.Modal.getInstance(document.getElementById('prodModal')).hide();
-        fetchCatalog(); 
+        showToast("✅ Producto guardado con éxito.", "success");
+        fetchAllDataBackground(); 
     } else {
         alert("Error: " + res.error);
     }
@@ -765,7 +862,6 @@ function addToCart(uuid) {
 async function openCart() {
     const selectExport = document.getElementById('cart-export-project');
     if (selectExport.options.length <= 1) { 
-        if(projects.length === 0) { const res = await callApi('getProjects'); if(res.success) projects = res.data; }
         projects.forEach(p => { const opt = document.createElement('option'); opt.value = p.id; opt.text = `${p.nombreProyecto} (${p.cliente})`; selectExport.appendChild(opt); });
     }
     const selectImport = document.getElementById('cart-import-project');
@@ -788,7 +884,7 @@ function updateCartUI() {
     cart.forEach((item, i) => {
         subtotal += (item.precio * item.cantidad);
         const descValue = item.specs || "";
-        const safeDescValue = descValue.replace(/"/g, '&quot;');
+        const safeDescValue = descValue.replace(/"/g, '"');
         
         container.innerHTML += `
         <div class="border-bottom border-secondary py-2">
@@ -925,6 +1021,8 @@ async function generatePDF() {
         const modalInstance = bootstrap.Modal.getInstance(modalEl);
         if(modalInstance) modalInstance.hide();
         
-        setTimeout(() => { fetchClients(); if(confirm(`Documento ${res.data.consecutivo} Generado. ¿Abrir?`)) { window.open(res.data.url, '_blank'); } }, 500); 
+        fetchAllDataBackground();
+        
+        setTimeout(() => { updateClientsDatalist(); if(confirm(`Documento ${res.data.consecutivo} Generado. ¿Abrir?`)) { window.open(res.data.url, '_blank'); } }, 500); 
     } else { alert("Error: " + res.error); }
 }
