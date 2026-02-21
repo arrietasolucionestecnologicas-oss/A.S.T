@@ -1,7 +1,7 @@
 // ==========================================
-// A.S.T. ADMIN FRONTEND (V26.4 - EDICIÓN DE ÍTEMS EN PROYECTO)
+// A.S.T. ADMIN FRONTEND (V28 - FIX PANTALLA NEGRA MODAL)
 // ==========================================
-// *** PEGA AQUÍ TU URL DEL SCRIPT (VERIFICA QUE SEA LA V26) ***
+// *** PEGA AQUÍ TU URL DEL SCRIPT ***
 const API_URL = "https://script.google.com/macros/s/AKfycbxpCp7aY4L48znjtqH_1svYzY6MjVY58bXxt3iZvyuPQwBBt0u7S32aXxxt9VVgtaHd/exec";
 const API_KEY = "AST_2025_SECURE"; 
 
@@ -17,6 +17,22 @@ let currentView = 'PRODUCTO';
 let deferredPrompt; 
 
 const fmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+
+// --- SOLUCIÓN: MANEJO DEL BOTÓN ATRÁS EN MÓVILES (Evita Pantalla Negra) ---
+document.addEventListener('show.bs.modal', function () {
+    window.history.pushState({ modal: true }, "");
+});
+
+window.addEventListener('popstate', function (event) {
+    const openModal = document.querySelector('.modal.show');
+    if (openModal) {
+        const modalInstance = bootstrap.Modal.getInstance(openModal);
+        if (modalInstance) {
+            modalInstance.hide();
+        }
+    }
+});
+// -------------------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', () => {
     fetchCatalog();
@@ -588,7 +604,6 @@ async function convertQuoteToProject(index) {
     }
 }
 
-// --- RENDER GRID ---
 function renderGrid(data) {
     const grid = document.getElementById('catalog-grid');
     grid.innerHTML = '';
@@ -747,7 +762,6 @@ function addToCart(uuid) {
     setTimeout(()=>fab.style.transform = "scale(1)", 200);
 }
 
-// === FUNCIÓN CART (Con protección de carrito abierto) ===
 async function openCart() {
     const selectExport = document.getElementById('cart-export-project');
     if (selectExport.options.length <= 1) { 
@@ -874,7 +888,6 @@ async function generatePDF() {
     const ivaVal = applyIva ? (subtotal * 0.19) : 0;
     const projectIdToSync = document.getElementById('cart-export-project').value;
     
-    // VERIFICACIÓN SEGURA DE TÉRMINOS
     let includeTerms = false;
     let termsText = "";
     
