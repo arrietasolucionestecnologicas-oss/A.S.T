@@ -10,6 +10,7 @@ let cart = [];
 let projects = []; 
 let clients = []; 
 let historyDocs = []; 
+let proveedores = [];
 let currentProject = null; 
 let currentProjectData = null; 
 let currentProjectItems = []; 
@@ -41,11 +42,13 @@ function loadLocalCache() {
         const p = localStorage.getItem('ast_projects');
         const cl = localStorage.getItem('ast_clients');
         const h = localStorage.getItem('ast_history');
+        const pr = localStorage.getItem('ast_proveedores');
         
         if (c) catalog = JSON.parse(c);
         if (p) projects = JSON.parse(p);
         if (cl) clients = JSON.parse(cl);
         if (h) historyDocs = JSON.parse(h);
+        if (pr) proveedores = JSON.parse(pr);
     } catch (e) {
         console.error("Error reading cache", e);
     }
@@ -59,19 +62,23 @@ async function fetchAllDataBackground() {
         projects = res.data.projects || [];
         clients = res.data.clients || [];
         historyDocs = res.data.historyDocs || [];
+        proveedores = res.data.proveedores || [];
         
         localStorage.setItem('ast_catalog', JSON.stringify(catalog));
         localStorage.setItem('ast_projects', JSON.stringify(projects));
         localStorage.setItem('ast_clients', JSON.stringify(clients));
         localStorage.setItem('ast_history', JSON.stringify(historyDocs));
+        localStorage.setItem('ast_proveedores', JSON.stringify(proveedores));
         
         if (currentView === 'PROYECTOS') { renderProjects(); calculateDashboard(); }
         else if (currentView === 'HISTORIAL') { renderHistory(); }
+        else if (currentView === 'PROVEEDORES') { renderProveedores(); }
         else { 
             const filtered = catalog.filter(p => p.tipo === currentView);
             renderGrid(filtered); 
         }
         updateClientsDatalist();
+        updateProvidersDatalist();
     }
     hideSyncIndicator();
 }
@@ -120,9 +127,11 @@ function showToast(msg, type = 'info') {
 document.addEventListener('DOMContentLoaded', () => {
     loadLocalCache(); 
     updateClientsDatalist(); 
+    updateProvidersDatalist();
     
     if(currentView === 'PROYECTOS') { renderProjects(); calculateDashboard(); }
     else if(currentView === 'HISTORIAL') { renderHistory(); }
+    else if(currentView === 'PROVEEDORES') { renderProveedores(); }
     else {
         const filtered = catalog.filter(p => p.tipo === currentView);
         renderGrid(filtered);
@@ -131,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchAllDataBackground(); 
     
     document.getElementById('search').addEventListener('input', (e) => {
-        if(currentView === 'PROYECTOS' || currentView === 'HISTORIAL') return; 
+        if(currentView === 'PROYECTOS' || currentView === 'HISTORIAL' || currentView === 'PROVEEDORES') return; 
         const term = e.target.value.toLowerCase();
         const filtered = catalog.filter(p => 
             p.tipo === currentView && 
@@ -163,15 +172,18 @@ function switchTab(viewName) {
     document.getElementById('tab-serv').className = 'nav-link';
     document.getElementById('tab-proj').className = 'nav-link';
     document.getElementById('tab-hist').className = 'nav-link';
+    document.getElementById('tab-prov').className = 'nav-link';
 
     if(viewName === 'PRODUCTO') document.getElementById('tab-prod').className = 'nav-link active';
     if(viewName === 'SERVICIO') document.getElementById('tab-serv').className = 'nav-link active';
     if(viewName === 'PROYECTOS') document.getElementById('tab-proj').className = 'nav-link active';
     if(viewName === 'HISTORIAL') document.getElementById('tab-hist').className = 'nav-link active';
+    if(viewName === 'PROVEEDORES') document.getElementById('tab-prov').className = 'nav-link active';
 
     document.getElementById('view-catalog').classList.add('hidden-section');
     document.getElementById('view-projects').classList.add('hidden-section');
     document.getElementById('view-history').classList.add('hidden-section');
+    document.getElementById('view-proveedores').classList.add('hidden-section');
     document.getElementById('fab-cart').style.display = 'none';
     document.getElementById('btn-main-add').style.display = 'none';
 
@@ -182,6 +194,10 @@ function switchTab(viewName) {
     else if (viewName === 'HISTORIAL') {
         document.getElementById('view-history').classList.remove('hidden-section');
         fetchHistory();
+    }
+    else if (viewName === 'PROVEEDORES') {
+        document.getElementById('view-proveedores').classList.remove('hidden-section');
+        renderProveedores();
     }
     else {
         document.getElementById('view-catalog').classList.remove('hidden-section');
@@ -210,7 +226,7 @@ async function callApi(action, payload = {}) {
 }
 
 async function fetchCatalog() {
-    if(catalog.length > 0 && currentView !== 'PROYECTOS' && currentView !== 'HISTORIAL') {
+    if(catalog.length > 0 && currentView !== 'PROYECTOS' && currentView !== 'HISTORIAL' && currentView !== 'PROVEEDORES') {
          switchTab(currentView); 
     }
 }
@@ -238,6 +254,76 @@ function autoFillClient(name, prefix) {
             document.getElementById('c-nit').value = client.nit;
             document.getElementById('c-tel').value = client.telefono;
         } 
+    }
+}
+
+// --- GESTIÓN DE PROVEEDORES ---
+function updateProvidersDatalist() {
+    const datalist = document.getElementById('providers-datalist');
+    if (!datalist) return;
+    datalist.innerHTML = '';
+    proveedores.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.nombre;
+        datalist.appendChild(opt);
+    });
+}
+
+function renderProveedores() {
+    const container = document.getElementById('proveedores-list');
+    container.innerHTML = '';
+    if (proveedores.length === 0) {
+        container.innerHTML = '<div class="text-muted text-center mt-5">No hay proveedores registrados.</div>';
+        return;
+    }
+    let listToRender = proveedores;
+    const term = document.getElementById('search-prov') ? document.getElementById('search-prov').value.toLowerCase() : "";
+    if (term) {
+        listToRender = proveedores.filter(p => p.nombre.toLowerCase().includes(term));
+    }
+    listToRender.forEach(p => {
+        const date = new Date(p.fecha).toLocaleDateString();
+        const card = `
+        <div class="project-card border-info">
+            <div class="d-flex justify-content-between">
+                <h6 class="text-white fw-bold mb-1">${p.nombre}</h6>
+                <span class="badge bg-secondary">${p.especialidad || 'General'}</span>
+            </div>
+            <small class="text-cyan d-block mb-1">NIT: ${p.nit || '---'} | Tel: ${p.contacto || '---'}</small>
+            <small class="text-muted" style="font-size:0.7rem;">Registrado: ${date}</small>
+        </div>`;
+        container.innerHTML += card;
+    });
+}
+
+async function openCostHistory() {
+    const nombreProd = document.getElementById('p-nombre').value;
+    if (!nombreProd) return;
+    document.getElementById('ch-title').innerText = nombreProd;
+    const container = document.getElementById('ch-list');
+    container.innerHTML = '<div class="text-center mt-3"><div class="spinner-border text-info spinner-border-sm"></div></div>';
+    new bootstrap.Modal(document.getElementById('costHistoryModal')).show();
+    
+    const res = await callApi('getProductCostHistory', { nombre: nombreProd });
+    container.innerHTML = '';
+    if (res.success) {
+        if (res.data.length === 0) {
+            container.innerHTML = '<div class="text-muted text-center small mt-3">No hay compras registradas para este material.</div>';
+        } else {
+            res.data.forEach(item => {
+                const date = new Date(item.fecha).toLocaleDateString();
+                container.innerHTML += `
+                <div class="d-flex justify-content-between align-items-center border-bottom border-secondary py-2">
+                    <div>
+                        <div class="text-white small fw-bold">${item.proveedor || 'Sin Proveedor'}</div>
+                        <div class="text-muted" style="font-size:0.7rem;">${date} | Cant: ${item.cantidad}</div>
+                    </div>
+                    <div class="text-danger fw-bold small">${fmt.format(item.costo)}</div>
+                </div>`;
+            });
+        }
+    } else {
+        container.innerHTML = `<div class="text-danger text-center small mt-3">Error: ${res.error}</div>`;
     }
 }
 
@@ -733,6 +819,7 @@ function openProductModal() {
     document.getElementById('p-imagen-data').value = "";
     document.getElementById('p-tipo').value = currentView === 'HISTORIAL' ? 'PRODUCTO' : currentView;
     document.getElementById('btn-github-publish').style.display = "none"; 
+    document.getElementById('btn-cost-history').style.display = "none";
     toggleFormFields();
     new bootstrap.Modal(document.getElementById('prodModal')).show();
 }
@@ -756,11 +843,17 @@ function loadEditModal(uuid) {
     document.getElementById('p-web').checked = p.visibleWeb;
     document.getElementById('p-imagen-data').value = p.imagen;
     document.getElementById('p-imagen-file').value = "";
+    
+    const btnCostHistory = document.getElementById('btn-cost-history');
     if (p.tipo === 'PRODUCTO') {
         document.getElementById('p-categoria').value = p.categoria || "AUTOMATIZACION_APPS";
         document.getElementById('p-codigo').value = p.codigo;
         document.getElementById('p-costo').value = p.costo;
+        if(btnCostHistory) btnCostHistory.style.display = "block";
+    } else {
+        if(btnCostHistory) btnCostHistory.style.display = "none";
     }
+    
     document.getElementById('btn-github-publish').style.display = "block";
     new bootstrap.Modal(document.getElementById('prodModal')).show();
 }
