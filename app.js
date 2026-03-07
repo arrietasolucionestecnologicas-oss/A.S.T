@@ -33,6 +33,15 @@ window.addEventListener('popstate', function (event) {
         }
     }
 });
+
+function cleanBackdrops() {
+    setTimeout(() => {
+        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+    }, 300);
+}
 // -------------------------------------------------------------------------
 
 // --- SISTEMA DE FLUIDEZ EXTREMA (CACHÉ Y SINCRONIZACIÓN) ---
@@ -281,19 +290,63 @@ function renderProveedores() {
     if (term) {
         listToRender = proveedores.filter(p => p.nombre.toLowerCase().includes(term));
     }
-    listToRender.forEach(p => {
+    listToRender.forEach((p, index) => {
+        const actualIndex = proveedores.findIndex(x => x.nombre === p.nombre);
         const date = new Date(p.fecha).toLocaleDateString();
         const card = `
         <div class="project-card border-info">
-            <div class="d-flex justify-content-between">
-                <h6 class="text-white fw-bold mb-1">${p.nombre}</h6>
-                <span class="badge bg-secondary">${p.especialidad || 'General'}</span>
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h6 class="text-white fw-bold mb-1">${p.nombre}</h6>
+                    <span class="badge bg-secondary">${p.especialidad || 'General'}</span>
+                </div>
+                <button class="btn btn-sm text-warning p-0" onclick="openEditProveedorModal(${actualIndex})" title="Editar Proveedor"><i class="bi bi-pencil-square"></i></button>
             </div>
-            <small class="text-cyan d-block mb-1">NIT: ${p.nit || '---'} | Tel: ${p.contacto || '---'}</small>
-            <small class="text-muted" style="font-size:0.7rem;">Registrado: ${date}</small>
+            <div class="mt-2">
+                <small class="text-cyan d-block mb-1">NIT: ${p.nit || '---'} | Tel: ${p.contacto || '---'}</small>
+                <small class="text-muted" style="font-size:0.7rem;">Registrado: ${date}</small>
+            </div>
         </div>`;
         container.innerHTML += card;
     });
+}
+
+function openEditProveedorModal(index) {
+    const p = proveedores[index];
+    if(!p) return;
+    document.getElementById('prov-original').value = p.nombre;
+    document.getElementById('prov-nombre').value = p.nombre;
+    document.getElementById('prov-nit').value = p.nit || '';
+    document.getElementById('prov-contacto').value = p.contacto || '';
+    document.getElementById('prov-especialidad').value = p.especialidad || '';
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('editProveedorModal')).show();
+}
+
+async function saveProveedor() {
+    const payload = {
+        originalNombre: document.getElementById('prov-original').value,
+        nombre: document.getElementById('prov-nombre').value,
+        nit: document.getElementById('prov-nit').value,
+        contacto: document.getElementById('prov-contacto').value,
+        especialidad: document.getElementById('prov-especialidad').value
+    };
+    
+    if(!payload.nombre) return alert("El nombre es obligatorio");
+
+    const modalInstance = bootstrap.Modal.getInstance(document.getElementById('editProveedorModal'));
+    if(modalInstance) {
+        modalInstance.hide();
+        cleanBackdrops();
+    }
+    
+    showToast("⏳ Actualizando proveedor...", "info");
+    const res = await callApi('updateProveedor', payload);
+    if(res.success) {
+        showToast("✅ Proveedor actualizado.", "success");
+        fetchAllDataBackground();
+    } else {
+        alert("Error: " + res.error);
+    }
 }
 
 async function openCostHistory() {
@@ -302,7 +355,7 @@ async function openCostHistory() {
     document.getElementById('ch-title').innerText = nombreProd;
     const container = document.getElementById('ch-list');
     container.innerHTML = '<div class="text-center mt-3"><div class="spinner-border text-info spinner-border-sm"></div></div>';
-    new bootstrap.Modal(document.getElementById('costHistoryModal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('costHistoryModal')).show();
     
     const res = await callApi('getProductCostHistory', { nombre: nombreProd });
     container.innerHTML = '';
@@ -389,7 +442,7 @@ function openNewProjectModal() {
     document.getElementById('np-proyecto').value = "";
     document.getElementById('np-cliente').value = "";
     document.getElementById('np-contacto').value = "";
-    new bootstrap.Modal(document.getElementById('newProjectModal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('newProjectModal')).show();
 }
 
 async function createNewProject() {
@@ -403,7 +456,11 @@ async function createNewProject() {
     btn.disabled = true; btn.innerText = "...";
     
     const modalInstance = bootstrap.Modal.getInstance(document.getElementById('newProjectModal'));
-    if(modalInstance) modalInstance.hide();
+    if(modalInstance) {
+        modalInstance.hide();
+        cleanBackdrops();
+    }
+    
     showToast("⏳ Creando carpeta de proyecto...", "info");
     btn.disabled = false; btn.innerText = "CREAR CARPETA";
     
@@ -419,8 +476,7 @@ async function createNewProject() {
 // --- DETALLE DE PROYECTO ---
 async function openProjectDetail(id) {
     currentProject = id;
-    const modal = new bootstrap.Modal(document.getElementById('projectDetailModal'));
-    modal.show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('projectDetailModal')).show();
     
     const pInfo = projects.find(p => p.id === id);
     if (pInfo) {
@@ -481,7 +537,7 @@ function openEditProjectModal() {
     document.getElementById('ep-cliente').value = currentProjectData.cliente;
     document.getElementById('ep-contacto').value = currentProjectData.contacto;
     document.getElementById('ep-estado').value = currentProjectData.estado;
-    new bootstrap.Modal(document.getElementById('editProjectModal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('editProjectModal')).show();
 }
 
 async function updateProject() {
@@ -494,7 +550,11 @@ async function updateProject() {
     };
     
     const modalInstance = bootstrap.Modal.getInstance(document.getElementById('editProjectModal'));
-    if(modalInstance) modalInstance.hide();
+    if(modalInstance) {
+        modalInstance.hide();
+        cleanBackdrops();
+    }
+    
     showToast("⏳ Actualizando proyecto...", "info");
     
     await callApi('updateProject', payload);
@@ -506,7 +566,11 @@ async function updateProject() {
 async function deleteProject() {
     if(confirm("¿Eliminar este proyecto y todo su historial?")) {
         const modalInstance = bootstrap.Modal.getInstance(document.getElementById('projectDetailModal'));
-        if(modalInstance) modalInstance.hide();
+        if(modalInstance) {
+            modalInstance.hide();
+            cleanBackdrops();
+        }
+        
         showToast("⏳ Eliminando proyecto...", "info");
         
         await callApi('deleteProject', { id: currentProject });
@@ -538,7 +602,7 @@ function openAddItemModal() {
         dl.appendChild(opt);
     });
     
-    new bootstrap.Modal(document.getElementById('addItemModal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('addItemModal')).show();
 }
 
 function openEditItemModal(idMov) {
@@ -564,7 +628,7 @@ function openEditItemModal(idMov) {
     document.querySelector('#addItemModal .modal-title').innerText = "Editar Movimiento";
     document.querySelector('#addItemModal .btn-primary').innerText = "GUARDAR CAMBIOS";
 
-    new bootstrap.Modal(document.getElementById('addItemModal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('addItemModal')).show();
 }
 
 function fillItemFromCatalog(name) {
@@ -612,7 +676,11 @@ async function saveProjectItem() {
     const originalText = btn.innerText;
     
     const modalInstance = bootstrap.Modal.getInstance(document.getElementById('addItemModal'));
-    if(modalInstance) modalInstance.hide();
+    if(modalInstance) {
+        modalInstance.hide();
+        cleanBackdrops();
+    }
+    
     showToast("⏳ Registrando movimiento...", "info");
     
     const res = await callApi(action, payload);
@@ -804,7 +872,7 @@ function renderGrid(data) {
                     <div class="btn-group">
                         <button class="btn btn-sm btn-outline-secondary" onclick='loadEditModal("${p.uuid}")'><i class="bi bi-pencil-fill"></i></button>
                         <button class="btn btn-sm btn-cyan" onclick='addToCart("${p.uuid}")'><i class="bi bi-plus-lg"></i></button>
-                        <button class="btn btn-sm btn-outline-light" onclick='loadEditModal("${p.uuid}")' title="Abrir para Publicar"><i class="bi bi-share-fill"></i></button>
+                        <button class="btn btn-sm btn-outline-success" onclick='shareProductDirectly("${p.uuid}")' title="Compartir a WhatsApp"><i class="bi bi-whatsapp"></i></button>
                     </div>
                 </div>
             </div>
@@ -821,7 +889,7 @@ function openProductModal() {
     document.getElementById('btn-github-publish').style.display = "none"; 
     document.getElementById('btn-cost-history').style.display = "none";
     toggleFormFields();
-    new bootstrap.Modal(document.getElementById('prodModal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('prodModal')).show();
 }
 
 function toggleFormFields() {
@@ -855,7 +923,7 @@ function loadEditModal(uuid) {
     }
     
     document.getElementById('btn-github-publish').style.display = "block";
-    new bootstrap.Modal(document.getElementById('prodModal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('prodModal')).show();
 }
 
 async function saveProduct() {
@@ -887,7 +955,11 @@ async function saveProduct() {
     };
     
     const modalInstance = bootstrap.Modal.getInstance(document.getElementById('prodModal'));
-    if(modalInstance) modalInstance.hide();
+    if(modalInstance) {
+        modalInstance.hide();
+        cleanBackdrops();
+    }
+    
     showToast("⏳ Guardando producto en nube...", "info");
     btn.disabled = false; btn.innerText = "GUARDAR DATOS";
     
@@ -934,6 +1006,49 @@ async function publishToGitHub() {
     }
 }
 
+// NUEVA FUNCIÓN: SHARE NATIVO (Estilo King's Shop)
+async function shareProductDirectly(uuid) {
+    const p = catalog.find(x => x.uuid === uuid);
+    if (!p) return;
+    
+    if (!navigator.share) {
+        alert("Tu navegador o dispositivo no soporta el envío directo de archivos. Usa el botón de GitHub.");
+        return;
+    }
+
+    showToast("Preparando archivo...", "info");
+
+    const precioStr = p.precio > 0 ? fmt.format(p.precio) : "Precio a Cotizar";
+    const specsLimpio = p.specs ? p.specs.replace(/[\r\n]+/g, ' ') : "Solución Profesional";
+    
+    const textoShare = `A.S.T. Soluciones Tecnológicas\n\nProducto: ${p.nombre}\nPrecio: ${precioStr}\n\nDetalles:\n${specsLimpio}\n\nContáctanos: wa.me/573137713430`;
+
+    try {
+        if (p.imagen && p.imagen.startsWith('http')) {
+            const response = await fetch(p.imagen);
+            const blob = await response.blob();
+            const file = new File([blob], "AST_Producto.jpg", { type: blob.type });
+
+            await navigator.share({
+                title: p.nombre,
+                text: textoShare,
+                files: [file]
+            });
+        } else {
+            await navigator.share({
+                title: p.nombre,
+                text: textoShare
+            });
+        }
+    } catch (error) {
+        if (error.name !== "AbortError") {
+            console.error("Error compartiendo:", error);
+            alert("No se pudo adjuntar la imagen. Se abrirá GitHub como respaldo.");
+            publishToGitHub(); 
+        }
+    }
+}
+
 const toBase64 = file => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -964,7 +1079,7 @@ async function openCart() {
     
     const modalEl = document.getElementById('cartModal');
     if (!modalEl.classList.contains('show')) {
-        new bootstrap.Modal(modalEl).show();
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
     }
 }
 
@@ -1112,7 +1227,10 @@ async function generatePDF() {
         cart = []; updateCartUI();
         const modalEl = document.getElementById('cartModal');
         const modalInstance = bootstrap.Modal.getInstance(modalEl);
-        if(modalInstance) modalInstance.hide();
+        if(modalInstance) {
+            modalInstance.hide();
+            cleanBackdrops();
+        }
         
         fetchAllDataBackground();
         
