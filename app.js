@@ -1023,18 +1023,22 @@ async function shareProductDirectly(uuid) {
     // Limpieza de Emojis y Formato de Viñetas
     let specsLimpio = "Solución Profesional";
     if (p.specs) {
-        let cleaned = p.specs.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0F\u200D]/gu, '');
+        // Regex robusto para eliminar emojis
+        let cleaned = p.specs.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, '');
         let lines = cleaned.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-        if (lines.length > 1) {
-            lines = lines.map(line => {
-                line = line.replace(/^[-*•]\s*/, '');
-                return '• ' + line;
-            });
-        }
+        
+        // Agregar viñeta a cada línea
+        lines = lines.map(line => {
+            line = line.replace(/^[-*•]\s*/, ''); // Limpiar viñetas viejas si existen
+            return '• ' + line;
+        });
+        
         specsLimpio = lines.join('\n');
     }
     
-    const textoShare = `🏢 *A.S.T. Soluciones Tecnológicas*\n-----------------------------------------\n📦 *Producto:* ${p.nombre}\n💰 *Valor:* ${precioStr}\n\n*Detalles Técnicos:*\n${specsLimpio}\n\nEscríbenos, será un gusto asesorarte en tu próximo proyecto.\n📞 *Contacto:* wa.me/573137713430`;
+    const urlWeb = `https://arrietasolucionestecnologicas-oss.github.io/web/?open=${p.uuid}`;
+    
+    const textoShare = `🏢 *A.S.T. Soluciones Tecnológicas*\n\n📦 *Producto:* ${p.nombre}\n💰 *Valor:* ${precioStr}\n\n*Detalles Técnicos:*\n${specsLimpio}\n\nEscríbenos, será un gusto asesorarte en tu próximo proyecto.\n\n🌐 O visita nuestra página para conocer más servicios y productos:\n${urlWeb}`;
 
     try {
         if (p.imagen && p.imagen.startsWith('http')) {
