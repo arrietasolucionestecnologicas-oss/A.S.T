@@ -1,5 +1,5 @@
 // ==========================================
-// A.S.T. ADMIN FRONTEND (V29 - FLUIDEZ EXTREMA & OPTIMISTIC UI)
+// A.S.T. ADMIN FRONTEND (V30 - FLUIDEZ EXTREMA & COMPARTIDO NATIVO)
 // ==========================================
 // *** PEGA AQUÍ TU URL DEL SCRIPT ***
 const API_URL = "https://script.google.com/macros/s/AKfycbxpCp7aY4L48znjtqH_1svYzY6MjVY58bXxt3iZvyuPQwBBt0u7S32aXxxt9VVgtaHd/exec";
@@ -870,9 +870,10 @@ function renderGrid(data) {
                 <div class="mt-auto d-flex justify-content-between align-items-end">
                     <div><small class="text-muted" style="font-size:0.7rem">PRECIO</small><div class="text-cyan fw-bold fs-5">${fmt.format(p.precio)}</div></div>
                     <div class="btn-group">
-                        <button class="btn btn-sm btn-outline-secondary" onclick='loadEditModal("${p.uuid}")'><i class="bi bi-pencil-fill"></i></button>
-                        <button class="btn btn-sm btn-cyan" onclick='addToCart("${p.uuid}")'><i class="bi bi-plus-lg"></i></button>
-                        <button class="btn btn-sm btn-outline-light" onclick='loadEditModal("${p.uuid}")' title="Abrir para Publicar"><i class="bi bi-share-fill"></i></button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick='loadEditModal("${p.uuid}")' title="Editar"><i class="bi bi-pencil-fill"></i></button>
+                        <button class="btn btn-sm btn-cyan" onclick='addToCart("${p.uuid}")' title="Añadir"><i class="bi bi-plus-lg"></i></button>
+                        <button class="btn btn-sm btn-outline-success" onclick='shareProductDirectly("${p.uuid}")' title="WhatsApp Nativo"><i class="bi bi-whatsapp"></i></button>
+                        <button class="btn btn-sm btn-outline-light" onclick='loadEditModal("${p.uuid}")' title="Publicar en Web"><i class="bi bi-cloud-upload"></i></button>
                     </div>
                 </div>
             </div>
@@ -998,12 +999,65 @@ async function publishToGitHub() {
         const finalUrl = res.data.url;
         navigator.clipboard.writeText(finalUrl).then(() => {
             if(confirm("✅ ¡Publicado en GitHub!\nEnlace copiado. ¿Compartir en WhatsApp ahora?")) {
-                 const msgShare = `🏢 *A.S.T. Soluciones Tecnológicas*\n\nConoce más detalles y especificaciones aquí:\n${finalUrl}`;
-                 window.open(`https://wa.me/?text=${encodeURIComponent(msgShare)}`, '_blank');
+                 window.open(`https://wa.me/?text=${encodeURIComponent("Mira este producto:\n" + finalUrl)}`, '_blank');
             }
         });
     } else {
         alert("Error al publicar: " + res.error);
+    }
+}
+
+// NUEVA FUNCIÓN: SHARE NATIVO (Estilo King's Shop Híbrido)
+async function shareProductDirectly(uuid) {
+    const p = catalog.find(x => x.uuid === uuid);
+    if (!p) return;
+    
+    if (!navigator.share) {
+        alert("Tu navegador o dispositivo no soporta el envío directo de archivos. Entra a editar y usa el botón de Publicar en Web (GitHub).");
+        return;
+    }
+
+    showToast("Preparando archivo...", "info");
+
+    const precioStr = (p.precio && p.precio > 0) ? fmt.format(p.precio) : "Precio a convenir";
+    
+    let specsLimpio = "Solución Profesional";
+    if (p.specs) {
+        let cleaned = p.specs.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, '');
+        let lines = cleaned.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        
+        lines = lines.map(line => {
+            line = line.replace(/^[-*•]\s*/, ''); 
+            return '• ' + line;
+        });
+        
+        specsLimpio = lines.join('\n');
+    }
+    
+    const urlWeb = `https://arrietasolucionestecnologicas-oss.github.io/web/?open=${p.uuid}`;
+    
+    const textoShare = `🏢 *A.S.T. Soluciones Tecnológicas*\n\n📦 *Ítem:* ${p.nombre}\n💰 *Valor:* ${precioStr}\n\n*Detalles Técnicos:*\n${specsLimpio}\n\nEscríbenos, será un gusto asesorarte en tu próximo proyecto.\n\n🌐 O visita nuestra página para conocer más servicios y productos:\n${urlWeb}`;
+
+    try {
+        if (p.imagen && p.imagen.startsWith('http')) {
+            const response = await fetch(p.imagen);
+            const blob = await response.blob();
+            const file = new File([blob], "AST_Catalogo.jpg", { type: blob.type });
+
+            await navigator.share({
+                text: textoShare,
+                files: [file]
+            });
+        } else {
+            await navigator.share({
+                text: textoShare
+            });
+        }
+    } catch (error) {
+        if (error.name !== "AbortError") {
+            console.error("Error compartiendo:", error);
+            alert("No se pudo adjuntar la imagen. Usa el botón de publicar en Web.");
+        }
     }
 }
 
