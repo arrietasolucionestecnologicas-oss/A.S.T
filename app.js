@@ -1019,9 +1019,22 @@ async function shareProductDirectly(uuid) {
     showToast("Preparando archivo...", "info");
 
     const precioStr = p.precio > 0 ? fmt.format(p.precio) : "Precio a Cotizar";
-    const specsLimpio = p.specs ? p.specs.replace(/[\r\n]+/g, ' ') : "Solución Profesional";
     
-    const textoShare = `A.S.T. Soluciones Tecnológicas\n\nProducto: ${p.nombre}\nPrecio: ${precioStr}\n\nDetalles:\n${specsLimpio}\n\nContáctanos: wa.me/573137713430`;
+    // Limpieza de Emojis y Formato de Viñetas
+    let specsLimpio = "Solución Profesional";
+    if (p.specs) {
+        let cleaned = p.specs.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0F\u200D]/gu, '');
+        let lines = cleaned.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        if (lines.length > 1) {
+            lines = lines.map(line => {
+                line = line.replace(/^[-*•]\s*/, '');
+                return '• ' + line;
+            });
+        }
+        specsLimpio = lines.join('\n');
+    }
+    
+    const textoShare = `🏢 *A.S.T. Soluciones Tecnológicas*\n-----------------------------------------\n📦 *Producto:* ${p.nombre}\n💰 *Valor:* ${precioStr}\n\n*Detalles Técnicos:*\n${specsLimpio}\n\nEscríbenos, será un gusto asesorarte en tu próximo proyecto.\n📞 *Contacto:* wa.me/573137713430`;
 
     try {
         if (p.imagen && p.imagen.startsWith('http')) {
@@ -1030,13 +1043,11 @@ async function shareProductDirectly(uuid) {
             const file = new File([blob], "AST_Producto.jpg", { type: blob.type });
 
             await navigator.share({
-                title: p.nombre,
                 text: textoShare,
                 files: [file]
             });
         } else {
             await navigator.share({
-                title: p.nombre,
                 text: textoShare
             });
         }
