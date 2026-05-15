@@ -999,7 +999,8 @@ async function publishToGitHub() {
         const finalUrl = res.data.url;
         navigator.clipboard.writeText(finalUrl).then(() => {
             if(confirm("✅ ¡Publicado en GitHub!\nEnlace copiado. ¿Compartir en WhatsApp ahora?")) {
-                 window.open(`https://wa.me/?text=${encodeURIComponent("Mira este producto:\n" + finalUrl)}`, '_blank');
+                 const msgShare = `🏢 *A.S.T. Soluciones Tecnológicas*\n\nConoce más detalles y especificaciones aquí:\n${finalUrl}`;
+                 window.open(`https://wa.me/?text=${encodeURIComponent(msgShare)}`, '_blank');
             }
         });
     } else {
