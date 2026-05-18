@@ -1,5 +1,5 @@
 // ==========================================
-// A.S.T. ADMIN FRONTEND (V32 - ALTO RENDIMIENTO & UX)
+// A.S.T. ADMIN FRONTEND (V33 - LATENCIA CERO & OPTIMISTIC UI)
 // ==========================================
 // *** PEGA AQUÍ TU URL DEL SCRIPT ***
 const API_URL = "https://script.google.com/macros/s/AKfycbxpCp7aY4L48znjtqH_1svYzY6MjVY58bXxt3iZvyuPQwBBt0u7S32aXxxt9VVgtaHd/exec";
@@ -18,6 +18,13 @@ let currentView = 'PRODUCTO';
 let deferredPrompt; 
 
 const fmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+
+function generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
 
 // --- SOLUCIÓN: MANEJO DEL BOTÓN ATRÁS EN MÓVILES (Evita Pantalla Negra) ---
 document.addEventListener('show.bs.modal', function () {
@@ -380,7 +387,7 @@ function openEditProveedorModal(index) {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('editProveedorModal')).show();
 }
 
-async function saveProveedor() {
+function saveProveedor() {
     const payload = {
         originalNombre: document.getElementById('prov-original').value,
         nombre: document.getElementById('prov-nombre').value,
@@ -397,14 +404,24 @@ async function saveProveedor() {
         cleanBackdrops();
     }
     
-    showToast("⏳ Actualizando proveedor...", "info");
-    const res = await callApi('updateProveedor', payload);
-    if(res.success) {
-        showToast("✅ Proveedor actualizado.", "success");
-        refreshProveedoresOnly();
-    } else {
-        alert("Error: " + res.error);
+    // OPTIMISTIC UPDATE
+    const idx = proveedores.findIndex(p => p.nombre.toLowerCase() === payload.originalNombre.toLowerCase());
+    if (idx !== -1) {
+        proveedores[idx] = { ...proveedores[idx], ...payload };
+        renderProveedores();
+        updateProvidersDatalist();
     }
+    
+    showSyncIndicator();
+    callApi('updateProveedor', payload).then(res => {
+        hideSyncIndicator();
+        if(res.success) {
+            refreshProveedoresOnly();
+        } else {
+            showToast("Error de sincronización", "danger");
+            refreshProveedoresOnly();
+        }
+    });
 }
 
 async function openCostHistory() {
@@ -503,15 +520,14 @@ function openNewProjectModal() {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('newProjectModal')).show();
 }
 
-async function createNewProject() {
+function createNewProject() {
     const payload = {
+        id: "PROJ-" + new Date().getTime(),
         nombreProyecto: document.getElementById('np-proyecto').value,
         cliente: document.getElementById('np-cliente').value,
         contacto: document.getElementById('np-contacto').value
     };
     if(!payload.nombreProyecto || !payload.cliente) return alert("Nombre y Cliente obligatorios");
-    const btn = document.querySelector('#newProjectModal .btn-cyan');
-    btn.disabled = true; btn.innerText = "...";
     
     const modalInstance = bootstrap.Modal.getInstance(document.getElementById('newProjectModal'));
     if(modalInstance) {
@@ -519,16 +535,31 @@ async function createNewProject() {
         cleanBackdrops();
     }
     
-    showToast("⏳ Creando carpeta de proyecto...", "info");
-    btn.disabled = false; btn.innerText = "CREAR CARPETA";
+    // OPTIMISTIC UPDATE
+    projects.unshift({
+        id: payload.id,
+        fecha: new Date().toISOString(),
+        cliente: payload.cliente,
+        nombreProyecto: payload.nombreProyecto,
+        contacto: payload.contacto,
+        estado: "ABIERTO",
+        totalCobrado: 0,
+        totalCostos: 0,
+        utilidad: 0
+    });
+    renderProjects();
+    calculateDashboard();
     
-    const res = await callApi('createProject', payload);
-    if(res.success) {
-        showToast("✅ Proyecto creado.", "success");
-        refreshProjectsOnly();
-    } else {
-        alert("Error: " + res.error);
-    }
+    showSyncIndicator();
+    callApi('createProject', payload).then(res => {
+        hideSyncIndicator();
+        if(res.success) {
+            refreshProjectsOnly();
+        } else {
+            showToast("Error de sincronización", "danger");
+            refreshProjectsOnly();
+        }
+    });
 }
 
 // --- DETALLE DE PROYECTO ---
@@ -598,7 +629,7 @@ function openEditProjectModal() {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('editProjectModal')).show();
 }
 
-async function updateProject() {
+function updateProject() {
     const payload = {
         id: document.getElementById('ep-id').value,
         nombreProyecto: document.getElementById('ep-proyecto').value,
@@ -613,15 +644,26 @@ async function updateProject() {
         cleanBackdrops();
     }
     
-    showToast("⏳ Actualizando proyecto...", "info");
+    // OPTIMISTIC UPDATE
+    const idx = projects.findIndex(p => p.id === payload.id);
+    if (idx !== -1) projects[idx] = { ...projects[idx], ...payload };
     
-    await callApi('updateProject', payload);
-    showToast("✅ Proyecto actualizado.", "success");
-    openProjectDetail(payload.id);
-    refreshProjectsOnly(); 
+    if (currentProjectData && currentProjectData.id === payload.id) {
+        currentProjectData = { ...currentProjectData, ...payload };
+        renderProjectItems();
+    }
+    renderProjects();
+    calculateDashboard();
+    
+    showSyncIndicator();
+    callApi('updateProject', payload).then(res => {
+        hideSyncIndicator();
+        if(res.success) refreshProjectsOnly();
+        else refreshProjectsOnly();
+    });
 }
 
-async function deleteProject() {
+function deleteProject() {
     if(confirm("¿Eliminar este proyecto y todo su historial?")) {
         const modalInstance = bootstrap.Modal.getInstance(document.getElementById('projectDetailModal'));
         if(modalInstance) {
@@ -629,11 +671,18 @@ async function deleteProject() {
             cleanBackdrops();
         }
         
-        showToast("⏳ Eliminando proyecto...", "info");
+        // OPTIMISTIC UPDATE
+        const idx = projects.findIndex(p => p.id === currentProject);
+        if (idx !== -1) projects.splice(idx, 1);
+        renderProjects();
+        calculateDashboard();
         
-        await callApi('deleteProject', { id: currentProject });
-        showToast("✅ Proyecto eliminado.", "success");
-        refreshProjectsOnly();
+        showSyncIndicator();
+        callApi('deleteProject', { id: currentProject }).then(res => {
+            hideSyncIndicator();
+            if(res.success) refreshProjectsOnly();
+            else refreshProjectsOnly();
+        });
     }
 }
 
@@ -708,10 +757,13 @@ function toggleVentaInput() {
     else div.style.display = 'none';
 }
 
-async function saveProjectItem() {
-    const idMov = document.getElementById('ai-id').value;
+function saveProjectItem() {
+    let idMov = document.getElementById('ai-id').value;
+    const isNew = !idMov;
+    if (isNew) idMov = generateUUID();
     
     const payload = {
+        idMov: idMov,
         projectId: currentProject,
         tipo: document.getElementById('ai-tipo').value,
         descripcion: document.getElementById('ai-desc').value,
@@ -724,14 +776,7 @@ async function saveProjectItem() {
     
     if(!payload.descripcion) return alert("Descripción requerida");
     
-    let action = 'addProjectMovement';
-    if (idMov && idMov !== "") {
-        payload.idMov = idMov;
-        action = 'updateProjectMovement';
-    }
-    
-    const btn = document.querySelector('#addItemModal .btn-primary');
-    const originalText = btn.innerText;
+    let action = isNew ? 'addProjectMovement' : 'updateProjectMovement';
     
     const modalInstance = bootstrap.Modal.getInstance(document.getElementById('addItemModal'));
     if(modalInstance) {
@@ -739,31 +784,75 @@ async function saveProjectItem() {
         cleanBackdrops();
     }
     
-    showToast("⏳ Registrando movimiento...", "info");
-    
-    const res = await callApi(action, payload);
-    
-    btn.disabled = false; 
-    btn.innerText = originalText;
-    
-    if(res.success) {
-        showToast("✅ Movimiento guardado.", "success");
-        openProjectDetail(currentProject);
-        refreshProjectsOnly();
-        if (payload.tipo === 'MATERIAL' && payload.costo > 0) refreshCatalogOnly();
-        if (payload.proveedor) refreshProveedoresOnly();
+    // OPTIMISTIC UPDATE
+    if (isNew) {
+        currentProjectItems.push({...payload, fecha: new Date().toISOString()});
     } else {
-        alert("Error: " + res.error);
+        const idx = currentProjectItems.findIndex(x => x.idMov === idMov);
+        if (idx !== -1) currentProjectItems[idx] = {...currentProjectItems[idx], ...payload};
     }
+    
+    // Recalcular Totales Locales
+    let tCosto = 0, tVenta = 0;
+    currentProjectItems.forEach(m => {
+        tCosto += (m.costo * m.cantidad);
+        if (m.esCobrar === true || m.esCobrar === 'TRUE') tVenta += (m.venta * m.cantidad);
+    });
+    currentProjectData.totalCostos = tCosto;
+    currentProjectData.totalCobrado = tVenta;
+    currentProjectData.utilidad = tVenta - tCosto;
+    
+    const projIdx = projects.findIndex(p => p.id === currentProject);
+    if (projIdx !== -1) {
+        projects[projIdx].totalCostos = tCosto;
+        projects[projIdx].totalCobrado = tVenta;
+        projects[projIdx].utilidad = tVenta - tCosto;
+    }
+    
+    renderProjectItems();
+    calculateDashboard();
+    
+    showSyncIndicator();
+    callApi(action, payload).then(res => {
+        hideSyncIndicator();
+        if(res.success) {
+            refreshProjectsOnly();
+            if (payload.tipo === 'MATERIAL' && payload.costo > 0) refreshCatalogOnly();
+            if (payload.proveedor) refreshProveedoresOnly();
+        } else {
+            showToast("Error de sincronización", "danger");
+            openProjectDetail(currentProject); 
+        }
+    });
 }
 
-async function deleteProjectMovement(idMov) {
+function deleteProjectMovement(idMov) {
     if(confirm("¿Borrar movimiento?")) {
-        showToast("⏳ Borrando movimiento...", "info");
-        await callApi('deleteProjectMovement', { idMov: idMov, projectId: currentProject });
-        showToast("✅ Movimiento borrado.", "success");
-        openProjectDetail(currentProject);
-        refreshProjectsOnly();
+        // OPTIMISTIC UPDATE
+        const idx = currentProjectItems.findIndex(x => x.idMov === idMov);
+        if (idx !== -1) currentProjectItems.splice(idx, 1);
+        
+        let tCosto = 0, tVenta = 0;
+        currentProjectItems.forEach(m => {
+            tCosto += (m.costo * m.cantidad);
+            if (m.esCobrar === true || m.esCobrar === 'TRUE') tVenta += (m.venta * m.cantidad);
+        });
+        currentProjectData.totalCostos = tCosto;
+        currentProjectData.totalCobrado = tVenta;
+        currentProjectData.utilidad = tVenta - tCosto;
+        
+        renderProjectItems();
+        
+        showSyncIndicator();
+        callApi('deleteProjectMovement', { idMov: idMov, projectId: currentProject }).then(res => {
+            hideSyncIndicator();
+            if(res.success) {
+                refreshProjectsOnly();
+            } else {
+                showToast("Error de sincronización", "danger");
+                openProjectDetail(currentProject); 
+            }
+        });
     }
 }
 
@@ -975,6 +1064,11 @@ function openProductModal() {
     if (document.getElementById('p-proveedor')) document.getElementById('p-proveedor').value = "";
     document.getElementById('btn-github-publish').style.display = "none"; 
     document.getElementById('btn-cost-history').style.display = "none";
+    
+    // Reset del botón de guardar
+    const btn = document.querySelector('#prodModal .btn-cyan');
+    if(btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-save"></i> GUARDAR DATOS'; }
+    
     toggleFormFields();
     bootstrap.Modal.getOrCreateInstance(document.getElementById('prodModal')).show();
 }
@@ -999,6 +1093,10 @@ function loadEditModal(uuid) {
     document.getElementById('p-imagen-data').value = p.imagen;
     document.getElementById('p-imagen-file').value = "";
     
+    // Reset del botón de guardar
+    const btnSave = document.querySelector('#prodModal .btn-cyan');
+    if(btnSave) { btnSave.disabled = false; btnSave.innerHTML = '<i class="bi bi-save"></i> GUARDAR DATOS'; }
+    
     const btnCostHistory = document.getElementById('btn-cost-history');
     if (p.tipo === 'PRODUCTO') {
         document.getElementById('p-categoria').value = p.categoria || "AUTOMATIZACION_APPS";
@@ -1017,6 +1115,7 @@ function loadEditModal(uuid) {
 async function saveProduct() {
     const btn = document.querySelector('#prodModal .btn-cyan');
     btn.disabled = true; btn.innerText = "PROCESANDO...";
+    
     const fileInput = document.getElementById('p-imagen-file');
     let finalImage = document.getElementById('p-imagen-data').value; 
     if (fileInput && fileInput.files.length > 0) {
@@ -1027,9 +1126,14 @@ async function saveProduct() {
             alert("Error imagen"); btn.disabled = false; return;
         }
     }
+    
     const tipo = document.getElementById('p-tipo').value;
+    let uuid = document.getElementById('p-uuid').value;
+    const isNew = !uuid;
+    if (isNew) uuid = generateUUID();
+    
     const payload = {
-        uuid: document.getElementById('p-uuid').value,
+        uuid: uuid,
         tipo: tipo,
         nombre: document.getElementById('p-nombre').value,
         specs: document.getElementById('p-specs').value,
@@ -1037,7 +1141,7 @@ async function saveProduct() {
         imagen: finalImage,
         visibleWeb: document.getElementById('p-web').checked,
         categoria: tipo==='PRODUCTO' ? document.getElementById('p-categoria').value : "",
-        codigo: tipo==='PRODUCTO' ? document.getElementById('p-codigo').value : "",
+        codigo: tipo==='PRODUCTO' ? document.getElementById('p-codigo').value : "SERV",
         costo: tipo==='PRODUCTO' ? Number(document.getElementById('p-costo').value) : 0,
         proveedor: tipo==='PRODUCTO' && document.getElementById('p-proveedor') ? document.getElementById('p-proveedor').value : "",
         iva: 19 
@@ -1049,17 +1153,29 @@ async function saveProduct() {
         cleanBackdrops();
     }
     
-    showToast("⏳ Guardando producto en nube...", "info");
-    btn.disabled = false; btn.innerText = "GUARDAR DATOS";
-    
-    const res = await callApi('upsertProduct', payload);
-    if (res.success) {
-        showToast("✅ Producto guardado con éxito.", "success");
-        refreshCatalogOnly(); 
-        if (payload.proveedor) refreshProveedoresOnly();
+    // OPTIMISTIC UPDATE
+    if (isNew) {
+        catalog.unshift(payload);
     } else {
-        alert("Error: " + res.error);
+        const idx = catalog.findIndex(x => x.uuid === uuid);
+        if (idx !== -1) catalog[idx] = payload;
     }
+    
+    if (currentView === tipo) {
+        renderGrid(catalog.filter(p => p.tipo === currentView));
+    }
+    
+    showSyncIndicator();
+    callApi('upsertProduct', payload).then(res => {
+        hideSyncIndicator();
+        if (res.success) {
+            refreshCatalogOnly(); 
+            if (payload.proveedor) refreshProveedoresOnly();
+        } else {
+            showToast("Error al guardar en la nube: " + res.error, "danger");
+            refreshCatalogOnly(); 
+        }
+    });
 }
 
 async function publishToGitHub() {
