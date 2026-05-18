@@ -1,5 +1,5 @@
 // ==========================================
-// A.S.T. ADMIN FRONTEND (V30 - FLUIDEZ EXTREMA & COMPARTIDO NATIVO)
+// A.S.T. ADMIN FRONTEND (V32 - ALTO RENDIMIENTO & UX)
 // ==========================================
 // *** PEGA AQUÍ TU URL DEL SCRIPT ***
 const API_URL = "https://script.google.com/macros/s/AKfycbxpCp7aY4L48znjtqH_1svYzY6MjVY58bXxt3iZvyuPQwBBt0u7S32aXxxt9VVgtaHd/exec";
@@ -92,6 +92,59 @@ async function fetchAllDataBackground() {
     hideSyncIndicator();
 }
 
+async function refreshCatalogOnly() {
+    const res = await callApi('getCatalogData');
+    if (res.success) {
+        catalog = res.data || [];
+        localStorage.setItem('ast_catalog', JSON.stringify(catalog));
+        if (currentView === 'PRODUCTO' || currentView === 'SERVICIO') {
+            renderGrid(catalog.filter(p => p.tipo === currentView));
+        }
+    }
+}
+
+async function refreshProjectsOnly() {
+    const res = await callApi('getProjectsData');
+    if (res.success) {
+        projects = res.data || [];
+        localStorage.setItem('ast_projects', JSON.stringify(projects));
+        if (currentView === 'PROYECTOS') {
+            renderProjects();
+            calculateDashboard();
+        }
+    }
+}
+
+async function refreshProveedoresOnly() {
+    const res = await callApi('getProveedoresData');
+    if (res.success) {
+        proveedores = res.data || [];
+        localStorage.setItem('ast_proveedores', JSON.stringify(proveedores));
+        if (currentView === 'PROVEEDORES') {
+            renderProveedores();
+        }
+        updateProvidersDatalist();
+    }
+}
+
+async function refreshHistoryOnly() {
+    const res = await callApi('getHistoryData');
+    if (res.success) {
+        historyDocs = res.data || [];
+        localStorage.setItem('ast_history', JSON.stringify(historyDocs));
+        if (currentView === 'HISTORIAL') renderHistory();
+    }
+}
+
+async function refreshClientsOnly() {
+    const res = await callApi('getClientsData');
+    if (res.success) {
+        clients = res.data || [];
+        localStorage.setItem('ast_clients', JSON.stringify(clients));
+        updateClientsDatalist();
+    }
+}
+
 function showSyncIndicator() {
     let ind = document.getElementById('sync-indicator');
     if (!ind) {
@@ -153,7 +206,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const term = e.target.value.toLowerCase();
         const filtered = catalog.filter(p => 
             p.tipo === currentView && 
-            (p.nombre.toLowerCase().includes(term) || String(p.codigo).toLowerCase().includes(term))
+            (
+                p.nombre.toLowerCase().includes(term) || 
+                String(p.codigo).toLowerCase().includes(term) ||
+                (p.specs && p.specs.toLowerCase().includes(term)) ||
+                (p.categoria && p.categoria.toLowerCase().includes(term))
+            )
         );
         renderGrid(filtered);
     });
@@ -343,7 +401,7 @@ async function saveProveedor() {
     const res = await callApi('updateProveedor', payload);
     if(res.success) {
         showToast("✅ Proveedor actualizado.", "success");
-        fetchAllDataBackground();
+        refreshProveedoresOnly();
     } else {
         alert("Error: " + res.error);
     }
@@ -467,7 +525,7 @@ async function createNewProject() {
     const res = await callApi('createProject', payload);
     if(res.success) {
         showToast("✅ Proyecto creado.", "success");
-        fetchAllDataBackground();
+        refreshProjectsOnly();
     } else {
         alert("Error: " + res.error);
     }
@@ -560,7 +618,7 @@ async function updateProject() {
     await callApi('updateProject', payload);
     showToast("✅ Proyecto actualizado.", "success");
     openProjectDetail(payload.id);
-    fetchAllDataBackground(); 
+    refreshProjectsOnly(); 
 }
 
 async function deleteProject() {
@@ -575,7 +633,7 @@ async function deleteProject() {
         
         await callApi('deleteProject', { id: currentProject });
         showToast("✅ Proyecto eliminado.", "success");
-        fetchAllDataBackground();
+        refreshProjectsOnly();
     }
 }
 
@@ -691,7 +749,9 @@ async function saveProjectItem() {
     if(res.success) {
         showToast("✅ Movimiento guardado.", "success");
         openProjectDetail(currentProject);
-        fetchAllDataBackground();
+        refreshProjectsOnly();
+        if (payload.tipo === 'MATERIAL' && payload.costo > 0) refreshCatalogOnly();
+        if (payload.proveedor) refreshProveedoresOnly();
     } else {
         alert("Error: " + res.error);
     }
@@ -703,7 +763,7 @@ async function deleteProjectMovement(idMov) {
         await callApi('deleteProjectMovement', { idMov: idMov, projectId: currentProject });
         showToast("✅ Movimiento borrado.", "success");
         openProjectDetail(currentProject);
-        fetchAllDataBackground();
+        refreshProjectsOnly();
     }
 }
 
@@ -762,12 +822,24 @@ function reloadOrderFromHistory(index) {
 
     try {
         let safeJson = String(doc.jsonData);
-        if (safeJson.startsWith('"') && safeJson.endsWith('"')) {
-            safeJson = safeJson.slice(1, -1).replace(/""/g, '"');
+        let orderData;
+        
+        if (!safeJson.trim().startsWith('{') && !safeJson.trim().startsWith('"') && !safeJson.trim().startsWith('[')) {
+            const binString = atob(safeJson);
+            const bytes = new Uint8Array(binString.length);
+            for (let i = 0; i < binString.length; i++) {
+                bytes[i] = binString.charCodeAt(i);
+            }
+            const decoded = new TextDecoder('utf-8').decode(bytes);
+            orderData = JSON.parse(decoded);
+        } else {
+            if (safeJson.startsWith('"') && safeJson.endsWith('"')) {
+                safeJson = safeJson.slice(1, -1).replace(/""/g, '"');
+            }
+            safeJson = safeJson.replace(/[\r\n]+/g, " ");
+            orderData = JSON.parse(safeJson);
         }
-        safeJson = safeJson.replace(/[\r\n]+/g, " ");
-
-        const orderData = JSON.parse(safeJson);
+        
         cart = orderData.items || [];
         
         if(orderData.cliente) {
@@ -815,12 +887,23 @@ async function convertQuoteToProject(index) {
 
     try {
         let safeJson = String(doc.jsonData);
-        if (safeJson.startsWith('"') && safeJson.endsWith('"')) {
-            safeJson = safeJson.slice(1, -1).replace(/""/g, '"');
+        let orderData;
+        
+        if (!safeJson.trim().startsWith('{') && !safeJson.trim().startsWith('"') && !safeJson.trim().startsWith('[')) {
+            const binString = atob(safeJson);
+            const bytes = new Uint8Array(binString.length);
+            for (let i = 0; i < binString.length; i++) {
+                bytes[i] = binString.charCodeAt(i);
+            }
+            const decoded = new TextDecoder('utf-8').decode(bytes);
+            orderData = JSON.parse(decoded);
+        } else {
+            if (safeJson.startsWith('"') && safeJson.endsWith('"')) {
+                safeJson = safeJson.slice(1, -1).replace(/""/g, '"');
+            }
+            safeJson = safeJson.replace(/[\r\n]+/g, " ");
+            orderData = JSON.parse(safeJson);
         }
-        safeJson = safeJson.replace(/[\r\n]+/g, " ");
-
-        const orderData = JSON.parse(safeJson);
         
         const payload = {
             nombreProyecto: `Ejecución ${doc.consecutivo}`,
@@ -836,9 +919,10 @@ async function convertQuoteToProject(index) {
         if (res.success) {
             showToast(`✅ Proyecto creado exitosamente.`, "success");
             switchTab('PROYECTOS');
-            fetchAllDataBackground().then(() => {
+            refreshProjectsOnly().then(() => {
                 openProjectDetail(res.data.projectId);
             });
+            refreshClientsOnly();
             
         } else {
             alert("Error al convertir la cotización: " + res.error);
@@ -860,10 +944,11 @@ function renderGrid(data) {
     data.forEach(p => {
         const imgHtml = p.imagen ? `<div style="height:140px; overflow:hidden; border-radius:4px; margin-bottom:10px; background:#000;"><img src="${p.imagen}" style="width:100%; height:100%; object-fit:cover;"></div>` : '';
         const badgeCode = p.tipo === 'PRODUCTO' ? `<span class="badge bg-info text-dark">${p.codigo}</span>` : `<span class="badge bg-warning text-dark">SERVICIO</span>`;
+        const marginHtml = (p.tipo === 'PRODUCTO' && p.costo > 0 && p.precio > 0) ? `<span class="badge bg-success ms-2" style="font-size:0.65rem;">${(((p.precio - p.costo) / p.precio) * 100).toFixed(0)}% MGN</span>` : '';
         const html = `
         <div class="col-12 col-md-6 col-lg-4">
             <div class="product-card h-100 p-3 d-flex flex-column">
-                <div class="d-flex justify-content-between mb-2">${badgeCode}${p.visibleWeb ? '<span class="text-success small">● WEB ON</span>' : ''}</div>
+                <div class="d-flex justify-content-between mb-2"><div>${badgeCode}${marginHtml}</div>${p.visibleWeb ? '<span class="text-success small">● WEB ON</span>' : ''}</div>
                 ${imgHtml}
                 <h6 class="text-white fw-bold mb-1">${p.nombre}</h6>
                 <small class="text-secondary mb-3 text-truncate">${p.specs || '---'}</small>
@@ -967,7 +1052,7 @@ async function saveProduct() {
     const res = await callApi('upsertProduct', payload);
     if (res.success) {
         showToast("✅ Producto guardado con éxito.", "success");
-        fetchAllDataBackground(); 
+        refreshCatalogOnly(); 
     } else {
         alert("Error: " + res.error);
     }
@@ -1082,13 +1167,20 @@ function addToCart(uuid) {
 
 async function openCart() {
     const selectExport = document.getElementById('cart-export-project');
-    if (selectExport.options.length <= 1) { 
-        projects.forEach(p => { const opt = document.createElement('option'); opt.value = p.id; opt.text = `${p.nombreProyecto} (${p.cliente})`; selectExport.appendChild(opt); });
-    }
     const selectImport = document.getElementById('cart-import-project');
-    if (selectImport.options.length <= 1) {
-        projects.forEach(p => { const opt = document.createElement('option'); opt.value = p.id; opt.text = `${p.nombreProyecto} (${p.cliente})`; selectImport.appendChild(opt); });
-    }
+    
+    ['cart-export-project','cart-import-project'].forEach(id => {
+        const sel = document.getElementById(id);
+        const val = sel.value;
+        sel.innerHTML = '<option value="">-- Sin vincular --</option>';
+        projects.forEach(p => { 
+            const opt = document.createElement('option'); 
+            opt.value = p.id; 
+            opt.text = `${p.nombreProyecto} (${p.cliente})`; 
+            sel.appendChild(opt); 
+        });
+        sel.value = val;
+    });
     
     const modalEl = document.getElementById('cartModal');
     if (!modalEl.classList.contains('show')) {
@@ -1245,7 +1337,9 @@ async function generatePDF() {
             cleanBackdrops();
         }
         
-        fetchAllDataBackground();
+        refreshHistoryOnly();
+        refreshClientsOnly();
+        if (projectIdToSync) refreshProjectsOnly();
         
         setTimeout(() => { updateClientsDatalist(); if(confirm(`Documento ${res.data.consecutivo} Generado. ¿Abrir?`)) { window.open(res.data.url, '_blank'); } }, 500); 
     } else { alert("Error: " + res.error); }
