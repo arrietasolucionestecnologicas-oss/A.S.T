@@ -972,6 +972,7 @@ function openProductModal() {
     document.getElementById('p-uuid').value = "";
     document.getElementById('p-imagen-data').value = "";
     document.getElementById('p-tipo').value = currentView === 'HISTORIAL' ? 'PRODUCTO' : currentView;
+    if (document.getElementById('p-proveedor')) document.getElementById('p-proveedor').value = "";
     document.getElementById('btn-github-publish').style.display = "none"; 
     document.getElementById('btn-cost-history').style.display = "none";
     toggleFormFields();
@@ -1003,6 +1004,7 @@ function loadEditModal(uuid) {
         document.getElementById('p-categoria').value = p.categoria || "AUTOMATIZACION_APPS";
         document.getElementById('p-codigo').value = p.codigo;
         document.getElementById('p-costo').value = p.costo;
+        if (document.getElementById('p-proveedor')) document.getElementById('p-proveedor').value = p.proveedor || "";
         if(btnCostHistory) btnCostHistory.style.display = "block";
     } else {
         if(btnCostHistory) btnCostHistory.style.display = "none";
@@ -1037,6 +1039,7 @@ async function saveProduct() {
         categoria: tipo==='PRODUCTO' ? document.getElementById('p-categoria').value : "",
         codigo: tipo==='PRODUCTO' ? document.getElementById('p-codigo').value : "",
         costo: tipo==='PRODUCTO' ? Number(document.getElementById('p-costo').value) : 0,
+        proveedor: tipo==='PRODUCTO' && document.getElementById('p-proveedor') ? document.getElementById('p-proveedor').value : "",
         iva: 19 
     };
     
@@ -1053,6 +1056,7 @@ async function saveProduct() {
     if (res.success) {
         showToast("✅ Producto guardado con éxito.", "success");
         refreshCatalogOnly(); 
+        if (payload.proveedor) refreshProveedoresOnly();
     } else {
         alert("Error: " + res.error);
     }
