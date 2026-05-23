@@ -259,6 +259,8 @@ document.getElementById('search').addEventListener('input', (e) => {
         }
     });
 
+}); // ← ESTE ES EL CIERRE DE DOMContentLoaded QUE FALTABA
+
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
