@@ -497,6 +497,40 @@ async function openCostHistory() {
 }
 
 // --- GESTIÓN DE PROYECTOS ---
+function renderProjects() {
+    const container = document.getElementById('projects-list');
+    container.innerHTML = '';
+    if (projects.length === 0) {
+        container.innerHTML = '<div class="text-muted text-center mt-5">No hay trabajos activos.</div>';
+        return;
+    }
+    projects.forEach(p => {
+        const estadoClass = p.estado === 'ABIERTO' ? 'text-success' : 'text-secondary';
+        const card = `
+        <div class="project-card" onclick="openProjectDetail('${p.id}')">
+            <div class="d-flex justify-content-between">
+                <h6 class="text-white fw-bold mb-1">${p.nombreProyecto}</h6>
+                <span class="badge bg-dark border border-secondary ${estadoClass}">${p.estado}</span>
+            </div>
+            <small class="text-cyan d-block mb-2">${p.cliente}</small>
+            <div class="row g-0 text-center" style="font-size:0.75rem;">
+                <div class="col-4 border-end border-secondary">
+                    <span class="text-muted">COBRADO</span><br>
+                    <span class="text-white">${fmt.format(p.totalCobrado)}</span>
+                </div>
+                <div class="col-4 border-end border-secondary">
+                    <span class="text-muted">COSTOS</span><br>
+                    <span class="text-danger">${fmt.format(p.totalCostos)}</span>
+                </div>
+                <div class="col-4">
+                    <span class="text-muted">UTILIDAD</span><br>
+                    <span class="${p.utilidad >= 0 ? 'text-profit' : 'text-loss'}">${fmt.format(p.utilidad)}</span>
+                </div>
+            </div>
+        </div>`;
+        container.innerHTML += card;
+    });
+}
 async function fetchProjects() {
     renderProjects();
     calculateDashboard();
