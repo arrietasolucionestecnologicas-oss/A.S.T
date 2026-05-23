@@ -237,21 +237,27 @@ document.addEventListener('DOMContentLoaded', () => {
     
     fetchAllDataBackground(); 
     
-    document.getElementById('search').addEventListener('input', (e) => {
-        if(currentView === 'PROYECTOS' || currentView === 'HISTORIAL' || currentView === 'PROVEEDORES') return; 
-        const term = e.target.value.toLowerCase();
-        const filtered = catalog.filter(p => 
-            p.tipo === currentView && 
-            (
-                p.nombre.toLowerCase().includes(term) || 
-                String(p.codigo).toLowerCase().includes(term) ||
-                (p.specs && p.specs.toLowerCase().includes(term)) ||
-                (p.categoria && p.categoria.toLowerCase().includes(term))
-            )
-        );
-        renderGrid(filtered);
+document.getElementById('search').addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase().trim();
+        if (currentView === 'PROYECTOS') {
+            renderProjectsFiltered(term);
+        } else if (currentView === 'HISTORIAL') {
+            renderHistoryFiltered(term);
+        } else if (currentView === 'PROVEEDORES') {
+            return;
+        } else {
+            const filtered = catalog.filter(p =>
+                p.tipo === currentView &&
+                (
+                    p.nombre.toLowerCase().includes(term) ||
+                    String(p.codigo).toLowerCase().includes(term) ||
+                    (p.specs && p.specs.toLowerCase().includes(term)) ||
+                    (p.categoria && p.categoria.toLowerCase().includes(term))
+                )
+            );
+            renderGrid(filtered);
+        }
     });
-});
 
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
@@ -271,6 +277,11 @@ async function installApp() {
 
 function switchTab(viewName) {
     currentView = viewName;
+
+    // Limpiar buscador al cambiar de vista
+    const searchEl = document.getElementById('search');
+    if (searchEl) searchEl.value = '';
+
     document.getElementById('tab-prod').className = 'nav-link';
     document.getElementById('tab-serv').className = 'nav-link';
     document.getElementById('tab-proj').className = 'nav-link';
@@ -292,8 +303,8 @@ function switchTab(viewName) {
 
     if (viewName === 'PROYECTOS') {
         document.getElementById('view-projects').classList.remove('hidden-section');
-        fetchProjects(); 
-    } 
+        fetchProjects();
+    }
     else if (viewName === 'HISTORIAL') {
         document.getElementById('view-history').classList.remove('hidden-section');
         fetchHistory();
@@ -310,7 +321,6 @@ function switchTab(viewName) {
         renderGrid(filtered);
     }
 }
-
 async function callApi(action, payload = {}) {
     try {
         const response = await fetch(API_URL, {
@@ -490,16 +500,28 @@ async function fetchProjects() {
     calculateDashboard();
 }
 
-function renderProjects() {
+function renderProjectsFiltered(term) {
     const container = document.getElementById('projects-list');
     container.innerHTML = '';
-    if (projects.length === 0) {
-        container.innerHTML = '<div class="text-muted text-center mt-5">No hay trabajos activos.</div>';
+
+    let lista = projects;
+    if (term) {
+        lista = projects.filter(p =>
+            p.nombreProyecto.toLowerCase().includes(term) ||
+            p.cliente.toLowerCase().includes(term) ||
+            (p.contacto && p.contacto.toLowerCase().includes(term)) ||
+            p.estado.toLowerCase().includes(term)
+        );
+    }
+
+    if (lista.length === 0) {
+        container.innerHTML = `<div class="text-muted text-center mt-5">Sin resultados para "<strong>${term}</strong>".</div>`;
         return;
     }
-    projects.forEach(p => {
+
+    lista.forEach(p => {
         const estadoClass = p.estado === 'ABIERTO' ? 'text-success' : 'text-secondary';
-        const card = `
+        container.innerHTML += `
         <div class="project-card" onclick="openProjectDetail('${p.id}')">
             <div class="d-flex justify-content-between">
                 <h6 class="text-white fw-bold mb-1">${p.nombreProyecto}</h6>
@@ -521,10 +543,54 @@ function renderProjects() {
                 </div>
             </div>
         </div>`;
-        container.innerHTML += card;
     });
 }
 
+function renderHistoryFiltered(term) {
+    const container = document.getElementById('history-list');
+    container.innerHTML = '';
+
+    let lista = historyDocs;
+    if (term) {
+        lista = historyDocs.filter(h =>
+            h.cliente.toLowerCase().includes(term) ||
+            h.consecutivo.toLowerCase().includes(term) ||
+            h.tipo.toLowerCase().includes(term)
+        );
+    }
+
+    if (lista.length === 0) {
+        container.innerHTML = `<div class="text-muted text-center mt-5">Sin resultados para "<strong>${term}</strong>".</div>`;
+        return;
+    }
+
+    lista.forEach(h => {
+        const index = historyDocs.indexOf(h);
+        const date = new Date(h.fecha).toLocaleDateString();
+        let btnConvertir = '';
+        if (h.tipo === 'Cotización') {
+            btnConvertir = `<button class="btn btn-outline-info" onclick="convertQuoteToProject(${index})" title="Convertir a Proyecto"><i class="bi bi-briefcase-fill"></i></button>`;
+        }
+        container.innerHTML += `
+        <div class="history-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="text-cyan fw-bold">${h.consecutivo}</div>
+                    <div class="text-white small">${h.cliente}</div>
+                    <div class="text-muted" style="font-size:0.7rem;">${date} | ${h.tipo}</div>
+                </div>
+                <div class="text-end d-flex flex-column align-items-end gap-1">
+                    <div class="text-white fw-bold">${fmt.format(h.total)}</div>
+                    <div class="btn-group btn-group-sm">
+                        <a href="${h.url}" target="_blank" class="btn btn-outline-light" title="Ver PDF"><i class="bi bi-eye"></i></a>
+                        <button class="btn btn-outline-warning" onclick="reloadOrderFromHistory(${index})" title="Cargar al Carrito"><i class="bi bi-pencil-square"></i></button>
+                        ${btnConvertir}
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    });
+}
 function calculateDashboard() {
     let cobrado = 0, gastos = 0, utilidad = 0;
     projects.forEach(p => {
