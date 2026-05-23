@@ -52,21 +52,49 @@ function cleanBackdrops() {
 // -------------------------------------------------------------------------
 
 // --- SISTEMA DE FLUIDEZ EXTREMA (CACHÉ Y SINCRONIZACIÓN) ---
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
+
+function setCacheWithTimestamp(key, data) {
+    try {
+        localStorage.setItem(key, JSON.stringify(data));
+        localStorage.setItem(key + '_ts', Date.now().toString());
+    } catch(e) {
+        console.error("Error escribiendo caché", e);
+    }
+}
+
+function getCacheIfFresh(key) {
+    try {
+        const ts = localStorage.getItem(key + '_ts');
+        if (!ts) return null;
+        if (Date.now() - parseInt(ts) > CACHE_TTL_MS) return null;
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : null;
+    } catch(e) {
+        return null;
+    }
+}
+
 function loadLocalCache() {
     try {
-        const c = localStorage.getItem('ast_catalog');
-        const p = localStorage.getItem('ast_projects');
-        const cl = localStorage.getItem('ast_clients');
-        const h = localStorage.getItem('ast_history');
-        const pr = localStorage.getItem('ast_proveedores');
-        
-        if (c) catalog = JSON.parse(c);
-        if (p) projects = JSON.parse(p);
-        if (cl) clients = JSON.parse(cl);
-        if (h) historyDocs = JSON.parse(h);
-        if (pr) proveedores = JSON.parse(pr);
-    } catch (e) {
-        console.error("Error reading cache", e);
+        const c  = getCacheIfFresh('ast_catalog');
+        const p  = getCacheIfFresh('ast_projects');
+        const cl = getCacheIfFresh('ast_clients');
+        const h  = getCacheIfFresh('ast_history');
+        const pr = getCacheIfFresh('ast_proveedores');
+
+        if (c)  catalog     = c;
+        if (p)  projects    = p;
+        if (cl) clients     = cl;
+        if (h)  historyDocs = h;
+        if (pr) proveedores = pr;
+
+        // Si alguna entidad expiró, la señalamos para refresh inmediato
+        if (!c || !p || !cl || !h || !pr) {
+            console.info("Caché expirada o ausente — se forzará sincronización.");
+        }
+    } catch(e) {
+        console.error("Error leyendo caché", e);
     }
 }
 
@@ -74,24 +102,25 @@ async function fetchAllDataBackground() {
     showSyncIndicator();
     const res = await callApi('getAllData');
     if (res.success) {
-        catalog = res.data.catalog || [];
-        projects = res.data.projects || [];
-        clients = res.data.clients || [];
+        catalog     = res.data.catalog     || [];
+        projects    = res.data.projects    || [];
+        clients     = res.data.clients     || [];
         historyDocs = res.data.historyDocs || [];
         proveedores = res.data.proveedores || [];
-        
-        localStorage.setItem('ast_catalog', JSON.stringify(catalog));
-        localStorage.setItem('ast_projects', JSON.stringify(projects));
-        localStorage.setItem('ast_clients', JSON.stringify(clients));
-        localStorage.setItem('ast_history', JSON.stringify(historyDocs));
-        localStorage.setItem('ast_proveedores', JSON.stringify(proveedores));
-        
-        if (currentView === 'PROYECTOS') { renderProjects(); calculateDashboard(); }
-        else if (currentView === 'HISTORIAL') { renderHistory(); }
+
+        // CAMBIO: usar setCacheWithTimestamp en lugar de setItem directo
+        setCacheWithTimestamp('ast_catalog',     catalog);
+        setCacheWithTimestamp('ast_projects',    projects);
+        setCacheWithTimestamp('ast_clients',     clients);
+        setCacheWithTimestamp('ast_history',     historyDocs);
+        setCacheWithTimestamp('ast_proveedores', proveedores);
+
+        if (currentView === 'PROYECTOS')        { renderProjects(); calculateDashboard(); }
+        else if (currentView === 'HISTORIAL')   { renderHistory(); }
         else if (currentView === 'PROVEEDORES') { renderProveedores(); }
-        else { 
+        else {
             const filtered = catalog.filter(p => p.tipo === currentView);
-            renderGrid(filtered); 
+            renderGrid(filtered);
         }
         updateClientsDatalist();
         updateProvidersDatalist();
@@ -103,7 +132,7 @@ async function refreshCatalogOnly() {
     const res = await callApi('getCatalogData');
     if (res.success) {
         catalog = res.data || [];
-        localStorage.setItem('ast_catalog', JSON.stringify(catalog));
+       setCacheWithTimestamp('ast_catalog', catalog);
         if (currentView === 'PRODUCTO' || currentView === 'SERVICIO') {
             renderGrid(catalog.filter(p => p.tipo === currentView));
         }
@@ -114,7 +143,7 @@ async function refreshProjectsOnly() {
     const res = await callApi('getProjectsData');
     if (res.success) {
         projects = res.data || [];
-        localStorage.setItem('ast_projects', JSON.stringify(projects));
+        setCacheWithTimestamp('ast_projects', projects);
         if (currentView === 'PROYECTOS') {
             renderProjects();
             calculateDashboard();
@@ -126,7 +155,7 @@ async function refreshProveedoresOnly() {
     const res = await callApi('getProveedoresData');
     if (res.success) {
         proveedores = res.data || [];
-        localStorage.setItem('ast_proveedores', JSON.stringify(proveedores));
+        setCacheWithTimestamp('ast_proveedores', proveedores);;
         if (currentView === 'PROVEEDORES') {
             renderProveedores();
         }
@@ -138,7 +167,7 @@ async function refreshHistoryOnly() {
     const res = await callApi('getHistoryData');
     if (res.success) {
         historyDocs = res.data || [];
-        localStorage.setItem('ast_history', JSON.stringify(historyDocs));
+        setCacheWithTimestamp('ast_history', historyDocs);
         if (currentView === 'HISTORIAL') renderHistory();
     }
 }
@@ -147,7 +176,7 @@ async function refreshClientsOnly() {
     const res = await callApi('getClientsData');
     if (res.success) {
         clients = res.data || [];
-        localStorage.setItem('ast_clients', JSON.stringify(clients));
+        setCacheWithTimestamp('ast_clients', clients);
         updateClientsDatalist();
     }
 }
@@ -897,129 +926,108 @@ function renderHistory() {
         container.innerHTML += html;
     });
 }
+// ==========================================
+// UTILIDAD: DECODIFICADOR DE PAYLOAD B64
+// ==========================================
+function decodeOrderPayload(jsonData) {
+    if (!jsonData || jsonData === "" || jsonData === "undefined") {
+        throw new Error("Este documento no tiene datos recuperables.");
+    }
 
+    let safeJson = String(jsonData);
+
+    // Intentar decodificación Base64 UTF-8 primero
+    if (!safeJson.trim().startsWith('{') && 
+        !safeJson.trim().startsWith('"') && 
+        !safeJson.trim().startsWith('[')) {
+        const binString = atob(safeJson);
+        const bytes = new Uint8Array(binString.length);
+        for (let i = 0; i < binString.length; i++) {
+            bytes[i] = binString.charCodeAt(i);
+        }
+        return JSON.parse(new TextDecoder('utf-8').decode(bytes));
+    }
+
+    // Fallback: JSON plano o con comillas envolventes
+    if (safeJson.startsWith('"') && safeJson.endsWith('"')) {
+        safeJson = safeJson.slice(1, -1).replace(/""/g, '"');
+    }
+    return JSON.parse(safeJson.replace(/[\r\n]+/g, " "));
+}
 function reloadOrderFromHistory(index) {
     const doc = historyDocs[index];
-    
-    if(!doc.jsonData || doc.jsonData === "" || doc.jsonData === "undefined") {
-        return alert("⚠️ Este documento es antiguo y no tiene datos recuperables.");
-    }
-
-    if(cart.length > 0) {
-        if(!confirm("⚠️ Tu carrito actual se borrará para cargar esta cotización. ¿Continuar?")) return;
-    }
 
     try {
-        let safeJson = String(doc.jsonData);
-        let orderData;
-        
-        if (!safeJson.trim().startsWith('{') && !safeJson.trim().startsWith('"') && !safeJson.trim().startsWith('[')) {
-            const binString = atob(safeJson);
-            const bytes = new Uint8Array(binString.length);
-            for (let i = 0; i < binString.length; i++) {
-                bytes[i] = binString.charCodeAt(i);
-            }
-            const decoded = new TextDecoder('utf-8').decode(bytes);
-            orderData = JSON.parse(decoded);
-        } else {
-            if (safeJson.startsWith('"') && safeJson.endsWith('"')) {
-                safeJson = safeJson.slice(1, -1).replace(/""/g, '"');
-            }
-            safeJson = safeJson.replace(/[\r\n]+/g, " ");
-            orderData = JSON.parse(safeJson);
+        const orderData = decodeOrderPayload(doc.jsonData);
+
+        if (cart.length > 0) {
+            if (!confirm("⚠️ Tu carrito actual se borrará para cargar esta cotización. ¿Continuar?")) return;
         }
-        
+
         cart = orderData.items || [];
-        
-        if(orderData.cliente) {
-            document.getElementById('c-nombre').value = orderData.cliente.nombre || "";
-            document.getElementById('c-nit').value = orderData.cliente.nit || "";
-            document.getElementById('c-tel').value = orderData.cliente.telefono || "";
+
+        if (orderData.cliente) {
+            document.getElementById('c-nombre').value = orderData.cliente.nombre   || "";
+            document.getElementById('c-nit').value    = orderData.cliente.nit      || "";
+            document.getElementById('c-tel').value    = orderData.cliente.telefono || "";
         }
-        
-        if(orderData.opciones) {
+
+        if (orderData.opciones) {
             const checkSpecs = document.getElementById('check-specs');
-            if(checkSpecs) checkSpecs.checked = orderData.opciones.mostrarDesc;
-            
-            if(orderData.opciones.terminos) {
+            if (checkSpecs) checkSpecs.checked = orderData.opciones.mostrarDesc;
+
+            if (orderData.opciones.terminos) {
                 const checkTerms = document.getElementById('check-terms');
-                const termsArea = document.getElementById('terms-area');
-                
-                if(checkTerms && termsArea) {
-                    checkTerms.checked = true;
-                    termsArea.style.display = 'block';
-                    termsArea.value = orderData.opciones.terminos;
+                const termsArea  = document.getElementById('terms-area');
+                if (checkTerms && termsArea) {
+                    checkTerms.checked       = true;
+                    termsArea.style.display  = 'block';
+                    termsArea.value          = orderData.opciones.terminos;
                 }
             }
         }
-        
+
         updateCartUI();
         openCart();
-        
         showToast(`✅ Cotización ${doc.consecutivo} cargada.`, "success");
 
     } catch(e) {
         console.error("Error leyendo JSON:", e);
         document.getElementById('c-nombre').value = doc.cliente || "";
-        alert("⚠️ Hubo un detalle cargando los productos, pero recuperé el cliente.");
+        showToast("⚠️ Documento antiguo: se recuperó solo el cliente.", "warning");
     }
 }
 
 async function convertQuoteToProject(index) {
     const doc = historyDocs[index];
-    
-    if(!doc.jsonData || doc.jsonData === "" || doc.jsonData === "undefined") {
-        return alert("⚠️ Esta cotización es muy antigua y no tiene el detalle interno para poder convertirse automáticamente.");
-    }
 
-    if(!confirm(`¿Estás seguro de que el cliente aprobó la Cotización ${doc.consecutivo}?\n\nSe creará un Trabajo Activo con todos sus ítems.`)) return;
+    if (!confirm(`¿El cliente aprobó la Cotización ${doc.consecutivo}?\n\nSe creará un Trabajo Activo con todos sus ítems.`)) return;
 
     try {
-        let safeJson = String(doc.jsonData);
-        let orderData;
-        
-        if (!safeJson.trim().startsWith('{') && !safeJson.trim().startsWith('"') && !safeJson.trim().startsWith('[')) {
-            const binString = atob(safeJson);
-            const bytes = new Uint8Array(binString.length);
-            for (let i = 0; i < binString.length; i++) {
-                bytes[i] = binString.charCodeAt(i);
-            }
-            const decoded = new TextDecoder('utf-8').decode(bytes);
-            orderData = JSON.parse(decoded);
-        } else {
-            if (safeJson.startsWith('"') && safeJson.endsWith('"')) {
-                safeJson = safeJson.slice(1, -1).replace(/""/g, '"');
-            }
-            safeJson = safeJson.replace(/[\r\n]+/g, " ");
-            orderData = JSON.parse(safeJson);
-        }
-        
+        const orderData = decodeOrderPayload(doc.jsonData);
+
         const payload = {
             nombreProyecto: `Ejecución ${doc.consecutivo}`,
-            cliente: orderData.cliente ? orderData.cliente.nombre : doc.cliente,
+            cliente:  orderData.cliente ? orderData.cliente.nombre   : doc.cliente,
             contacto: orderData.cliente ? orderData.cliente.telefono : "",
-            items: orderData.items || []
+            items:    orderData.items || []
         };
 
         showToast(`⏳ Creando proyecto desde ${doc.consecutivo}...`, "info");
-
         const res = await callApi('convertQuoteToProject', payload);
 
         if (res.success) {
             showToast(`✅ Proyecto creado exitosamente.`, "success");
             switchTab('PROYECTOS');
-            refreshProjectsOnly().then(() => {
-                openProjectDetail(res.data.projectId);
-            });
+            refreshProjectsOnly().then(() => openProjectDetail(res.data.projectId));
             refreshClientsOnly();
-            
         } else {
-            alert("Error al convertir la cotización: " + res.error);
+            showToast("Error al convertir: " + res.error, "danger");
         }
 
     } catch(e) {
-        console.error("Error leyendo JSON para conversión:", e);
-        alert("⚠️ Error: Los datos internos de esta cotización están dañados y no se pueden migrar de forma automática.");
+        console.error("Error en conversión:", e);
+        showToast("⚠️ " + e.message, "danger");
     }
 }
 
