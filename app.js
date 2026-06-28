@@ -427,39 +427,55 @@ function openEditProveedorModal(index) {
     document.getElementById('prov-especialidad').value = p.especialidad || '';
     bootstrap.Modal.getOrCreateInstance(document.getElementById('editProveedorModal')).show();
 }
-
+function openNewProveedorModal() {
+    document.getElementById('prov-original').value    = "";
+    document.getElementById('prov-nombre').value      = "";
+    document.getElementById('prov-nit').value         = "";
+    document.getElementById('prov-contacto').value    = "";
+    document.getElementById('prov-especialidad').value = "";
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('editProveedorModal')).show();
+}
 function saveProveedor() {
     const payload = {
         originalNombre: document.getElementById('prov-original').value,
-        nombre: document.getElementById('prov-nombre').value,
-        nit: document.getElementById('prov-nit').value,
-        contacto: document.getElementById('prov-contacto').value,
-        especialidad: document.getElementById('prov-especialidad').value
+        nombre:         document.getElementById('prov-nombre').value,
+        nit:            document.getElementById('prov-nit').value,
+        contacto:       document.getElementById('prov-contacto').value,
+        especialidad:   document.getElementById('prov-especialidad').value
     };
-    
-    if(!payload.nombre) return alert("El nombre es obligatorio");
+
+    if (!payload.nombre) return alert("El nombre es obligatorio");
+
+    const isNew = !payload.originalNombre || payload.originalNombre.trim() === "";
 
     const modalInstance = bootstrap.Modal.getInstance(document.getElementById('editProveedorModal'));
-    if(modalInstance) {
-        modalInstance.hide();
-        cleanBackdrops();
-    }
-    
+    if (modalInstance) { modalInstance.hide(); cleanBackdrops(); }
+
     // OPTIMISTIC UPDATE
-    const idx = proveedores.findIndex(p => p.nombre.toLowerCase() === payload.originalNombre.toLowerCase());
-    if (idx !== -1) {
-        proveedores[idx] = { ...proveedores[idx], ...payload };
-        renderProveedores();
-        updateProvidersDatalist();
+    if (isNew) {
+        proveedores.push({
+            nombre:       payload.nombre,
+            nit:          payload.nit,
+            contacto:     payload.contacto,
+            especialidad: payload.especialidad,
+            fecha:        new Date().toISOString()
+        });
+    } else {
+        const idx = proveedores.findIndex(p => p.nombre.toLowerCase() === payload.originalNombre.toLowerCase());
+        if (idx !== -1) proveedores[idx] = { ...proveedores[idx], ...payload };
     }
-    
+
+    renderProveedores();
+    updateProvidersDatalist();
+
     showSyncIndicator();
     callApi('updateProveedor', payload).then(res => {
         hideSyncIndicator();
-        if(res.success) {
+        if (res.success) {
             refreshProveedoresOnly();
+            showToast(isNew ? '✅ Proveedor creado' : '✅ Proveedor actualizado', 'success');
         } else {
-            showToast("Error de sincronización", "danger");
+            showToast("Error: " + res.error, "danger");
             refreshProveedoresOnly();
         }
     });
