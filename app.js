@@ -471,11 +471,14 @@ function saveProveedor() {
     showSyncIndicator();
     callApi('updateProveedor', payload).then(res => {
         hideSyncIndicator();
-        if (res.success) {
+        // Chequear success tanto en outer como en inner data
+        const ok = res.success && res.data && res.data.success !== false;
+        if (ok) {
             refreshProveedoresOnly();
             showToast(isNew ? '✅ Proveedor creado' : '✅ Proveedor actualizado', 'success');
         } else {
-            showToast("Error: " + res.error, "danger");
+            const errMsg = (res.data && res.data.error) ? res.data.error : res.error || "Error desconocido";
+            showToast("Error: " + errMsg, "danger");
             refreshProveedoresOnly();
         }
     });
