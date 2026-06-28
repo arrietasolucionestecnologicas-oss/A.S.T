@@ -1146,10 +1146,27 @@ function renderGrid(data) {
     const grid = document.getElementById('catalog-grid');
     grid.innerHTML = '';
     if (data.length === 0) {
-        grid.innerHTML = `<div class="col-12 text-center mt-5"><i class="bi bi-box-seam text-secondary" style="font-size: 3rem;"></i><p class="text-muted">No hay items registrados.</p></div>`;
+        grid.innerHTML = `<div class="col-12 text-center mt-5"><i class="bi bi-box-seam text-secondary" style="font-size:3rem;"></i><p class="text-muted">No hay items registrados.</p></div>`;
         return;
     }
+
+    const DIAS_PRECIO_VIEJO = 120;
+    const ahora = Date.now();
+
     data.forEach(p => {
+        // --- Badge precio desactualizado ---
+        let precioViejoBadge = '';
+        let precioViejo = false;
+        if (p.fechaUltimoCosto) {
+            const diasDiff = Math.floor((ahora - new Date(p.fechaUltimoCosto).getTime()) / 86400000);
+            if (diasDiff > DIAS_PRECIO_VIEJO) {
+                precioViejo = true;
+                precioViejoBadge = `<span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem;" title="Costo sin actualizar hace ${diasDiff} días">
+                    <i class="bi bi-clock-history"></i> ${diasDiff}d
+                </span>`;
+            }
+        }
+
         const imgHtml = p.imagen
             ? `<div onclick='openViewModal("${p.uuid}")'
                     style="height:140px;overflow:hidden;border-radius:4px;margin-bottom:10px;background:#000;cursor:zoom-in;position:relative;">
@@ -1161,18 +1178,23 @@ function renderGrid(data) {
                    </div>
                </div>`
             : '';
+
         const badgeCode = p.tipo === 'PRODUCTO'
             ? `<span class="badge bg-info text-dark">${p.codigo}</span>`
             : `<span class="badge bg-warning text-dark">SERVICIO</span>`;
+
         const marginHtml = (p.tipo === 'PRODUCTO' && p.costo > 0 && p.precio > 0)
             ? `<span class="badge bg-success ms-2" style="font-size:0.65rem;">${(((p.precio - p.costo) / p.precio) * 100).toFixed(0)}% MGN</span>`
             : '';
+
+        const precioStyle = precioViejo ? 'color:#ffc107;' : '';
+
         const html = `
         <div class="col-12 col-md-6 col-lg-4">
             <div class="product-card h-100 p-3 d-flex flex-column">
                 <div class="d-flex justify-content-between mb-2">
-                    <div>${badgeCode}${marginHtml}</div>
-                    ${p.visibleWeb ? '<span class="text-success small">● WEB ON</span>' : ''}
+                    <div>${badgeCode}${marginHtml}${precioViejoBadge}</div>
+                    ${p.visibleWeb ? '<span class="text-success small">● WEB ON</span>' : ''}${p.publicadoGitHub ? ' <span class="text-warning small" title="Enlace compartible activo"><i class="bi bi-cloud-check-fill"></i></span>' : ''}
                 </div>
                 ${imgHtml}
                 <h6 class="text-white fw-bold mb-1"
@@ -1182,7 +1204,8 @@ function renderGrid(data) {
                 <div class="mt-auto d-flex justify-content-between align-items-end">
                     <div>
                         <small class="text-muted" style="font-size:0.7rem">PRECIO</small>
-                        <div class="text-cyan fw-bold fs-5">${fmt.format(p.precio)}</div>
+                        <div class="fw-bold fs-5" style="${precioStyle}">${fmt.format(p.precio)}</div>
+                        ${precioViejo ? `<small style="font-size:0.6rem;color:#ffc107;">Verificar costo</small>` : ''}
                     </div>
                     <div class="btn-group">
                         <button class="btn btn-sm btn-outline-secondary" onclick='loadEditModal("${p.uuid}")' title="Editar"><i class="bi bi-pencil-fill"></i></button>
@@ -1479,13 +1502,24 @@ const toBase64 = file => new Promise((resolve, reject) => {
 
 function addToCart(uuid) {
     const p = catalog.find(x => x.uuid === uuid);
+    if (!p) return;
+
+    const DIAS_PRECIO_VIEJO = 120;
+    if (p.fechaUltimoCosto) {
+        const diasDiff = Math.floor((Date.now() - new Date(p.fechaUltimoCosto).getTime()) / 86400000);
+        if (diasDiff > DIAS_PRECIO_VIEJO) {
+            showToast(`⚠️ "${p.nombre}": costo sin actualizar hace ${diasDiff} días. Verifica antes de cotizar.`, 'warning');
+        }
+    }
+
     const exist = cart.find(x => x.uuid === uuid);
-    if(exist) exist.cantidad++;
+    if (exist) exist.cantidad++;
     else cart.push({ ...p, cantidad: 1 });
+
     updateCartUI();
     const fab = document.getElementById('fab-cart');
     fab.style.transform = "scale(1.2)";
-    setTimeout(()=>fab.style.transform = "scale(1)", 200);
+    setTimeout(() => fab.style.transform = "scale(1)", 200);
 }
 
 async function openCart() {
