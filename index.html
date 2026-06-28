@@ -471,12 +471,105 @@
     </div>
 
     <div class="modal fade" id="addItemModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark-panel border-secondary">
-                <div class="modal-header border-secondary py-2">
-                    <h6 class="modal-title text-white">Registrar Movimiento</h6>
-                    <button type="button" class="btn-close btn-close-white small" data-bs-dismiss="modal"></button>
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark-panel border-secondary">
+            <div class="modal-header border-secondary py-2">
+                <h6 class="modal-title text-white">Registrar Movimiento</h6>
+                <button type="button" class="btn-close btn-close-white small" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="ai-id">
+
+                <div class="mb-3 border-bottom border-secondary pb-3">
+                    <label class="small text-cyan fw-bold">Importar del Catálogo</label>
+                    <div class="input-group input-group-sm">
+                        <input class="form-control bg-dark text-white border-cyan" list="list-catalog-items" id="ai-search" onchange="fillItemFromCatalog(this.value)" placeholder="Escribe para buscar...">
+                        <button class="btn btn-outline-secondary" onclick="document.getElementById('ai-search').value=''"><i class="bi bi-x"></i></button>
+                    </div>
+                    <datalist id="list-catalog-items"></datalist>
                 </div>
+
+                <div class="mb-2">
+                    <label class="small text-muted">Descripción</label>
+                    <input type="text" id="ai-desc" class="form-control form-control-sm bg-dark text-white border-secondary">
+                </div>
+
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="small text-muted">Tipo</label>
+                        <select id="ai-tipo" class="form-select form-select-sm bg-dark text-white border-secondary">
+                            <option value="MATERIAL">Material / Insumo</option>
+                            <option value="MANO_OBRA">Mano de Obra</option>
+                            <option value="TRANSPORTE">Transporte / Viáticos</option>
+                            <option value="OTRO">Otro</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted">Proveedor (Opcional)</label>
+                        <input type="text" id="ai-prov" class="form-control form-control-sm bg-dark text-white border-secondary" list="providers-datalist" placeholder="Lugar de compra">
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-2">
+                    <div class="col-4">
+                        <label class="small text-muted">Cant.</label>
+                        <input type="number" id="ai-cant" class="form-control form-control-sm bg-dark text-white border-secondary" value="1">
+                    </div>
+                    <div class="col-8">
+                        <label class="small text-danger">COSTO UNIT (Lo que pagas)</label>
+                        <input type="number" id="ai-costo" class="form-control form-control-sm bg-dark text-white border-danger" value="0">
+                    </div>
+                </div>
+
+                <hr class="border-secondary my-2">
+
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="ai-cobrar" checked onchange="toggleVentaInput()">
+                    <label class="form-check-label text-cyan small fw-bold" for="ai-cobrar">¿COBRAR AL CLIENTE?</label>
+                </div>
+
+                <div class="mb-2" id="div-venta">
+                    <label class="small text-cyan">PRECIO VENTA UNIT (Lo que cobras)</label>
+                    <input type="number" id="ai-venta" class="form-control form-control-sm bg-dark text-white border-cyan" value="0">
+                </div>
+
+                <hr class="border-secondary my-2">
+
+                <div class="row g-2 mb-2">
+                    <div class="col-5">
+                        <label class="small text-muted">Horas trabajadas</label>
+                        <div class="input-group input-group-sm">
+                            <input type="number" id="ai-horas"
+                                   class="form-control bg-dark text-white border-secondary"
+                                   value="0" step="0.5" min="0">
+                            <span class="input-group-text bg-dark border-secondary text-muted">h</span>
+                        </div>
+                    </div>
+                    <div class="col-7">
+                        <label class="small text-muted">Estado de tarea</label>
+                        <select id="ai-estado" class="form-select form-select-sm bg-dark text-white border-secondary">
+                            <option value="PENDIENTE">Pendiente</option>
+                            <option value="EN_PROGRESO">En Progreso</option>
+                            <option value="HECHO">Hecho</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mb-1">
+                    <label class="small text-muted">Nota / Bitácora de visita</label>
+                    <textarea id="ai-nota"
+                              class="form-control form-control-sm bg-dark text-white border-secondary"
+                              rows="2"
+                              placeholder="¿Qué se hizo? ¿Qué falta? Observaciones..."></textarea>
+                </div>
+
+            </div>
+            <div class="modal-footer border-secondary py-2">
+                <button class="btn btn-primary w-100 btn-sm" onclick="saveProjectItem()">REGISTRAR</button>
+            </div>
+        </div>
+    </div>
+</div>
                 <div class="modal-body">
                     <input type="hidden" id="ai-id">
 
@@ -653,6 +746,52 @@
     <img id="lightbox-img" src="" alt="Vista ampliada"
          style="max-width:95vw; max-height:95vh; object-fit:contain; border-radius:4px;"
          onclick="event.stopPropagation()">
+</div>
+    <!-- ============================================================
+     MODAL EDITAR PROVEEDOR [ZONA-FE-02]
+     IDs referenciados en app.js: prov-original, prov-nombre,
+     prov-nit, prov-contacto, prov-especialidad
+     ============================================================ -->
+<div class="modal fade" id="editProveedorModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark-panel border-info">
+            <div class="modal-header border-secondary py-2">
+                <h6 class="modal-title text-info">
+                    <i class="bi bi-building"></i> Editar Proveedor
+                </h6>
+                <button type="button" class="btn-close btn-close-white small" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="prov-original">
+                <div class="mb-2">
+                    <label class="small text-cyan fw-bold">Nombre</label>
+                    <input type="text" id="prov-nombre"
+                           class="form-control form-control-sm bg-dark text-white border-cyan">
+                </div>
+                <div class="mb-2">
+                    <label class="small text-muted">NIT / CC</label>
+                    <input type="text" id="prov-nit"
+                           class="form-control form-control-sm bg-dark text-white border-secondary">
+                </div>
+                <div class="mb-2">
+                    <label class="small text-muted">Teléfono / Contacto</label>
+                    <input type="text" id="prov-contacto"
+                           class="form-control form-control-sm bg-dark text-white border-secondary">
+                </div>
+                <div class="mb-2">
+                    <label class="small text-muted">Especialidad</label>
+                    <input type="text" id="prov-especialidad"
+                           class="form-control form-control-sm bg-dark text-white border-secondary"
+                           placeholder="Ej: Electricidad, Suministros...">
+                </div>
+            </div>
+            <div class="modal-footer border-secondary py-2">
+                <button class="btn btn-info w-100 btn-sm fw-bold text-dark" onclick="saveProveedor()">
+                    <i class="bi bi-save"></i> GUARDAR PROVEEDOR
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="app.js"></script>
