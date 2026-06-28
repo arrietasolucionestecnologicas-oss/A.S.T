@@ -828,11 +828,15 @@ function openAddItemModal() {
     document.getElementById('ai-horas').value  = 0;
     document.getElementById('ai-estado').value = 'PENDIENTE';
     document.getElementById('ai-nota').value   = '';
+    document.getElementById('ai-search').value = '';
+
+    const compare = document.getElementById('ai-provider-compare');
+    if (compare) { compare.style.display = 'none'; compare.innerHTML = ''; }
 
     document.getElementById('ai-cobrar').checked = true;
     toggleVentaInput();
 
-    document.querySelector('#addItemModal .modal-title').innerText       = "Registrar Movimiento";
+    document.querySelector('#addItemModal .modal-title').innerText = "Registrar Movimiento";
     document.querySelector('#addItemModal .btn-primary').innerText = "REGISTRAR";
 
     const dl = document.getElementById('list-catalog-items');
@@ -844,7 +848,7 @@ function openAddItemModal() {
     });
 
     bootstrap.Modal.getOrCreateInstance(document.getElementById('addItemModal')).show();
-}    
+}
 
 function openEditItemModal(idMov) {
     const item = currentProjectItems.find(x => x.idMov === idMov);
@@ -875,16 +879,82 @@ function openEditItemModal(idMov) {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('addItemModal')).show();
 }
 
-function fillItemFromCatalog(name) {
+async function fillItemFromCatalog(name) {
     const item = catalog.find(p => p.nombre === name);
-    if(item) {
-        document.getElementById('ai-desc').value = item.nombre;
-        document.getElementById('ai-costo').value = item.costo || 0;
-        document.getElementById('ai-venta').value = item.precio || 0;
-        const tipoSelect = document.getElementById('ai-tipo');
-        if(item.tipo === 'SERVICIO') tipoSelect.value = 'MANO_OBRA';
-        else tipoSelect.value = 'MATERIAL';
+    if (!item) return;
+
+    document.getElementById('ai-desc').value  = item.nombre;
+    document.getElementById('ai-costo').value = item.costo  || 0;
+    document.getElementById('ai-venta').value = item.precio || 0;
+
+    const tipoSelect = document.getElementById('ai-tipo');
+    if (item.tipo === 'SERVICIO') tipoSelect.value = 'MANO_OBRA';
+    else tipoSelect.value = 'MATERIAL';
+
+    if (item.tipo === 'PRODUCTO') {
+        renderProviderCompare(null, true);
+        const res = await callApi('getProviderPrices', { nombre: item.nombre });
+        renderProviderCompare(res.success ? res.data : []);
+    } else {
+        renderProviderCompare([]);
     }
+}
+// ==========================================
+// COMPARADOR DE PROVEEDORES [ZONA-FE-02] v33.1
+// ==========================================
+function renderProviderCompare(data, loading = false) {
+    const box = document.getElementById('ai-provider-compare');
+    if (!box) return;
+
+    if (loading) {
+        box.style.display = 'block';
+        box.innerHTML = `<div class="text-center py-1">
+            <div class="spinner-border spinner-border-sm text-cyan" style="width:0.8rem;height:0.8rem;"></div>
+            <small class="text-muted ms-1">Consultando precios...</small>
+        </div>`;
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+    }
+
+    const minCosto = Math.min(...data.map(p => p.costo));
+
+    box.style.display = 'block';
+    box.innerHTML = `
+        <div class="p-2 rounded" style="background:#0a1628; border:1px solid #0d6efd; font-size:0.75rem;">
+            <div class="text-info fw-bold mb-1">
+                <i class="bi bi-bar-chart-fill"></i> Precios registrados por proveedor:
+            </div>
+            ${data.map(p => {
+                const dias    = p.fecha ? Math.floor((Date.now() - new Date(p.fecha).getTime()) / 86400000) : '?';
+                const esMenor = p.costo === minCosto && data.length > 1;
+                return `
+                <div class="d-flex justify-content-between align-items-center py-1 border-top border-secondary">
+                    <div class="overflow-hidden me-2">
+                        <span class="text-white">${p.proveedor}</span>
+                        <small class="text-muted ms-1">· hace ${dias}d</small>
+                        ${esMenor ? '<span class="badge bg-success ms-1" style="font-size:0.55rem;">MÁS ECONÓMICO</span>' : ''}
+                    </div>
+                    <div class="d-flex gap-1 align-items-center flex-shrink-0">
+                        <span class="fw-bold ${esMenor ? 'text-success' : 'text-white'}">${fmt.format(p.costo)}</span>
+                        <button class="btn btn-sm btn-outline-info py-0 px-2" style="font-size:0.65rem;"
+                                onclick="usarProveedorPrecio('${p.proveedor.replace(/'/g, "\\'")}', ${p.costo})">
+                            Usar
+                        </button>
+                    </div>
+                </div>`;
+            }).join('')}
+        </div>`;
+}
+
+function usarProveedorPrecio(proveedor, costo) {
+    document.getElementById('ai-prov').value  = proveedor;
+    document.getElementById('ai-costo').value = costo;
+    showToast(`✅ ${proveedor} — ${fmt.format(costo)}`, 'success');
 }
 
 function toggleVentaInput() {
