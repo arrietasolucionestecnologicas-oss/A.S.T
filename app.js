@@ -819,19 +819,22 @@ function deleteProject() {
 
 // --- ITEMS DE PROYECTO ---
 function openAddItemModal() {
-    document.getElementById('ai-id').value = "";
-    document.getElementById('ai-desc').value = "";
-    document.getElementById('ai-prov').value = "";
-    document.getElementById('ai-cant').value = 1;
+    document.getElementById('ai-id').value    = "";
+    document.getElementById('ai-desc').value  = "";
+    document.getElementById('ai-prov').value  = "";
+    document.getElementById('ai-cant').value  = 1;
     document.getElementById('ai-costo').value = 0;
     document.getElementById('ai-venta').value = 0;
-    
+    document.getElementById('ai-horas').value  = 0;
+    document.getElementById('ai-estado').value = 'PENDIENTE';
+    document.getElementById('ai-nota').value   = '';
+
     document.getElementById('ai-cobrar').checked = true;
     toggleVentaInput();
-    
-    document.querySelector('#addItemModal .modal-title').innerText = "Registrar Movimiento";
+
+    document.querySelector('#addItemModal .modal-title').innerText       = "Registrar Movimiento";
     document.querySelector('#addItemModal .btn-primary').innerText = "REGISTRAR";
-    
+
     const dl = document.getElementById('list-catalog-items');
     dl.innerHTML = '';
     catalog.forEach(p => {
@@ -839,21 +842,24 @@ function openAddItemModal() {
         opt.value = p.nombre;
         dl.appendChild(opt);
     });
-    
+
     bootstrap.Modal.getOrCreateInstance(document.getElementById('addItemModal')).show();
-}
+}    
 
 function openEditItemModal(idMov) {
     const item = currentProjectItems.find(x => x.idMov === idMov);
-    if(!item) return;
+    if (!item) return;
 
-    document.getElementById('ai-id').value = item.idMov;
-    document.getElementById('ai-desc').value = item.descripcion;
-    document.getElementById('ai-prov').value = item.proveedor || "";
-    document.getElementById('ai-cant').value = item.cantidad;
+    document.getElementById('ai-id').value    = item.idMov;
+    document.getElementById('ai-desc').value  = item.descripcion;
+    document.getElementById('ai-prov').value  = item.proveedor || "";
+    document.getElementById('ai-cant').value  = item.cantidad;
     document.getElementById('ai-costo').value = item.costo;
     document.getElementById('ai-venta').value = item.venta;
-    
+    document.getElementById('ai-horas').value  = item.horas       || 0;
+    document.getElementById('ai-estado').value = item.estadoTarea || 'PENDIENTE';
+    document.getElementById('ai-nota').value   = item.notaVisita  || '';
+
     const tipoSelect = document.getElementById('ai-tipo');
     if (tipoSelect.querySelector(`option[value="${item.tipo}"]`)) {
         tipoSelect.value = item.tipo;
@@ -889,70 +895,73 @@ function toggleVentaInput() {
 }
 
 function saveProjectItem() {
-    let idMov = document.getElementById('ai-id').value;
+    let idMov  = document.getElementById('ai-id').value;
     const isNew = !idMov;
     if (isNew) idMov = generateUUID();
-    
+
     const payload = {
-        idMov: idMov,
-        projectId: currentProject,
-        tipo: document.getElementById('ai-tipo').value,
+        idMov:       idMov,
+        projectId:   currentProject,
+        tipo:        document.getElementById('ai-tipo').value,
         descripcion: document.getElementById('ai-desc').value,
-        proveedor: document.getElementById('ai-prov').value,
-        cantidad: Number(document.getElementById('ai-cant').value),
-        costo: Number(document.getElementById('ai-costo').value),
-        venta: Number(document.getElementById('ai-venta').value),
-        esCobrar: document.getElementById('ai-cobrar').checked
+        proveedor:   document.getElementById('ai-prov').value,
+        cantidad:    Number(document.getElementById('ai-cant').value),
+        costo:       Number(document.getElementById('ai-costo').value),
+        venta:       Number(document.getElementById('ai-venta').value),
+        esCobrar:    document.getElementById('ai-cobrar').checked,
+        horas:       Number(document.getElementById('ai-horas').value)  || 0,
+        estadoTarea: document.getElementById('ai-estado').value,
+        notaVisita:  document.getElementById('ai-nota').value
     };
-    
-    if(!payload.descripcion) return alert("Descripción requerida");
-    
-    let action = isNew ? 'addProjectMovement' : 'updateProjectMovement';
-    
+
+    if (!payload.descripcion) return alert("Descripción requerida");
+
+    const action = isNew ? 'addProjectMovement' : 'updateProjectMovement';
+
     const modalInstance = bootstrap.Modal.getInstance(document.getElementById('addItemModal'));
-    if(modalInstance) {
+    if (modalInstance) {
         modalInstance.hide();
         cleanBackdrops();
     }
-    
+
     // OPTIMISTIC UPDATE
     if (isNew) {
-        currentProjectItems.push({...payload, fecha: new Date().toISOString()});
+        currentProjectItems.push({ ...payload, fecha: new Date().toISOString() });
     } else {
         const idx = currentProjectItems.findIndex(x => x.idMov === idMov);
-        if (idx !== -1) currentProjectItems[idx] = {...currentProjectItems[idx], ...payload};
+        if (idx !== -1) currentProjectItems[idx] = { ...currentProjectItems[idx], ...payload };
     }
-    
-    // Recalcular Totales Locales
+
+    // Recalcular totales locales
     let tCosto = 0, tVenta = 0;
     currentProjectItems.forEach(m => {
         tCosto += (m.costo * m.cantidad);
         if (m.esCobrar === true || m.esCobrar === 'TRUE') tVenta += (m.venta * m.cantidad);
     });
-    currentProjectData.totalCostos = tCosto;
+    currentProjectData.totalCostos  = tCosto;
     currentProjectData.totalCobrado = tVenta;
-    currentProjectData.utilidad = tVenta - tCosto;
-    
+    currentProjectData.utilidad     = tVenta - tCosto;
+
     const projIdx = projects.findIndex(p => p.id === currentProject);
     if (projIdx !== -1) {
-        projects[projIdx].totalCostos = tCosto;
+        projects[projIdx].totalCostos  = tCosto;
         projects[projIdx].totalCobrado = tVenta;
-        projects[projIdx].utilidad = tVenta - tCosto;
+        projects[projIdx].utilidad     = tVenta - tCosto;
     }
-    
+
     renderProjectItems();
     calculateDashboard();
-    
+
     showSyncIndicator();
     callApi(action, payload).then(res => {
         hideSyncIndicator();
-        if(res.success) {
+        if (res.success) {
             refreshProjectsOnly();
             if (payload.tipo === 'MATERIAL' && payload.costo > 0) refreshCatalogOnly();
             if (payload.proveedor) refreshProveedoresOnly();
         } else {
             showToast("Error de sincronización", "danger");
-            openProjectDetail(currentProject); 
+            openProjectDetail(currentProject);
         }
     });
 }
