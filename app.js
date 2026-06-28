@@ -1203,13 +1203,15 @@ function openProductModal() {
     document.getElementById('p-imagen-data').value = "";
     document.getElementById('p-tipo').value = currentView === 'HISTORIAL' ? 'PRODUCTO' : currentView;
     if (document.getElementById('p-proveedor')) document.getElementById('p-proveedor').value = "";
-    document.getElementById('btn-github-publish').style.display = "none"; 
+    document.getElementById('btn-github-publish').style.display = "none";
     document.getElementById('btn-cost-history').style.display = "none";
-    
-    // Reset del botón de guardar
+
+    const alertBox = document.getElementById('p-nombre-alert');
+    if (alertBox) { alertBox.style.display = 'none'; alertBox.innerHTML = ''; }
+
     const btn = document.querySelector('#prodModal .btn-cyan');
-    if(btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-save"></i> GUARDAR DATOS'; }
-    
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-save"></i> GUARDAR DATOS'; }
+
     toggleFormFields();
     bootstrap.Modal.getOrCreateInstance(document.getElementById('prodModal')).show();
 }
@@ -1224,6 +1226,10 @@ function toggleFormFields() {
 function loadEditModal(uuid) {
     const p = catalog.find(x => x.uuid === uuid);
     if (!p) return;
+
+    const alertBox = document.getElementById('p-nombre-alert');
+    if (alertBox) { alertBox.style.display = 'none'; alertBox.innerHTML = ''; }
+
     document.getElementById('p-uuid').value = p.uuid;
     document.getElementById('p-tipo').value = p.tipo;
     toggleFormFields();
@@ -1233,26 +1239,82 @@ function loadEditModal(uuid) {
     document.getElementById('p-web').checked = p.visibleWeb;
     document.getElementById('p-imagen-data').value = p.imagen;
     document.getElementById('p-imagen-file').value = "";
-    
-    // Reset del botón de guardar
+
     const btnSave = document.querySelector('#prodModal .btn-cyan');
-    if(btnSave) { btnSave.disabled = false; btnSave.innerHTML = '<i class="bi bi-save"></i> GUARDAR DATOS'; }
-    
+    if (btnSave) { btnSave.disabled = false; btnSave.innerHTML = '<i class="bi bi-save"></i> GUARDAR DATOS'; }
+
     const btnCostHistory = document.getElementById('btn-cost-history');
     if (p.tipo === 'PRODUCTO') {
         document.getElementById('p-categoria').value = p.categoria || "AUTOMATIZACION_APPS";
         document.getElementById('p-codigo').value = p.codigo;
         document.getElementById('p-costo').value = p.costo;
         if (document.getElementById('p-proveedor')) document.getElementById('p-proveedor').value = p.proveedor || "";
-        if(btnCostHistory) btnCostHistory.style.display = "block";
+        if (btnCostHistory) btnCostHistory.style.display = "block";
     } else {
-        if(btnCostHistory) btnCostHistory.style.display = "none";
+        if (btnCostHistory) btnCostHistory.style.display = "none";
     }
-    
+
     document.getElementById('btn-github-publish').style.display = "block";
     bootstrap.Modal.getOrCreateInstance(document.getElementById('prodModal')).show();
 }
+// ==========================================
+// DETECCIÓN DE DUPLICADOS [ZONA-FE-02] v33.1
+// ==========================================
+function _normalizeForDup(s) {
+    return String(s).toLowerCase().trim()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ");
+}
 
+function _similarityScore(a, b) {
+    const na = _normalizeForDup(a);
+    const nb = _normalizeForDup(b);
+    if (!na || !nb) return 0;
+    if (na === nb) return 1;
+    if (na.includes(nb) || nb.includes(na)) return 0.85;
+    const wordsA = new Set(na.split(" ").filter(w => w.length > 2));
+    const wordsB = new Set(nb.split(" ").filter(w => w.length > 2));
+    if (wordsA.size === 0 || wordsB.size === 0) return 0;
+    let common = 0;
+    wordsA.forEach(w => { if (wordsB.has(w)) common++; });
+    return common / Math.max(wordsA.size, wordsB.size);
+}
+
+let _dupTimer = null;
+function checkDuplicateProduct(value) {
+    clearTimeout(_dupTimer);
+    const alertBox = document.getElementById('p-nombre-alert');
+    if (!alertBox) return;
+    if (!value || value.length < 3) { alertBox.style.display = 'none'; return; }
+
+    _dupTimer = setTimeout(() => {
+        const currentUuid = document.getElementById('p-uuid').value;
+        const matches = catalog
+            .filter(p => p.uuid !== currentUuid && _similarityScore(value, p.nombre) >= 0.7)
+            .slice(0, 3);
+
+        if (matches.length === 0) { alertBox.style.display = 'none'; return; }
+
+        alertBox.style.display = 'block';
+        alertBox.innerHTML = `
+            <div class="p-2 rounded mt-1" style="background:#2a1f00; border:1px solid #ffc107; font-size:0.75rem;">
+                <div class="text-warning fw-bold mb-1">
+                    <i class="bi bi-exclamation-triangle-fill"></i> Productos similares en catálogo:
+                </div>
+                ${matches.map(m => `
+                <div class="d-flex justify-content-between align-items-center py-1 border-top border-secondary">
+                    <span class="text-white">${m.nombre}</span>
+                    <div class="d-flex gap-1">
+                        <span class="text-muted" style="font-size:0.65rem;">${fmt.format(m.precio)}</span>
+                        <button class="btn btn-sm btn-outline-warning py-0 px-2" style="font-size:0.65rem;"
+                                onclick="loadEditModal('${m.uuid}')">
+                            <i class="bi bi-eye"></i> Ver
+                        </button>
+                    </div>
+                </div>`).join('')}
+            </div>`;
+    }, 500);
+}
 async function saveProduct() {
     const btn = document.querySelector('#prodModal .btn-cyan');
     btn.disabled = true; btn.innerText = "PROCESANDO...";
