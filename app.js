@@ -14,7 +14,8 @@ let proveedores = [];
 let currentProject = null; 
 let currentProjectData = null; 
 let currentProjectItems = []; 
-let currentView = 'PRODUCTO'; 
+let currentView = 'PRODUCTO';
+let currentCatalogView = 'cards';
 let deferredPrompt; 
 
 const fmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
@@ -322,6 +323,18 @@ function switchTab(viewName) {
         const filtered = catalog.filter(p => p.tipo === currentView);
         renderGrid(filtered);
     }
+}
+
+function switchCatalogView(mode) {
+    currentCatalogView = mode;
+    document.getElementById('btn-view-cards').className = mode === 'cards'
+        ? 'btn btn-sm btn-cyan'
+        : 'btn btn-sm btn-outline-secondary';
+    document.getElementById('btn-view-list').className = mode === 'list'
+        ? 'btn btn-sm btn-cyan'
+        : 'btn btn-sm btn-outline-secondary';
+    const filtered = catalog.filter(p => p.tipo === currentView);
+    renderGrid(filtered);
 }
 async function callApi(action, payload = {}) {
     try {
@@ -1253,81 +1266,145 @@ async function convertQuoteToProject(index) {
 function renderGrid(data) {
     const grid = document.getElementById('catalog-grid');
     grid.innerHTML = '';
+
     if (data.length === 0) {
-        grid.innerHTML = `<div class="col-12 text-center mt-5"><i class="bi bi-box-seam text-secondary" style="font-size:3rem;"></i><p class="text-muted">No hay items registrados.</p></div>`;
+        grid.innerHTML = `<div class="col-12 text-center mt-5">
+            <i class="bi bi-box-seam text-secondary" style="font-size:3rem;"></i>
+            <p class="text-muted">No hay items registrados.</p>
+        </div>`;
         return;
     }
 
     const DIAS_PRECIO_VIEJO = 120;
     const ahora = Date.now();
 
-    data.forEach(p => {
-        // --- Badge precio desactualizado ---
-        let precioViejoBadge = '';
-        let precioViejo = false;
-        if (p.fechaUltimoCosto) {
-            const diasDiff = Math.floor((ahora - new Date(p.fechaUltimoCosto).getTime()) / 86400000);
-            if (diasDiff > DIAS_PRECIO_VIEJO) {
-                precioViejo = true;
-                precioViejoBadge = `<span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem;" title="Costo sin actualizar hace ${diasDiff} días">
-                    <i class="bi bi-clock-history"></i> ${diasDiff}d
-                </span>`;
+    if (currentCatalogView === 'list') {
+        // ── VISTA LISTA ──────────────────────────────────────
+        grid.className = 'row g-0';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'col-12';
+        wrapper.style.borderTop = '1px solid #222';
+
+        data.forEach(p => {
+            let precioViejo = false;
+            let diasStr = '';
+            if (p.fechaUltimoCosto) {
+                const dias = Math.floor((ahora - new Date(p.fechaUltimoCosto).getTime()) / 86400000);
+                if (dias > DIAS_PRECIO_VIEJO) { precioViejo = true; diasStr = dias + 'd'; }
             }
-        }
 
-        const imgHtml = p.imagen
-            ? `<div onclick='openViewModal("${p.uuid}")'
-                    style="height:140px;overflow:hidden;border-radius:4px;margin-bottom:10px;background:#000;cursor:zoom-in;position:relative;">
-                   <img src="${p.imagen}" style="width:100%;height:100%;object-fit:cover;">
-                   <div style="position:absolute;bottom:4px;right:4px;pointer-events:none;">
-                       <span class="badge bg-dark bg-opacity-75 border border-secondary" style="font-size:0.6rem;">
-                           <i class="bi bi-zoom-in"></i>
-                       </span>
-                   </div>
-               </div>`
-            : '';
+            const badgeCode = p.tipo === 'PRODUCTO'
+                ? `<span class="badge bg-info text-dark" style="font-size:0.6rem;">${p.codigo}</span>`
+                : `<span class="badge bg-warning text-dark" style="font-size:0.6rem;">SERV</span>`;
 
-        const badgeCode = p.tipo === 'PRODUCTO'
-            ? `<span class="badge bg-info text-dark">${p.codigo}</span>`
-            : `<span class="badge bg-warning text-dark">SERVICIO</span>`;
+            const marginHtml = (p.tipo === 'PRODUCTO' && p.costo > 0 && p.precio > 0)
+                ? `<span class="badge bg-success" style="font-size:0.6rem;">${(((p.precio - p.costo) / p.precio) * 100).toFixed(0)}%</span>`
+                : '';
 
-        const marginHtml = (p.tipo === 'PRODUCTO' && p.costo > 0 && p.precio > 0)
-            ? `<span class="badge bg-success ms-2" style="font-size:0.65rem;">${(((p.precio - p.costo) / p.precio) * 100).toFixed(0)}% MGN</span>`
-            : '';
+            const precioColor = precioViejo ? 'color:#ffc107;' : 'color:var(--ast-cyan);';
+            const precioBadge = precioViejo
+                ? `<i class="bi bi-clock-history text-warning ms-1" title="Sin actualizar hace ${diasStr}" style="font-size:0.65rem;"></i>`
+                : '';
 
-        const precioStyle = precioViejo ? 'color:#ffc107;' : '';
+            const webDot = p.visibleWeb
+                ? `<span class="text-success" style="font-size:0.6rem;" title="Web ON">●</span>`
+                : '';
 
-        const html = `
-        <div class="col-12 col-md-6 col-lg-4">
-            <div class="product-card h-100 p-3 d-flex flex-column">
-                <div class="d-flex justify-content-between mb-2">
-                    <div>${badgeCode}${marginHtml}${precioViejoBadge}</div>
-                    ${p.visibleWeb ? '<span class="text-success small">● WEB ON</span>' : ''}${p.publicadoGitHub ? ' <span class="text-warning small" title="Enlace compartible activo"><i class="bi bi-cloud-check-fill"></i></span>' : ''}
+            const row = document.createElement('div');
+            row.className = 'list-item-row';
+            row.innerHTML = `
+                <div style="min-width:70px; display:flex; gap:3px; flex-wrap:wrap;">
+                    ${badgeCode}${marginHtml}
                 </div>
-                ${imgHtml}
-                <h6 class="text-white fw-bold mb-1"
-                    onclick='openViewModal("${p.uuid}")'
-                    style="cursor:pointer;">${p.nombre}</h6>
-                <small class="text-secondary mb-3 text-truncate">${p.specs || '---'}</small>
-                <div class="mt-auto d-flex justify-content-between align-items-end">
-                    <div>
-                        <small class="text-muted" style="font-size:0.7rem">PRECIO</small>
-                        <div class="fw-bold fs-5" style="${precioStyle}">${fmt.format(p.precio)}</div>
-                        ${precioViejo ? `<small style="font-size:0.6rem;color:#ffc107;">Verificar costo</small>` : ''}
+                <div class="flex-grow-1 overflow-hidden">
+                    <span class="list-item-name" onclick='openViewModal("${p.uuid}")'>${p.nombre}</span>
+                    <span class="list-item-spec ms-2">${p.specs || '---'}</span>
+                </div>
+                <div style="min-width:90px; text-align:right;">
+                    <span class="fw-bold" style="${precioColor}font-size:0.85rem;">${fmt.format(p.precio)}</span>
+                    ${precioBadge}
+                </div>
+                <div style="min-width:18px;">${webDot}</div>
+                <div class="btn-group btn-group-sm flex-shrink-0">
+                    <button class="btn btn-outline-secondary" onclick='loadEditModal("${p.uuid}")'  title="Editar"><i class="bi bi-pencil-fill"></i></button>
+                    <button class="btn btn-cyan"              onclick='addToCart("${p.uuid}")'      title="Añadir"><i class="bi bi-plus-lg"></i></button>
+                    <button class="btn btn-outline-success"   onclick='shareProductDirectly("${p.uuid}")' title="WhatsApp"><i class="bi bi-whatsapp"></i></button>
+                    <button class="btn btn-outline-info"      onclick='openViewModal("${p.uuid}")'  title="Ver"><i class="bi bi-eye"></i></button>
+                </div>`;
+            wrapper.appendChild(row);
+        });
+
+        grid.appendChild(wrapper);
+
+    } else {
+        // ── VISTA CARDS ───────────────────────────────────────
+        grid.className = 'row g-3';
+
+        data.forEach(p => {
+            let precioViejoBadge = '';
+            let precioViejo = false;
+            if (p.fechaUltimoCosto) {
+                const diasDiff = Math.floor((ahora - new Date(p.fechaUltimoCosto).getTime()) / 86400000);
+                if (diasDiff > DIAS_PRECIO_VIEJO) {
+                    precioViejo = true;
+                    precioViejoBadge = `<span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem;" title="Costo sin actualizar hace ${diasDiff} días">
+                        <i class="bi bi-clock-history"></i> ${diasDiff}d
+                    </span>`;
+                }
+            }
+
+            const imgHtml = p.imagen
+                ? `<div onclick='openViewModal("${p.uuid}")'
+                        style="height:140px;overflow:hidden;border-radius:4px;margin-bottom:10px;background:#000;cursor:zoom-in;position:relative;">
+                       <img src="${p.imagen}" style="width:100%;height:100%;object-fit:cover;">
+                       <div style="position:absolute;bottom:4px;right:4px;pointer-events:none;">
+                           <span class="badge bg-dark bg-opacity-75 border border-secondary" style="font-size:0.6rem;">
+                               <i class="bi bi-zoom-in"></i>
+                           </span>
+                       </div>
+                   </div>`
+                : '';
+
+            const badgeCode = p.tipo === 'PRODUCTO'
+                ? `<span class="badge bg-info text-dark">${p.codigo}</span>`
+                : `<span class="badge bg-warning text-dark">SERVICIO</span>`;
+
+            const marginHtml = (p.tipo === 'PRODUCTO' && p.costo > 0 && p.precio > 0)
+                ? `<span class="badge bg-success ms-2" style="font-size:0.65rem;">${(((p.precio - p.costo) / p.precio) * 100).toFixed(0)}% MGN</span>`
+                : '';
+
+            const precioStyle = precioViejo ? 'color:#ffc107;' : '';
+
+            grid.innerHTML += `
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="product-card h-100 p-3 d-flex flex-column">
+                    <div class="d-flex justify-content-between mb-2">
+                        <div>${badgeCode}${marginHtml}${precioViejoBadge}</div>
+                        ${p.visibleWeb ? '<span class="text-success small">● WEB ON</span>' : ''}${p.publicadoGitHub ? ' <span class="text-warning small" title="Enlace compartible activo"><i class="bi bi-cloud-check-fill"></i></span>' : ''}
                     </div>
-                    <div class="btn-group">
-                        <button class="btn btn-sm btn-outline-secondary" onclick='loadEditModal("${p.uuid}")' title="Editar"><i class="bi bi-pencil-fill"></i></button>
-                        <button class="btn btn-sm btn-cyan"              onclick='addToCart("${p.uuid}")'   title="Añadir a cotización"><i class="bi bi-plus-lg"></i></button>
-                        <button class="btn btn-sm btn-outline-success"   onclick='shareProductDirectly("${p.uuid}")' title="WhatsApp Nativo"><i class="bi bi-whatsapp"></i></button>
-                        <button class="btn btn-sm btn-outline-info"      onclick='openViewModal("${p.uuid}")'        title="Ver Detalle"><i class="bi bi-eye"></i></button>
+                    ${imgHtml}
+                    <h6 class="text-white fw-bold mb-1"
+                        onclick='openViewModal("${p.uuid}")'
+                        style="cursor:pointer;">${p.nombre}</h6>
+                    <small class="text-secondary mb-3 text-truncate">${p.specs || '---'}</small>
+                    <div class="mt-auto d-flex justify-content-between align-items-end">
+                        <div>
+                            <small class="text-muted" style="font-size:0.7rem">PRECIO</small>
+                            <div class="fw-bold fs-5" style="${precioStyle}">${fmt.format(p.precio)}</div>
+                            ${precioViejo ? `<small style="font-size:0.6rem;color:#ffc107;">Verificar costo</small>` : ''}
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-secondary" onclick='loadEditModal("${p.uuid}")'        title="Editar"><i class="bi bi-pencil-fill"></i></button>
+                            <button class="btn btn-sm btn-cyan"              onclick='addToCart("${p.uuid}")'             title="Añadir a cotización"><i class="bi bi-plus-lg"></i></button>
+                            <button class="btn btn-sm btn-outline-success"   onclick='shareProductDirectly("${p.uuid}")' title="WhatsApp Nativo"><i class="bi bi-whatsapp"></i></button>
+                            <button class="btn btn-sm btn-outline-info"      onclick='openViewModal("${p.uuid}")'        title="Ver Detalle"><i class="bi bi-eye"></i></button>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </div>`;
-        grid.innerHTML += html;
-    });
+            </div>`;
+        });
+    }
 }
-
 function openProductModal() {
     document.getElementById('prodForm').reset();
     document.getElementById('p-uuid').value = "";
