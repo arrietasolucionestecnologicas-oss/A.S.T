@@ -51,6 +51,21 @@
         }
         .kpi-value { font-size: 1.1rem; font-weight: bold; color: white; }
         .kpi-label { font-size: 0.7rem; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+
+        /* Vista Lista Catálogo */
+        .list-item-row {
+            background: #1a1a1a;
+            border-bottom: 1px solid #222;
+            padding: 8px 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.15s;
+        }
+        .list-item-row:hover { background: #212121; }
+        .list-item-name { font-size: 0.85rem; font-weight: bold; color: #fff; cursor: pointer; }
+        .list-item-name:hover { color: var(--ast-cyan); }
+        .list-item-spec { font-size: 0.7rem; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
     </style>
 </head>
 <body>
@@ -106,6 +121,15 @@
         </div>
     </div>
 </div>
+
+           <div class="d-flex justify-content-end mb-2 gap-1">
+                <button id="btn-view-cards" class="btn btn-sm btn-cyan" onclick="switchCatalogView('cards')" title="Vista Cards">
+                    <i class="bi bi-grid-fill"></i>
+                </button>
+                <button id="btn-view-list" class="btn btn-sm btn-outline-secondary" onclick="switchCatalogView('list')" title="Vista Lista">
+                    <i class="bi bi-list-ul"></i>
+                </button>
+            </div>
 
             <div id="catalog-grid" class="row g-3">
                 <div class="col-12 text-center mt-5">
