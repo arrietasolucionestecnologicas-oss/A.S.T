@@ -1321,6 +1321,9 @@ function openProductModal() {
     const alertBox = document.getElementById('p-nombre-alert');
     if (alertBox) { alertBox.style.display = 'none'; alertBox.innerHTML = ''; }
 
+    const section = document.getElementById('prod-provider-section');
+    if (section) section.style.display = 'none';
+
     const btn = document.querySelector('#prodModal .btn-cyan');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-save"></i> GUARDAR DATOS'; }
 
@@ -1356,18 +1359,105 @@ function loadEditModal(uuid) {
     if (btnSave) { btnSave.disabled = false; btnSave.innerHTML = '<i class="bi bi-save"></i> GUARDAR DATOS'; }
 
     const btnCostHistory = document.getElementById('btn-cost-history');
+    const section = document.getElementById('prod-provider-section');
+
     if (p.tipo === 'PRODUCTO') {
         document.getElementById('p-categoria').value = p.categoria || "AUTOMATIZACION_APPS";
         document.getElementById('p-codigo').value = p.codigo;
         document.getElementById('p-costo').value = p.costo;
         if (document.getElementById('p-proveedor')) document.getElementById('p-proveedor').value = p.proveedor || "";
         if (btnCostHistory) btnCostHistory.style.display = "block";
+        if (section) section.style.display = 'block';
+        loadProductProviderPrices(p.nombre);
     } else {
         if (btnCostHistory) btnCostHistory.style.display = "none";
+        if (section) section.style.display = 'none';
     }
 
     document.getElementById('btn-github-publish').style.display = "block";
     bootstrap.Modal.getOrCreateInstance(document.getElementById('prodModal')).show();
+}
+// ==========================================
+// MULTI-PROVEEDOR POR PRODUCTO [ZONA-FE-02] v33.1
+// ==========================================
+async function loadProductProviderPrices(nombre) {
+    if (!nombre) return;
+    renderProductProviderPrices(null, true);
+    const res = await callApi('getProviderPrices', { nombre: nombre });
+    renderProductProviderPrices(res.success ? res.data : []);
+}
+
+function renderProductProviderPrices(data, loading = false) {
+    const box = document.getElementById('prod-provider-list');
+    if (!box) return;
+
+    if (loading) {
+        box.innerHTML = `<div class="py-1">
+            <div class="spinner-border spinner-border-sm text-cyan" style="width:0.8rem;height:0.8rem;"></div>
+            <small class="text-muted ms-1">Cargando precios...</small>
+        </div>`;
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        box.innerHTML = '<div class="text-muted" style="font-size:0.75rem;">Sin precios registrados. Agrega el primero abajo.</div>';
+        return;
+    }
+
+    const minCosto = Math.min(...data.map(p => p.costo));
+    box.innerHTML = data.map(p => {
+        const dias    = p.fecha ? Math.floor((Date.now() - new Date(p.fecha).getTime()) / 86400000) : '?';
+        const esMenor = p.costo === minCosto && data.length > 1;
+        return `
+        <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary">
+            <div class="overflow-hidden me-2">
+                <span class="text-white" style="font-size:0.75rem;">${p.proveedor}</span>
+                <small class="text-muted ms-1" style="font-size:0.65rem;">· hace ${dias}d</small>
+                ${esMenor ? '<span class="badge bg-success ms-1" style="font-size:0.55rem;">MÁS ECONÓMICO</span>' : ''}
+            </div>
+            <div class="d-flex gap-1 align-items-center flex-shrink-0">
+                <span class="fw-bold ${esMenor ? 'text-success' : 'text-white'}" style="font-size:0.75rem;">${fmt.format(p.costo)}</span>
+                <button class="btn btn-sm btn-outline-info py-0 px-1" style="font-size:0.6rem;"
+                        title="Establecer como proveedor principal"
+                        onclick="useProviderAsMain('${p.proveedor.replace(/'/g, "\\'")}', ${p.costo})">
+                    <i class="bi bi-star-fill"></i>
+                </button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function useProviderAsMain(proveedor, costo) {
+    if (document.getElementById('p-proveedor')) document.getElementById('p-proveedor').value = proveedor;
+    document.getElementById('p-costo').value = costo;
+    showToast(`✅ ${proveedor} establecido como principal`, 'success');
+}
+
+async function saveProductProviderPrice() {
+    const nombre   = document.getElementById('p-nombre').value;
+    const proveedor = document.getElementById('prod-prov-nombre').value.trim();
+    const costo    = Number(document.getElementById('prod-prov-costo').value);
+
+    if (!nombre)             return showToast('Primero guarda el nombre del producto', 'warning');
+    if (!proveedor)          return showToast('Escribe el nombre del proveedor', 'warning');
+    if (!costo || costo <= 0) return showToast('Escribe un precio válido', 'warning');
+
+    const btn = document.querySelector('#prod-provider-section .btn-outline-cyan');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spinner-border spinner-border-sm" style="width:0.7rem;height:0.7rem;"></div>'; }
+
+    const res = await callApi('addCatalogProviderPrice', { nombre, proveedor, costo });
+
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-plus-lg"></i>'; }
+
+    if (res.success && res.data && res.data.success !== false) {
+        document.getElementById('prod-prov-nombre').value = '';
+        document.getElementById('prod-prov-costo').value  = '';
+        showToast('✅ Precio registrado', 'success');
+        loadProductProviderPrices(nombre);
+        refreshProveedoresOnly();
+    } else {
+        showToast('Error al guardar precio', 'danger');
+    }
 }
 // ==========================================
 // DETECCIÓN DE DUPLICADOS [ZONA-FE-02] v33.1
