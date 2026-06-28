@@ -1136,28 +1136,50 @@ async function convertQuoteToProject(index) {
 function renderGrid(data) {
     const grid = document.getElementById('catalog-grid');
     grid.innerHTML = '';
-    if(data.length === 0) {
+    if (data.length === 0) {
         grid.innerHTML = `<div class="col-12 text-center mt-5"><i class="bi bi-box-seam text-secondary" style="font-size: 3rem;"></i><p class="text-muted">No hay items registrados.</p></div>`;
         return;
     }
     data.forEach(p => {
-        const imgHtml = p.imagen ? `<div style="height:140px; overflow:hidden; border-radius:4px; margin-bottom:10px; background:#000;"><img src="${p.imagen}" style="width:100%; height:100%; object-fit:cover;"></div>` : '';
-        const badgeCode = p.tipo === 'PRODUCTO' ? `<span class="badge bg-info text-dark">${p.codigo}</span>` : `<span class="badge bg-warning text-dark">SERVICIO</span>`;
-        const marginHtml = (p.tipo === 'PRODUCTO' && p.costo > 0 && p.precio > 0) ? `<span class="badge bg-success ms-2" style="font-size:0.65rem;">${(((p.precio - p.costo) / p.precio) * 100).toFixed(0)}% MGN</span>` : '';
+        const imgHtml = p.imagen
+            ? `<div onclick='openViewModal("${p.uuid}")'
+                    style="height:140px;overflow:hidden;border-radius:4px;margin-bottom:10px;background:#000;cursor:zoom-in;position:relative;">
+                   <img src="${p.imagen}" style="width:100%;height:100%;object-fit:cover;">
+                   <div style="position:absolute;bottom:4px;right:4px;pointer-events:none;">
+                       <span class="badge bg-dark bg-opacity-75 border border-secondary" style="font-size:0.6rem;">
+                           <i class="bi bi-zoom-in"></i>
+                       </span>
+                   </div>
+               </div>`
+            : '';
+        const badgeCode = p.tipo === 'PRODUCTO'
+            ? `<span class="badge bg-info text-dark">${p.codigo}</span>`
+            : `<span class="badge bg-warning text-dark">SERVICIO</span>`;
+        const marginHtml = (p.tipo === 'PRODUCTO' && p.costo > 0 && p.precio > 0)
+            ? `<span class="badge bg-success ms-2" style="font-size:0.65rem;">${(((p.precio - p.costo) / p.precio) * 100).toFixed(0)}% MGN</span>`
+            : '';
         const html = `
         <div class="col-12 col-md-6 col-lg-4">
             <div class="product-card h-100 p-3 d-flex flex-column">
-                <div class="d-flex justify-content-between mb-2"><div>${badgeCode}${marginHtml}</div>${p.visibleWeb ? '<span class="text-success small">● WEB ON</span>' : ''}</div>
+                <div class="d-flex justify-content-between mb-2">
+                    <div>${badgeCode}${marginHtml}</div>
+                    ${p.visibleWeb ? '<span class="text-success small">● WEB ON</span>' : ''}
+                </div>
                 ${imgHtml}
-                <h6 class="text-white fw-bold mb-1">${p.nombre}</h6>
+                <h6 class="text-white fw-bold mb-1"
+                    onclick='openViewModal("${p.uuid}")'
+                    style="cursor:pointer;">${p.nombre}</h6>
                 <small class="text-secondary mb-3 text-truncate">${p.specs || '---'}</small>
                 <div class="mt-auto d-flex justify-content-between align-items-end">
-                    <div><small class="text-muted" style="font-size:0.7rem">PRECIO</small><div class="text-cyan fw-bold fs-5">${fmt.format(p.precio)}</div></div>
+                    <div>
+                        <small class="text-muted" style="font-size:0.7rem">PRECIO</small>
+                        <div class="text-cyan fw-bold fs-5">${fmt.format(p.precio)}</div>
+                    </div>
                     <div class="btn-group">
                         <button class="btn btn-sm btn-outline-secondary" onclick='loadEditModal("${p.uuid}")' title="Editar"><i class="bi bi-pencil-fill"></i></button>
-                        <button class="btn btn-sm btn-cyan" onclick='addToCart("${p.uuid}")' title="Añadir"><i class="bi bi-plus-lg"></i></button>
-                        <button class="btn btn-sm btn-outline-success" onclick='shareProductDirectly("${p.uuid}")' title="WhatsApp Nativo"><i class="bi bi-whatsapp"></i></button>
-                        <button class="btn btn-sm btn-outline-light" onclick='loadEditModal("${p.uuid}")' title="Publicar en Web"><i class="bi bi-cloud-upload"></i></button>
+                        <button class="btn btn-sm btn-cyan"              onclick='addToCart("${p.uuid}")'   title="Añadir a cotización"><i class="bi bi-plus-lg"></i></button>
+                        <button class="btn btn-sm btn-outline-success"   onclick='shareProductDirectly("${p.uuid}")' title="WhatsApp Nativo"><i class="bi bi-whatsapp"></i></button>
+                        <button class="btn btn-sm btn-outline-info"      onclick='openViewModal("${p.uuid}")'        title="Ver Detalle"><i class="bi bi-eye"></i></button>
                     </div>
                 </div>
             </div>
@@ -1573,4 +1595,98 @@ async function generatePDF() {
         
         setTimeout(() => { updateClientsDatalist(); if(confirm(`Documento ${res.data.consecutivo} Generado. ¿Abrir?`)) { window.open(res.data.url, '_blank'); } }, 500); 
     } else { alert("Error: " + res.error); }
+}
+// ==========================================
+// VISTA DETALLE + LIGHTBOX [ZONA-FE-02] v33.1
+// UUID activo: dataset del nodo #viewProductModal.
+// Sin variables globales nuevas.
+// ==========================================
+
+function openViewModal(uuid) {
+    const p = catalog.find(x => x.uuid === uuid);
+    if (!p) return;
+
+    // Referencia activa en el DOM — no requiere variable global
+    document.getElementById('viewProductModal').dataset.uuid = uuid;
+
+    // Tipo / código
+    const badge = document.getElementById('vp-tipo-badge');
+    badge.textContent       = p.tipo === 'PRODUCTO' ? 'PRODUCTO' : 'SERVICIO';
+    badge.style.background  = p.tipo === 'PRODUCTO' ? 'var(--ast-cyan)' : '#ffc107';
+    badge.style.color       = '#000';
+    document.getElementById('vp-codigo-badge').textContent = p.codigo || '---';
+
+    // Imagen
+    const img          = document.getElementById('vp-imagen');
+    const placeholder  = document.getElementById('vp-img-placeholder');
+    const hint         = document.getElementById('vp-expand-hint');
+    const imgContainer = document.getElementById('vp-img-container');
+
+    if (p.imagen) {
+        img.src                   = p.imagen;
+        img.style.display         = 'block';
+        placeholder.style.display = 'none';
+        hint.style.display        = 'block';
+        imgContainer.style.cursor = 'zoom-in';
+    } else {
+        img.style.display         = 'none';
+        placeholder.style.display = 'flex';
+        hint.style.display        = 'none';
+        imgContainer.style.cursor = 'default';
+    }
+
+    // Textos
+    document.getElementById('vp-nombre').textContent = p.nombre;
+    document.getElementById('vp-specs').textContent  = p.specs || 'Sin descripción.';
+    document.getElementById('vp-precio').textContent = fmt.format(p.precio || 0);
+    document.getElementById('vp-costo').textContent  = fmt.format(p.costo  || 0);
+
+    // Badge web pública
+    document.getElementById('vp-web-badge').style.display = p.visibleWeb ? 'block' : 'none';
+
+    // Botón publicar: visible solo si el producto ya está persistido (tiene uuid)
+    document.getElementById('vp-btn-publish').style.display = p.uuid ? 'block' : 'none';
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('viewProductModal')).show();
+}
+
+function switchToEditMode() {
+    const uuid  = document.getElementById('viewProductModal').dataset.uuid;
+    const modal = bootstrap.Modal.getInstance(document.getElementById('viewProductModal'));
+    if (modal) { modal.hide(); cleanBackdrops(); }
+    setTimeout(() => loadEditModal(uuid), 350);
+}
+
+function addToCartFromView() {
+    const uuid = document.getElementById('viewProductModal').dataset.uuid;
+    if (!uuid) return;
+    addToCart(uuid);
+    showToast('✅ Ítem agregado a la cotización', 'success');
+}
+
+function publishFromView() {
+    const uuid  = document.getElementById('viewProductModal').dataset.uuid;
+    if (!uuid) return;
+    const modal = bootstrap.Modal.getInstance(document.getElementById('viewProductModal'));
+    if (modal) { modal.hide(); cleanBackdrops(); }
+    // Carga el modal de edición (llena los campos del prodModal)
+    // luego dispara el botón de GitHub que ya tiene su propia lógica
+    setTimeout(() => {
+        loadEditModal(uuid);
+        setTimeout(() => {
+            const btn = document.getElementById('btn-github-publish');
+            if (btn) btn.click();
+        }, 350);
+    }, 350);
+}
+
+function openLightbox() {
+    const img = document.getElementById('vp-imagen');
+    if (!img || img.style.display === 'none') return;
+    document.getElementById('lightbox-img').src = img.src;
+    document.getElementById('lightbox-overlay').style.display = 'flex';
+}
+
+function closeLightbox() {
+    document.getElementById('lightbox-overlay').style.display = 'none';
 }
