@@ -242,7 +242,9 @@
 
                         <div class="mb-2">
                             <label class="small text-secondary">Nombre del Ítem</label>
-                            <input type="text" id="p-nombre" class="form-control bg-dark text-white border-secondary" required>
+                            <input type="text" id="p-nombre" class="form-control bg-dark text-white border-secondary" required
+                                   oninput="checkDuplicateProduct(this.value)">
+                            <div id="p-nombre-alert" style="display:none;" class="mt-1"></div>
                         </div>
                         <div class="mb-2">
                             <label class="small text-secondary">Descripción / Detalles</label>
