@@ -716,25 +716,44 @@ function createNewProject() {
 async function openProjectDetail(id) {
     currentProject = id;
     bootstrap.Modal.getOrCreateInstance(document.getElementById('projectDetailModal')).show();
-    
+
     const pInfo = projects.find(p => p.id === id);
     if (pInfo) {
-        document.getElementById('pd-title').innerText = pInfo.nombreProyecto;
+        document.getElementById('pd-title').innerText    = pInfo.nombreProyecto;
         document.getElementById('pd-subtitle').innerText = pInfo.cliente;
-        document.getElementById('pd-cobrado').innerText = fmt.format(pInfo.totalCobrado);
-        document.getElementById('pd-gastos').innerText = fmt.format(pInfo.totalCostos);
+        document.getElementById('pd-cobrado').innerText  = fmt.format(pInfo.totalCobrado);
+        document.getElementById('pd-gastos').innerText   = fmt.format(pInfo.totalCostos);
         document.getElementById('pd-utilidad').innerText = fmt.format(pInfo.utilidad);
-        document.getElementById('pd-items-list').innerHTML = '<div class="text-center mt-3"><div class="spinner-border text-cyan spinner-border-sm"></div><div class="small text-muted mt-1">Cargando movimientos...</div></div>';
     }
-    
-    const res = await callApi('getProjectDetails', { id: id });
-    if(res.success) {
-        currentProjectData = res.data.info;
-        currentProjectItems = res.data.items;
-        renderProjectItems();
-    }
-}
+    document.getElementById('pd-items-list').innerHTML = `
+        <div class="text-center mt-3">
+            <div class="spinner-border text-cyan spinner-border-sm"></div>
+            <div class="small text-muted mt-1">Cargando movimientos...</div>
+        </div>`;
 
+    // Primer intento
+    let res = await callApi('getProjectDetails', { id: id });
+
+    // Si el backend aún no encuentra el proyecto (race condition),
+    // esperar 1.5s y reintentar una vez
+    if (!res.success || !res.data || !res.data.info) {
+        await new Promise(r => setTimeout(r, 1500));
+        res = await callApi('getProjectDetails', { id: id });
+    }
+
+    if (!res.success || !res.data || !res.data.info) {
+        document.getElementById('pd-items-list').innerHTML = `
+            <div class="text-center mt-4">
+                <i class="bi bi-hourglass-split text-warning" style="font-size:2rem;"></i>
+                <p class="text-muted small mt-2">El proyecto se está creando.<br>Cierra y vuelve a abrirlo en unos segundos.</p>
+            </div>`;
+        return;
+    }
+
+    currentProjectData  = res.data.info;
+    currentProjectItems = res.data.items;
+    renderProjectItems();
+}
 function renderProjectItems() {
     document.getElementById('pd-title').innerText = currentProjectData.nombreProyecto;
     document.getElementById('pd-subtitle').innerText = currentProjectData.cliente;
