@@ -1279,11 +1279,10 @@ function renderGrid(data) {
     const ahora = Date.now();
 
     if (currentCatalogView === 'list') {
-        // ── VISTA LISTA RESPONSIVA ────────────────────────────
         grid.className = 'row g-0';
         const wrapper = document.createElement('div');
         wrapper.className = 'col-12';
-        wrapper.style.borderTop = '1px solid #222';
+        wrapper.style.cssText = 'border-top:1px solid #222;';
 
         data.forEach(p => {
             let precioViejo = false;
@@ -1293,73 +1292,75 @@ function renderGrid(data) {
                 if (dias > DIAS_PRECIO_VIEJO) { precioViejo = true; diasStr = dias + 'd'; }
             }
 
-            const badgeCode = p.tipo === 'PRODUCTO'
-                ? `<span class="badge bg-info text-dark" style="font-size:0.6rem;">${p.codigo}</span>`
-                : `<span class="badge bg-warning text-dark" style="font-size:0.6rem;">SERV</span>`;
+            // Badge corto para lista
+            const codigo = p.tipo === 'PRODUCTO' ? p.codigo : 'SRV';
+            const badgeColor = p.tipo === 'PRODUCTO' ? '#0dcaf0' : '#ffc107';
+            const badgeTextColor = '#000';
 
-            const marginHtml = (p.tipo === 'PRODUCTO' && p.costo > 0 && p.precio > 0)
-                ? `<span class="badge bg-success" style="font-size:0.55rem;">${(((p.precio - p.costo) / p.precio) * 100).toFixed(0)}%</span>`
-                : '';
+            const margen = (p.tipo === 'PRODUCTO' && p.costo > 0 && p.precio > 0)
+                ? Math.round(((p.precio - p.costo) / p.precio) * 100) + '%'
+                : null;
 
             const precioColor = precioViejo ? '#ffc107' : 'var(--ast-cyan)';
-            const precioBadge = precioViejo
-                ? `<i class="bi bi-clock-history ms-1" style="font-size:0.6rem;color:#ffc107;" title="Sin actualizar hace ${diasStr}"></i>`
+            const clockIcon   = precioViejo
+                ? `<i class="bi bi-clock-history" style="font-size:0.6rem;color:#ffc107;margin-left:2px;" title="${diasStr}"></i>`
                 : '';
-
-            const webDot = p.visibleWeb
-                ? `<span style="font-size:0.6rem;color:#198754;" title="Web ON">●</span> `
-                : '';
+            const webDot = p.visibleWeb ? '● ' : '';
 
             const row = document.createElement('div');
-            row.className = 'list-item-row';
+            row.style.cssText = 'background:#1a1a1a; border-bottom:1px solid #222; padding:8px 10px;';
             row.innerHTML = `
-                <!-- FILA PRINCIPAL -->
-                <div style="display:flex; align-items:center; gap:6px; width:100%;">
+                <!-- LÍNEA 1: código | nombre | precio | acción -->
+                <div style="display:flex; align-items:center; gap:6px; min-width:0;">
 
-                    <!-- Badges izquierda -->
-                    <div style="display:flex; gap:3px; align-items:center; flex-shrink:0;">
-                        ${badgeCode}${marginHtml}
+                    <!-- Código compacto -->
+                    <div style="flex-shrink:0; display:flex; flex-direction:column; gap:2px; align-items:flex-start;">
+                        <span style="background:${badgeColor}; color:${badgeTextColor}; border-radius:4px; padding:1px 5px; font-size:0.6rem; font-weight:bold; white-space:nowrap;">${codigo}</span>
+                        ${margen ? `<span style="background:#198754; color:#fff; border-radius:4px; padding:1px 4px; font-size:0.55rem; white-space:nowrap;">${margen}</span>` : ''}
                     </div>
 
-                    <!-- Nombre + specs (crece) -->
+                    <!-- Nombre (ocupa todo el espacio disponible) -->
                     <div style="flex:1; min-width:0; overflow:hidden;">
-                        <div class="list-item-name" onclick='openViewModal("${p.uuid}")'
-                             style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                            ${webDot}${p.nombre}
+                        <div onclick='openViewModal("${p.uuid}")'
+                             style="font-size:0.82rem; font-weight:bold; color:#fff; cursor:pointer;
+                                    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                            ${webDot ? `<span style="color:#198754;font-size:0.7rem;">${webDot}</span>` : ''}${p.nombre}
                         </div>
-                        <div class="list-item-spec d-none d-sm-block">${p.specs || '---'}</div>
-                    </div>
-
-                    <!-- Precio (fijo derecha) -->
-                    <div style="flex-shrink:0; text-align:right; min-width:80px;">
-                        <div class="fw-bold" style="color:${precioColor}; font-size:0.85rem; white-space:nowrap;">
-                            ${fmt.format(p.precio)}${precioBadge}
+                        <div style="font-size:0.68rem; color:#555; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                            ${p.specs || '---'}
                         </div>
                     </div>
 
-                    <!-- Botones -->
-                    <div style="flex-shrink:0;" class="d-none d-sm-flex gap-1">
-                        <button class="btn btn-sm btn-outline-secondary" onclick='loadEditModal("${p.uuid}")'        title="Editar"><i class="bi bi-pencil-fill"></i></button>
-                        <button class="btn btn-sm btn-cyan"              onclick='addToCart("${p.uuid}")'             title="Añadir"><i class="bi bi-plus-lg"></i></button>
-                        <button class="btn btn-sm btn-outline-success"   onclick='shareProductDirectly("${p.uuid}")' title="WhatsApp"><i class="bi bi-whatsapp"></i></button>
-                        <button class="btn btn-sm btn-outline-info"      onclick='openViewModal("${p.uuid}")'        title="Ver"><i class="bi bi-eye"></i></button>
+                    <!-- Precio -->
+                    <div style="flex-shrink:0; text-align:right; min-width:72px;">
+                        <div style="font-weight:bold; color:${precioColor}; font-size:0.82rem; white-space:nowrap;">
+                            ${fmt.format(p.precio)}${clockIcon}
+                        </div>
                     </div>
 
-                    <!-- Botón compacto solo móvil -->
-                    <div style="flex-shrink:0;" class="d-flex d-sm-none">
-                        <button class="btn btn-sm btn-outline-secondary px-2"
-                                onclick='openViewModal("${p.uuid}")'
-                                title="Ver detalle">
-                            <i class="bi bi-chevron-right"></i>
+                    <!-- Botón ver (móvil) / botones completos (desktop) -->
+                    <div style="flex-shrink:0;" class="d-sm-none">
+                        <button onclick='openViewModal("${p.uuid}")'
+                                style="background:transparent; border:1px solid #444; color:#aaa; border-radius:4px; width:28px; height:28px; display:flex; align-items:center; justify-content:center;">
+                            <i class="bi bi-chevron-right" style="font-size:0.75rem;"></i>
                         </button>
+                    </div>
+                    <div class="d-none d-sm-flex" style="flex-shrink:0; gap:4px;">
+                        <button class="btn btn-sm btn-outline-secondary" onclick='loadEditModal("${p.uuid}")'><i class="bi bi-pencil-fill"></i></button>
+                        <button class="btn btn-sm btn-cyan"              onclick='addToCart("${p.uuid}")'><i class="bi bi-plus-lg"></i></button>
+                        <button class="btn btn-sm btn-outline-success"   onclick='shareProductDirectly("${p.uuid}")'><i class="bi bi-whatsapp"></i></button>
+                        <button class="btn btn-sm btn-outline-info"      onclick='openViewModal("${p.uuid}")'><i class="bi bi-eye"></i></button>
                     </div>
                 </div>
 
-                <!-- FILA SECUNDARIA solo móvil: acciones rápidas -->
-                <div class="d-flex d-sm-none gap-1 mt-1 ps-1" style="width:100%;">
-                    <button class="btn btn-sm btn-outline-secondary flex-grow-1" onclick='loadEditModal("${p.uuid}")'><i class="bi bi-pencil-fill"></i></button>
-                    <button class="btn btn-sm btn-cyan flex-grow-1"              onclick='addToCart("${p.uuid}")'><i class="bi bi-plus-lg"></i></button>
-                    <button class="btn btn-sm btn-outline-success flex-grow-1"   onclick='shareProductDirectly("${p.uuid}")'><i class="bi bi-whatsapp"></i></button>
+                <!-- LÍNEA 2: botones acción — solo móvil -->
+                <div class="d-flex d-sm-none" style="gap:6px; margin-top:6px;">
+                    <button class="btn btn-sm btn-outline-secondary" style="flex:1;"
+                            onclick='loadEditModal("${p.uuid}")'><i class="bi bi-pencil-fill"></i> Editar</button>
+                    <button class="btn btn-sm btn-cyan" style="flex:1;"
+                            onclick='addToCart("${p.uuid}")'><i class="bi bi-plus-lg"></i> Cotizar</button>
+                    <button class="btn btn-sm btn-outline-success" style="flex:1;"
+                            onclick='shareProductDirectly("${p.uuid}")'><i class="bi bi-whatsapp"></i></button>
                 </div>`;
 
             wrapper.appendChild(row);
@@ -1378,7 +1379,7 @@ function renderGrid(data) {
                 const diasDiff = Math.floor((ahora - new Date(p.fechaUltimoCosto).getTime()) / 86400000);
                 if (diasDiff > DIAS_PRECIO_VIEJO) {
                     precioViejo = true;
-                    precioViejoBadge = `<span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem;" title="Costo sin actualizar hace ${diasDiff} días">
+                    precioViejoBadge = `<span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem;" title="${diasDiff} días sin actualizar">
                         <i class="bi bi-clock-history"></i> ${diasDiff}d
                     </span>`;
                 }
@@ -1411,12 +1412,10 @@ function renderGrid(data) {
                 <div class="product-card h-100 p-3 d-flex flex-column">
                     <div class="d-flex justify-content-between mb-2">
                         <div>${badgeCode}${marginHtml}${precioViejoBadge}</div>
-                        ${p.visibleWeb ? '<span class="text-success small">● WEB ON</span>' : ''}${p.publicadoGitHub ? ' <span class="text-warning small" title="Enlace compartible activo"><i class="bi bi-cloud-check-fill"></i></span>' : ''}
+                        ${p.visibleWeb ? '<span class="text-success small">● WEB ON</span>' : ''}${p.publicadoGitHub ? ' <span class="text-warning small"><i class="bi bi-cloud-check-fill"></i></span>' : ''}
                     </div>
                     ${imgHtml}
-                    <h6 class="text-white fw-bold mb-1"
-                        onclick='openViewModal("${p.uuid}")'
-                        style="cursor:pointer;">${p.nombre}</h6>
+                    <h6 class="text-white fw-bold mb-1" onclick='openViewModal("${p.uuid}")' style="cursor:pointer;">${p.nombre}</h6>
                     <small class="text-secondary mb-3 text-truncate">${p.specs || '---'}</small>
                     <div class="mt-auto d-flex justify-content-between align-items-end">
                         <div>
@@ -1425,10 +1424,10 @@ function renderGrid(data) {
                             ${precioViejo ? `<small style="font-size:0.6rem;color:#ffc107;">Verificar costo</small>` : ''}
                         </div>
                         <div class="btn-group">
-                            <button class="btn btn-sm btn-outline-secondary" onclick='loadEditModal("${p.uuid}")'        title="Editar"><i class="bi bi-pencil-fill"></i></button>
-                            <button class="btn btn-sm btn-cyan"              onclick='addToCart("${p.uuid}")'             title="Añadir a cotización"><i class="bi bi-plus-lg"></i></button>
-                            <button class="btn btn-sm btn-outline-success"   onclick='shareProductDirectly("${p.uuid}")' title="WhatsApp Nativo"><i class="bi bi-whatsapp"></i></button>
-                            <button class="btn btn-sm btn-outline-info"      onclick='openViewModal("${p.uuid}")'        title="Ver Detalle"><i class="bi bi-eye"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick='loadEditModal("${p.uuid}")'><i class="bi bi-pencil-fill"></i></button>
+                            <button class="btn btn-sm btn-cyan"              onclick='addToCart("${p.uuid}")'><i class="bi bi-plus-lg"></i></button>
+                            <button class="btn btn-sm btn-outline-success"   onclick='shareProductDirectly("${p.uuid}")'><i class="bi bi-whatsapp"></i></button>
+                            <button class="btn btn-sm btn-outline-info"      onclick='openViewModal("${p.uuid}")'><i class="bi bi-eye"></i></button>
                         </div>
                     </div>
                 </div>
