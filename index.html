@@ -510,7 +510,10 @@
                 </div>
                 <div class="modal-footer border-top border-secondary bg-dark">
                     <button class="btn btn-outline-light flex-grow-1" onclick="openAddItemModal()">
-                        <i class="bi bi-tools"></i> Agregar Ítem/Gasto
+                        <i class="bi bi-tools"></i> Ítem Manual
+                    </button>
+                    <button class="btn btn-cyan flex-grow-1" onclick="openBulkItemModal()">
+                        <i class="bi bi-cart-plus-fill"></i> Compra en Almacén
                     </button>
                 </div>
             </div>
@@ -638,7 +641,102 @@
         </div>
     </div>
     
-                
+     <!-- ============================================================
+     MODAL COMPRA MASIVA [ZONA-FE-02] v33.2
+     Registro rápido de múltiples ítems de un mismo proveedor
+     ============================================================ -->
+<div class="modal fade" id="bulkItemModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-fullscreen-sm-down">
+        <div class="modal-content bg-dark-panel border-secondary" style="height:100%;">
+
+            <div class="modal-header border-secondary py-2">
+                <h6 class="modal-title text-cyan">
+                    <i class="bi bi-cart-plus-fill me-2"></i>Compra en Almacén
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body p-0 d-flex flex-column" style="overflow:hidden; flex:1;">
+
+                <!-- Buscador -->
+                <div style="padding:10px 12px; border-bottom:1px solid #1a2a3a; background:#071726; flex-shrink:0;">
+                    <div style="position:relative;">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-dark border-cyan text-cyan">
+                                <i class="bi bi-search"></i>
+                            </span>
+                            <input type="text" id="bulk-search"
+                                   class="form-control bg-dark text-white border-cyan"
+                                   placeholder="Buscar producto del catálogo..."
+                                   autocomplete="off"
+                                   oninput="buscarCatalogoBulk(this.value)">
+                            <button class="btn btn-outline-secondary"
+                                    onclick="document.getElementById('bulk-search').value='';buscarCatalogoBulk('')">
+                                <i class="bi bi-x"></i>
+                            </button>
+                        </div>
+                        <div id="bulk-search-results"
+                             style="display:none; position:absolute; left:0; right:0; top:100%; z-index:9999;
+                                    background:#0A1628; border:1px solid rgba(0,200,255,0.3);
+                                    border-top:none; border-radius:0 0 8px 8px;
+                                    max-height:200px; overflow-y:auto; box-shadow:0 8px 24px rgba(0,0,0,0.5);">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lista de ítems seleccionados -->
+                <div id="bulk-cart-list" style="flex:1; overflow-y:auto;">
+                    <div id="bulk-empty-state"
+                         style="padding:40px; text-align:center; color:#4A6680;">
+                        <i class="bi bi-cart" style="font-size:2.5rem;"></i>
+                        <p style="font-size:0.85rem; margin-top:10px;">
+                            Busca y agrega productos arriba<br>
+                            <span style="font-size:0.75rem;">Puedes editar cantidad, costo y precio de cada uno</span>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Opciones globales -->
+                <div style="border-top:1px solid #1a2a3a; padding:10px 12px;
+                             background:#071726; flex-shrink:0;">
+                    <div class="mb-2">
+                        <label class="small text-muted">Proveedor de esta compra</label>
+                        <input type="text" id="bulk-proveedor"
+                               class="form-control form-control-sm bg-dark text-white border-secondary"
+                               list="providers-datalist"
+                               placeholder="Se llena automático o escribe aquí">
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" id="bulk-cobrar"
+                                   checked onchange="actualizarListaBulk()">
+                            <label class="form-check-label text-cyan small fw-bold"
+                                   for="bulk-cobrar">¿COBRAR AL CLIENTE?</label>
+                        </div>
+                        <div>
+                            <div style="font-size:0.6rem; color:#4A6680; text-align:right;">TOTAL COSTO</div>
+                            <div id="bulk-total"
+                                 style="font-family:'Space Grotesk',sans-serif; font-weight:700;
+                                        color:#ff9999; font-size:1rem; text-align:right;">$0</div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="modal-footer border-secondary py-2">
+                <button id="bulk-register-btn"
+                        class="btn btn-cyan w-100 fw-bold"
+                        onclick="registrarComprasMasivas()"
+                        disabled>
+                    <i class="bi bi-check2-all me-1"></i>
+                    REGISTRAR <span id="bulk-count-label">0 ítems</span>
+                </button>
+            </div>
+
+        </div>
+    </div>
+</div>           
 
     <div class="modal fade" id="costHistoryModal" tabindex="-1" style="z-index: 1060;">
         <div class="modal-dialog modal-dialog-centered">
