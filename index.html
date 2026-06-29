@@ -526,13 +526,32 @@
                 <div class="modal-body">
                     <input type="hidden" id="ai-id">
 
-                    <div class="mb-3 border-bottom border-secondary pb-3">
+                   <div class="mb-3 border-bottom border-secondary pb-3">
                         <label class="small text-cyan fw-bold">Importar del Catálogo</label>
-                        <div class="input-group input-group-sm">
-                            <input class="form-control bg-dark text-white border-cyan" list="list-catalog-items" id="ai-search" onchange="fillItemFromCatalog(this.value)" placeholder="Escribe para buscar...">
-                            <button class="btn btn-outline-secondary" onclick="document.getElementById('ai-search').value=''"><i class="bi bi-x"></i></button>
+                        <div style="position:relative;">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-dark border-cyan text-cyan">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text"
+                                       id="ai-search"
+                                       class="form-control bg-dark text-white border-cyan"
+                                       placeholder="Escribe nombre del producto..."
+                                       autocomplete="off"
+                                       oninput="buscarEnCatalogo(this.value)">
+                                <button class="btn btn-outline-secondary"
+                                        onclick="limpiarBuscadorCatalogo()">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                            <div id="ai-search-results"
+                                 style="display:none; position:absolute; left:0; right:0; top:100%; z-index:9999;
+                                        background:#0A1628; border:1px solid rgba(0,200,255,0.3);
+                                        border-top:none; border-radius:0 0 8px 8px;
+                                        max-height:220px; overflow-y:auto;">
+                            </div>
                         </div>
-                        <datalist id="list-catalog-items"></datalist>
+                        <div id="ai-selected-item" style="display:none; margin-top:6px;"</div>
                     </div>
 
                     <div id="ai-provider-compare" style="display:none;" class="mb-2"></div>
