@@ -17,6 +17,8 @@ let currentProjectItems = [];
 let currentView = 'PRODUCTO';
 let currentCatalogView = 'cards';
 let deferredPrompt; 
+let bulkCart         = [];
+let _bulkSearchTimer = null;
 
 const fmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
@@ -2228,3 +2230,347 @@ function openLightbox() {
 function closeLightbox() {
     document.getElementById('lightbox-overlay').style.display = 'none';
 }
+
+// ==========================================
+// COMPRA MASIVA EN ALMACÉN [ZONA-FE-02] v33.2
+// ==========================================
+
+function openBulkItemModal() {
+    bulkCart = [];
+    document.getElementById('bulk-search').value    = '';
+    document.getElementById('bulk-proveedor').value = '';
+    document.getElementById('bulk-cobrar').checked  = true;
+
+    const box = document.getElementById('bulk-search-results');
+    if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+
+    actualizarListaBulk();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('bulkItemModal')).show();
+}
+
+function buscarCatalogoBulk(valor) {
+    clearTimeout(_bulkSearchTimer);
+    const box = document.getElementById('bulk-search-results');
+    if (!box) return;
+
+    if (!valor || valor.trim().length < 2) {
+        box.style.display = 'none';
+        box.innerHTML     = '';
+        return;
+    }
+
+    _bulkSearchTimer = setTimeout(() => {
+        const term    = valor.toLowerCase().trim();
+        const matches = catalog.filter(p =>
+            p.nombre.toLowerCase().includes(term) ||
+            (p.codigo && p.codigo.toLowerCase().includes(term)) ||
+            (p.specs  && p.specs.toLowerCase().includes(term))
+        ).slice(0, 10);
+
+        if (matches.length === 0) {
+            box.innerHTML     = `<div style="padding:14px; text-align:center; color:#4A6680; font-size:0.8rem;">Sin resultados para "${valor}"</div>`;
+            box.style.display = 'block';
+            return;
+        }
+
+        box.innerHTML = matches.map(p => {
+            const enCarrito = bulkCart.find(x => x.uuid === p.uuid);
+            const badge = p.tipo === 'PRODUCTO'
+                ? `<span style="background:#0dcaf0;color:#000;border-radius:3px;padding:1px 5px;font-size:0.55rem;font-weight:700;">${p.codigo}</span>`
+                : `<span style="background:#ffc107;color:#000;border-radius:3px;padding:1px 5px;font-size:0.55rem;font-weight:700;">SERV</span>`;
+            const icono = enCarrito
+                ? `<i class="bi bi-check-circle-fill" style="color:#00E676;font-size:1.1rem;"></i>`
+                : `<i class="bi bi-plus-circle" style="color:#00C8FF;font-size:1.1rem;"></i>`;
+
+            return `
+            <div onclick="agregarItemBulk('${p.uuid}')"
+                 style="padding:10px 14px; border-bottom:1px solid rgba(0,200,255,0.08);
+                        cursor:pointer; display:flex; align-items:center; gap:10px;
+                        background:${enCarrito ? 'rgba(0,230,118,0.05)' : 'transparent'};"
+                 onmouseenter="this.style.background='rgba(0,200,255,0.08)'"
+                 onmouseleave="this.style.background='${enCarrito ? 'rgba(0,230,118,0.05)' : 'transparent'}'">
+                <div style="flex:1; min-width:0;">
+                    <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
+                        ${badge}
+                        <span style="font-size:0.83rem; font-weight:600; color:#fff;
+                                     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+                                     max-width:180px;">${p.nombre}</span>
+                    </div>
+                    <div style="font-size:0.67rem; color:#4A6680;">
+                        Costo: ${fmt.format(p.costo || 0)} &nbsp;|&nbsp; Precio: ${p.precio > 0 ? fmt.format(p.precio) : 'Cotizar'}
+                    </div>
+                </div>
+                <div style="flex-shrink:0;">${icono}</div>
+            </div>`;
+        }).join('');
+
+        box.style.display = 'block';
+    }, 200);
+}
+
+function agregarItemBulk(uuid) {
+    const p = catalog.find(x => x.uuid === uuid);
+    if (!p) return;
+
+    const existe = bulkCart.find(x => x.uuid === uuid);
+    if (existe) {
+        existe.cantidad++;
+    } else {
+        bulkCart.push({
+            uuid:     p.uuid,
+            nombre:   p.nombre,
+            tipo:     p.tipo,
+            codigo:   p.codigo || '',
+            cantidad: 1,
+            costo:    p.costo  || 0,
+            venta:    p.precio || 0
+        });
+        // Auto-fill proveedor del catálogo si el campo está vacío
+        const provInput = document.getElementById('bulk-proveedor');
+        if (provInput && !provInput.value.trim() && p.proveedor) {
+            provInput.value = p.proveedor;
+        }
+    }
+
+    // Cerrar resultados y limpiar buscador
+    const box = document.getElementById('bulk-search-results');
+    if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+    document.getElementById('bulk-search').value = '';
+
+    actualizarListaBulk();
+}
+
+function actualizarListaBulk() {
+    const container  = document.getElementById('bulk-cart-list');
+    const totalEl    = document.getElementById('bulk-total');
+    const countLabel = document.getElementById('bulk-count-label');
+    const btn        = document.getElementById('bulk-register-btn');
+
+    if (bulkCart.length === 0) {
+        container.innerHTML = `
+            <div style="padding:40px; text-align:center; color:#4A6680;">
+                <i class="bi bi-cart" style="font-size:2.5rem;"></i>
+                <p style="font-size:0.85rem; margin-top:10px;">
+                    Busca y agrega productos arriba<br>
+                    <span style="font-size:0.75rem;">Puedes editar cantidad, costo y precio de cada uno</span>
+                </p>
+            </div>`;
+        if (totalEl)    totalEl.innerText    = '$0';
+        if (countLabel) countLabel.innerText = '0 ítems';
+        if (btn)        btn.disabled         = true;
+        return;
+    }
+
+    let totalCosto = 0;
+    container.innerHTML = bulkCart.map((item, idx) => {
+        totalCosto += item.costo * item.cantidad;
+        const bgRow = idx % 2 === 0 ? '#071726' : '#050f1a';
+        return `
+        <div style="padding:10px 12px; border-bottom:1px solid #1a2a3a; background:${bgRow};">
+
+            <!-- Nombre + eliminar -->
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <div style="flex:1; min-width:0;">
+                    <div style="font-size:0.83rem; font-weight:600; color:#fff;
+                                white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        ${item.nombre}
+                    </div>
+                    <div style="font-size:0.63rem; color:#4A6680;">${item.codigo}</div>
+                </div>
+                <button onclick="eliminarItemBulk('${item.uuid}')"
+                        style="background:transparent; border:1px solid rgba(255,68,68,0.3);
+                               color:#ff4444; border-radius:4px; padding:2px 8px;
+                               font-size:0.75rem; cursor:pointer; flex-shrink:0;">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+
+            <!-- Controles: cantidad + costo + precio -->
+            <div style="display:grid; grid-template-columns:auto 1fr 1fr; gap:8px; align-items:end;">
+
+                <!-- Cantidad -->
+                <div>
+                    <div style="font-size:0.58rem; color:#aaa; margin-bottom:3px;">CANT</div>
+                    <div style="display:flex; align-items:center; background:#0A1628;
+                                border:1px solid #2a3a4a; border-radius:6px; overflow:hidden;">
+                        <button onclick="cambiarCantidadBulk('${item.uuid}', -1)"
+                                style="background:transparent; border:none; color:#aaa;
+                                       width:30px; height:32px; font-size:1.1rem;
+                                       cursor:pointer; flex-shrink:0;">−</button>
+                        <input type="number" value="${item.cantidad}" min="1"
+                               onchange="setCantidadBulk('${item.uuid}', this.value)"
+                               style="width:36px; background:transparent; border:none;
+                                      color:#fff; text-align:center; font-size:0.85rem;
+                                      font-weight:700; padding:0;">
+                        <button onclick="cambiarCantidadBulk('${item.uuid}', 1)"
+                                style="background:transparent; border:none; color:#00C8FF;
+                                       width:30px; height:32px; font-size:1.1rem;
+                                       cursor:pointer; flex-shrink:0;">+</button>
+                    </div>
+                </div>
+
+                <!-- Costo -->
+                <div>
+                    <div style="font-size:0.58rem; color:#ff6b6b; margin-bottom:3px;">COSTO UNIT</div>
+                    <input type="number" value="${item.costo}"
+                           onchange="setCostoBulk('${item.uuid}', this.value)"
+                           style="width:100%; background:#0A1628;
+                                  border:1px solid rgba(255,107,107,0.4);
+                                  border-radius:6px; color:#ff9999;
+                                  font-size:0.8rem; padding:5px 8px; font-weight:600;">
+                </div>
+
+                <!-- Precio venta -->
+                <div>
+                    <div style="font-size:0.58rem; color:#00C8FF; margin-bottom:3px;">PRECIO VENTA</div>
+                    <input type="number" value="${item.venta}"
+                           onchange="setPrecioBulk('${item.uuid}', this.value)"
+                           style="width:100%; background:#0A1628;
+                                  border:1px solid rgba(0,200,255,0.3);
+                                  border-radius:6px; color:#00C8FF;
+                                  font-size:0.8rem; padding:5px 8px; font-weight:600;">
+                </div>
+            </div>
+
+            <!-- Subtotal -->
+            <div style="text-align:right; font-size:0.68rem; color:#4A6680; margin-top:5px;">
+                Subtotal costo:
+                <span style="color:#ff9999; font-weight:600;">
+                    ${fmt.format(item.costo * item.cantidad)}
+                </span>
+            </div>
+        </div>`;
+    }).join('');
+
+    if (totalEl)    totalEl.innerText    = fmt.format(totalCosto);
+    if (countLabel) countLabel.innerText = `${bulkCart.length} ítem${bulkCart.length !== 1 ? 's' : ''}`;
+    if (btn)        btn.disabled         = false;
+}
+
+function cambiarCantidadBulk(uuid, delta) {
+    const item = bulkCart.find(x => x.uuid === uuid);
+    if (!item) return;
+    item.cantidad = Math.max(1, item.cantidad + delta);
+    actualizarListaBulk();
+}
+
+function setCantidadBulk(uuid, val) {
+    const item = bulkCart.find(x => x.uuid === uuid);
+    if (!item) return;
+    const n = parseInt(val);
+    item.cantidad = (!n || n < 1) ? 1 : n;
+    actualizarListaBulk();
+}
+
+function setCostoBulk(uuid, val) {
+    const item = bulkCart.find(x => x.uuid === uuid);
+    if (item) { item.costo = Number(val) || 0; actualizarListaBulk(); }
+}
+
+function setPrecioBulk(uuid, val) {
+    const item = bulkCart.find(x => x.uuid === uuid);
+    if (item) { item.venta = Number(val) || 0; actualizarListaBulk(); }
+}
+
+function eliminarItemBulk(uuid) {
+    bulkCart = bulkCart.filter(x => x.uuid !== uuid);
+    actualizarListaBulk();
+}
+
+async function registrarComprasMasivas() {
+    if (bulkCart.length === 0) return;
+
+    const btn       = document.getElementById('bulk-register-btn');
+    const proveedor = document.getElementById('bulk-proveedor').value.trim();
+    const cobrar    = document.getElementById('bulk-cobrar').checked;
+    const total     = bulkCart.length;
+
+    btn.disabled  = true;
+    btn.innerHTML = `<div class="spinner-border spinner-border-sm me-2"
+                         style="width:0.9rem;height:0.9rem;border-width:0.15em;"></div>
+                     Registrando ${total} ítem${total !== 1 ? 's' : ''}...`;
+
+    // OPTIMISTIC UPDATE — todos al estado local inmediatamente
+    const nuevosMovs = bulkCart.map(item => ({
+        idMov:       generateUUID(),
+        fecha:       new Date().toISOString(),
+        tipo:        item.tipo === 'SERVICIO' ? 'MANO_OBRA' : 'MATERIAL',
+        descripcion: item.nombre,
+        proveedor:   proveedor,
+        cantidad:    item.cantidad,
+        costo:       item.costo,
+        venta:       item.venta,
+        esCobrar:    cobrar,
+        horas:       0,
+        estadoTarea: 'PENDIENTE',
+        notaVisita:  ''
+    }));
+
+    nuevosMovs.forEach(m => currentProjectItems.push(m));
+
+    let tCosto = 0, tVenta = 0;
+    currentProjectItems.forEach(m => {
+        tCosto += (m.costo * m.cantidad);
+        if (m.esCobrar === true || m.esCobrar === 'TRUE') tVenta += (m.venta * m.cantidad);
+    });
+    currentProjectData.totalCostos  = tCosto;
+    currentProjectData.totalCobrado = tVenta;
+    currentProjectData.utilidad     = tVenta - tCosto;
+
+    const projIdx = projects.findIndex(p => p.id === currentProject);
+    if (projIdx !== -1) {
+        projects[projIdx].totalCostos  = tCosto;
+        projects[projIdx].totalCobrado = tVenta;
+        projects[projIdx].utilidad     = tVenta - tCosto;
+    }
+
+    renderProjectItems();
+    calculateDashboard();
+
+    // Cerrar modal
+    const mi = bootstrap.Modal.getInstance(document.getElementById('bulkItemModal'));
+    if (mi) { mi.hide(); cleanBackdrops(); }
+
+    showToast(`⏳ Guardando ${total} ítems en segundo plano...`, 'info');
+
+    // BACKEND: llamadas en paralelo
+    const promesas = bulkCart.map(item =>
+        callApi('addProjectMovement', {
+            idMov:       generateUUID(),
+            projectId:   currentProject,
+            tipo:        item.tipo === 'SERVICIO' ? 'MANO_OBRA' : 'MATERIAL',
+            descripcion: item.nombre,
+            proveedor:   proveedor,
+            cantidad:    item.cantidad,
+            costo:       item.costo,
+            venta:       item.venta,
+            esCobrar:    cobrar,
+            horas:       0,
+            estadoTarea: 'PENDIENTE',
+            notaVisita:  ''
+        })
+    );
+
+    const resultados = await Promise.all(promesas);
+    const errores    = resultados.filter(r => !r.success).length;
+
+    if (errores === 0) {
+        showToast(`✅ ${total} ítem${total !== 1 ? 's' : ''} registrados correctamente`, 'success');
+    } else {
+        showToast(`⚠️ ${errores} ítem(s) con error — verificando...`, 'warning');
+    }
+
+    bulkCart = [];
+    refreshProjectsOnly();
+    if (proveedor) refreshProveedoresOnly();
+}
+
+// Cerrar resultados al tocar fuera del buscador
+document.addEventListener('click', function(e) {
+    const search  = document.getElementById('bulk-search');
+    const results = document.getElementById('bulk-search-results');
+    if (!results) return;
+    if (search && !search.contains(e.target) && !results.contains(e.target)) {
+        results.style.display = 'none';
+    }
+});
