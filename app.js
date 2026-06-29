@@ -881,22 +881,18 @@ function openAddItemModal() {
     document.getElementById('ai-nota').value   = '';
     document.getElementById('ai-search').value = '';
 
-    const compare = document.getElementById('ai-provider-compare');
-    if (compare) { compare.style.display = 'none'; compare.innerHTML = ''; }
+    const results  = document.getElementById('ai-search-results');
+    const selected = document.getElementById('ai-selected-item');
+    const compare  = document.getElementById('ai-provider-compare');
+    if (results)  { results.style.display  = 'none'; results.innerHTML  = ''; }
+    if (selected) { selected.style.display = 'none'; selected.innerHTML = ''; }
+    if (compare)  { compare.style.display  = 'none'; compare.innerHTML  = ''; }
 
     document.getElementById('ai-cobrar').checked = true;
     toggleVentaInput();
 
     document.querySelector('#addItemModal .modal-title').innerText = "Registrar Movimiento";
     document.querySelector('#addItemModal .btn-primary').innerText = "REGISTRAR";
-
-    const dl = document.getElementById('list-catalog-items');
-    dl.innerHTML = '';
-    catalog.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.nombre;
-        dl.appendChild(opt);
-    });
 
     bootstrap.Modal.getOrCreateInstance(document.getElementById('addItemModal')).show();
 }
@@ -914,6 +910,14 @@ function openEditItemModal(idMov) {
     document.getElementById('ai-horas').value  = item.horas       || 0;
     document.getElementById('ai-estado').value = item.estadoTarea || 'PENDIENTE';
     document.getElementById('ai-nota').value   = item.notaVisita  || '';
+    document.getElementById('ai-search').value = '';
+
+    const results  = document.getElementById('ai-search-results');
+    const selected = document.getElementById('ai-selected-item');
+    const compare  = document.getElementById('ai-provider-compare');
+    if (results)  { results.style.display  = 'none'; results.innerHTML  = ''; }
+    if (selected) { selected.style.display = 'none'; selected.innerHTML = ''; }
+    if (compare)  { compare.style.display  = 'none'; compare.innerHTML  = ''; }
 
     const tipoSelect = document.getElementById('ai-tipo');
     if (tipoSelect.querySelector(`option[value="${item.tipo}"]`)) {
@@ -929,7 +933,131 @@ function openEditItemModal(idMov) {
 
     bootstrap.Modal.getOrCreateInstance(document.getElementById('addItemModal')).show();
 }
+// ==========================================
+// BUSCADOR CATÁLOGO MÓVIL [ZONA-FE-02] v33.2
+// Reemplaza <datalist> — funciona en Android
+// ==========================================
+let _buscarTimer = null;
 
+function buscarEnCatalogo(valor) {
+    clearTimeout(_buscarTimer);
+    const box = document.getElementById('ai-search-results');
+    if (!box) return;
+
+    if (!valor || valor.trim().length < 2) {
+        box.style.display = 'none';
+        box.innerHTML     = '';
+        return;
+    }
+
+    _buscarTimer = setTimeout(() => {
+        const term    = valor.toLowerCase().trim();
+        const matches = catalog.filter(p =>
+            p.nombre.toLowerCase().includes(term) ||
+            (p.codigo && p.codigo.toLowerCase().includes(term)) ||
+            (p.specs  && p.specs.toLowerCase().includes(term))
+        ).slice(0, 8);
+
+        if (matches.length === 0) {
+            box.innerHTML     = `<div style="padding:12px; text-align:center; color:#4A6680; font-size:0.8rem;">Sin resultados para "${valor}"</div>`;
+            box.style.display = 'block';
+            return;
+        }
+
+        box.innerHTML = matches.map(p => {
+            const badge      = p.tipo === 'PRODUCTO'
+                ? `<span style="background:#0dcaf0;color:#000;border-radius:3px;padding:1px 5px;font-size:0.55rem;font-weight:700;">${p.codigo}</span>`
+                : `<span style="background:#ffc107;color:#000;border-radius:3px;padding:1px 5px;font-size:0.55rem;font-weight:700;">SERV</span>`;
+            const precio     = p.precio > 0 ? fmt.format(p.precio) : 'Cotizar';
+            return `
+            <div onclick="seleccionarDelCatalogo('${p.uuid}')"
+                 style="padding:10px 14px; border-bottom:1px solid rgba(0,200,255,0.1);
+                        cursor:pointer; transition:background 0.15s; display:flex;
+                        align-items:center; gap:10px;"
+                 onmouseenter="this.style.background='rgba(0,200,255,0.08)'"
+                 onmouseleave="this.style.background='transparent'">
+                <div style="flex:1; min-width:0;">
+                    <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
+                        ${badge}
+                        <span style="font-size:0.82rem; font-weight:600; color:#fff;
+                                     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+                                     max-width:180px;">${p.nombre}</span>
+                    </div>
+                    <div style="font-size:0.68rem; color:#4A6680; white-space:nowrap;
+                                overflow:hidden; text-overflow:ellipsis;">
+                        ${p.specs ? p.specs.substring(0, 60) + '...' : '—'}
+                    </div>
+                </div>
+                <div style="flex-shrink:0; font-size:0.78rem; font-weight:700; color:#00C8FF;">
+                    ${precio}
+                </div>
+            </div>`;
+        }).join('');
+
+        box.style.display = 'block';
+    }, 300);
+}
+
+async function seleccionarDelCatalogo(uuid) {
+    const p   = catalog.find(x => x.uuid === uuid);
+    const box = document.getElementById('ai-search-results');
+    const sel = document.getElementById('ai-selected-item');
+    if (!p) return;
+
+    // Cerrar resultados
+    if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+
+    // Mostrar seleccionado
+    document.getElementById('ai-search').value = p.nombre;
+    if (sel) {
+        sel.style.display = 'block';
+        sel.innerHTML = `<div style="background:rgba(0,200,255,0.08); border:1px solid rgba(0,200,255,0.25);
+                                     border-radius:6px; padding:8px 12px; display:flex;
+                                     align-items:center; justify-content:space-between;">
+            <span style="font-size:0.78rem; color:#00C8FF; font-weight:600;">
+                <i class="bi bi-check-circle-fill me-1"></i>${p.nombre}
+            </span>
+            <span style="font-size:0.72rem; color:#4A6680;">${p.codigo}</span>
+        </div>`;
+    }
+
+    // Llenar campos
+    document.getElementById('ai-desc').value  = p.nombre;
+    document.getElementById('ai-costo').value = p.costo  || 0;
+    document.getElementById('ai-venta').value = p.precio || 0;
+
+    const tipoSelect = document.getElementById('ai-tipo');
+    tipoSelect.value = p.tipo === 'SERVICIO' ? 'MANO_OBRA' : 'MATERIAL';
+
+    // Comparador de proveedores
+    if (p.tipo === 'PRODUCTO') {
+        renderProviderCompare(null, true);
+        const res = await callApi('getProviderPrices', { nombre: p.nombre });
+        renderProviderCompare(res.success ? res.data : []);
+    } else {
+        renderProviderCompare([]);
+    }
+}
+
+function limpiarBuscadorCatalogo() {
+    document.getElementById('ai-search').value = '';
+    const box = document.getElementById('ai-search-results');
+    const sel = document.getElementById('ai-selected-item');
+    const cmp = document.getElementById('ai-provider-compare');
+    if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+    if (sel) { sel.style.display = 'none'; sel.innerHTML = ''; }
+    if (cmp) { cmp.style.display = 'none'; cmp.innerHTML = ''; }
+}
+
+// Cerrar resultados al tocar fuera
+document.addEventListener('click', function(e) {
+    const search  = document.getElementById('ai-search');
+    const results = document.getElementById('ai-search-results');
+    if (!results) return;
+    if (search && !search.contains(e.target) && !results.contains(e.target)) {
+        results.style.display = 'none';
+    }
+});
 async function fillItemFromCatalog(name) {
     const item = catalog.find(p => p.nombre === name);
     if (!item) return;
