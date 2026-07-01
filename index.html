@@ -659,6 +659,28 @@
             <div class="modal-body p-0 d-flex flex-column" style="overflow:hidden; flex:1;">
 
                 <!-- Buscador -->
+                <!-- Tabs: Por ítem / Factura rápida -->
+                <div style="display:flex; border-bottom:1px solid #1a2a3a; flex-shrink:0;">
+                    <button id="bulk-tab-items"
+                            onclick="switchBulkTab('items')"
+                            style="flex:1; padding:10px; background:#071726; border:none;
+                                   border-bottom:2px solid #00C8FF; color:#00C8FF;
+                                   font-family:'Space Grotesk',sans-serif; font-size:0.78rem;
+                                   font-weight:600; cursor:pointer;">
+                        <i class="bi bi-list-check me-1"></i> Por Ítem
+                    </button>
+                    <button id="bulk-tab-factura"
+                            onclick="switchBulkTab('factura')"
+                            style="flex:1; padding:10px; background:#050f1a; border:none;
+                                   border-bottom:2px solid transparent; color:#4A6680;
+                                   font-family:'Space Grotesk',sans-serif; font-size:0.78rem;
+                                   font-weight:600; cursor:pointer;">
+                        <i class="bi bi-receipt me-1"></i> Factura Total
+                    </button>
+                </div>
+
+                <!-- TAB: Por ítem — Buscador -->
+                <div id="bulk-panel-items">
                 <div style="padding:10px 12px; border-bottom:1px solid #1a2a3a; background:#071726; flex-shrink:0;">
                     <div style="position:relative;">
                         <div class="input-group input-group-sm">
@@ -682,6 +704,43 @@
                                     max-height:200px; overflow-y:auto; box-shadow:0 8px 24px rgba(0,0,0,0.5);">
                         </div>
                     </div>
+              </div>
+                </div><!-- /bulk-panel-items buscador -->
+
+                <!-- TAB: Factura Total -->
+                <div id="bulk-panel-factura" style="display:none; padding:16px 12px; flex-shrink:0;">
+                    <div class="mb-3">
+                        <label class="small text-muted">Descripción de la compra</label>
+                        <input type="text" id="bulk-factura-desc"
+                               class="form-control form-control-sm bg-dark text-white border-secondary"
+                               placeholder="Ej: Materiales eléctricos Félix Torres COT-305753">
+                    </div>
+                    <div class="mb-3">
+                        <label class="small text-danger fw-bold">Total que pagaste (con IVA incluido)</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-dark border-danger text-danger">$</span>
+                            <input type="number" id="bulk-factura-costo"
+                                   class="form-control bg-dark text-white border-danger"
+                                   placeholder="0" value="0">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="small text-muted">Proveedor</label>
+                        <input type="text" id="bulk-factura-prov"
+                               class="form-control form-control-sm bg-dark text-white border-secondary"
+                               list="providers-datalist"
+                               placeholder="Nombre del proveedor">
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="bulk-factura-cobrar" checked>
+                        <label class="form-check-label text-cyan small fw-bold" for="bulk-factura-cobrar">
+                            ¿COBRAR AL CLIENTE?
+                        </label>
+                    </div>
+                    <div class="mt-2 p-2 rounded" style="background:rgba(0,200,255,0.05); border:1px solid rgba(0,200,255,0.15); font-size:0.72rem; color:#4A6680;">
+                        <i class="bi bi-info-circle text-cyan me-1"></i>
+                        Se registra como un solo movimiento con el total. Útil para facturas o remisiones completas.
+                    </div>
                 </div>
 
                 <!-- Lista de ítems seleccionados -->
@@ -695,8 +754,10 @@
                         </p>
                     </div>
                 </div>
+                </div><!-- /bulk-panel-items -->
 
-                <!-- Opciones globales -->
+                <!-- Opciones globales — solo visible en tab Por Ítem -->
+                <div id="bulk-opciones-globales">
                 <div style="border-top:1px solid #1a2a3a; padding:10px 12px;
                              background:#071726; flex-shrink:0;">
                     <div class="mb-2">
@@ -721,6 +782,7 @@
                         </div>
                     </div>
                 </div>
+                </div><!-- /bulk-opciones-globales -->
 
             </div>
 
