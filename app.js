@@ -2679,4 +2679,4 @@ async function registrarComprasMasivas() {
     refreshProjectsOnly();
     if (proveedor) refreshProveedoresOnly();
 }
-});
+
