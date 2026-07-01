@@ -2245,7 +2245,26 @@ function openBulkItemModal() {
     if (box) { box.style.display = 'none'; box.innerHTML = ''; }
 
     actualizarListaBulk();
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('bulkItemModal')).show();
+
+    // Cerrar modal de proyecto primero, luego abrir bulk
+    const projModal = bootstrap.Modal.getInstance(document.getElementById('projectDetailModal'));
+    if (projModal) {
+        projModal.hide();
+        setTimeout(() => {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('bulkItemModal')).show();
+        }, 350);
+    } else {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('bulkItemModal')).show();
+    }
+
+    // Al cerrar bulk, reabrir el proyecto automáticamente
+    const bulkEl = document.getElementById('bulkItemModal');
+    bulkEl.addEventListener('hidden.bs.modal', function reabrirProyecto() {
+        bulkEl.removeEventListener('hidden.bs.modal', reabrirProyecto);
+        if (currentProject) {
+            setTimeout(() => openProjectDetail(currentProject), 300);
+        }
+    });
 }
 
 function buscarCatalogoBulk(valor) {
@@ -2477,10 +2496,112 @@ function eliminarItemBulk(uuid) {
     actualizarListaBulk();
 }
 
+function switchBulkTab(tab) {
+    const panelItems    = document.getElementById('bulk-panel-items');
+    const panelFactura  = document.getElementById('bulk-panel-factura');
+    const opcionesGlob  = document.getElementById('bulk-opciones-globales');
+    const tabItems      = document.getElementById('bulk-tab-items');
+    const tabFactura    = document.getElementById('bulk-tab-factura');
+    const btn           = document.getElementById('bulk-register-btn');
+    const countLabel    = document.getElementById('bulk-count-label');
+
+    if (tab === 'items') {
+        panelItems.style.display   = '';
+        panelFactura.style.display = 'none';
+        opcionesGlob.style.display = '';
+        tabItems.style.borderBottomColor = '#00C8FF';
+        tabItems.style.color             = '#00C8FF';
+        tabItems.style.background        = '#071726';
+        tabFactura.style.borderBottomColor = 'transparent';
+        tabFactura.style.color             = '#4A6680';
+        tabFactura.style.background        = '#050f1a';
+        actualizarListaBulk();
+    } else {
+        panelItems.style.display   = 'none';
+        panelFactura.style.display = '';
+        opcionesGlob.style.display = 'none';
+        tabItems.style.borderBottomColor = 'transparent';
+        tabItems.style.color             = '#4A6680';
+        tabItems.style.background        = '#050f1a';
+        tabFactura.style.borderBottomColor = '#00C8FF';
+        tabFactura.style.color             = '#00C8FF';
+        tabFactura.style.background        = '#071726';
+        btn.disabled         = false;
+        countLabel.innerText = 'factura completa';
+    }
+}
 async function registrarComprasMasivas() {
+    const tabFactura = document.getElementById('bulk-tab-factura');
+    const modoFactura = tabFactura && tabFactura.style.color === 'rgb(0, 200, 255)';
+
+    const btn = document.getElementById('bulk-register-btn');
+
+    // ── MODO FACTURA TOTAL ────────────────────────────────────
+    if (modoFactura) {
+        const desc     = document.getElementById('bulk-factura-desc').value.trim();
+        const costo    = Number(document.getElementById('bulk-factura-costo').value) || 0;
+        const proveedor = document.getElementById('bulk-factura-prov').value.trim();
+        const cobrar   = document.getElementById('bulk-factura-cobrar').checked;
+
+        if (!desc)  return showToast('Escribe una descripción', 'warning');
+        if (!costo) return showToast('Escribe el total pagado', 'warning');
+
+        btn.disabled  = true;
+        btn.innerHTML = `<div class="spinner-border spinner-border-sm me-2"
+                             style="width:0.9rem;height:0.9rem;border-width:0.15em;"></div>
+                         Registrando...`;
+
+        const payload = {
+            idMov:       generateUUID(),
+            projectId:   currentProject,
+            tipo:        'MATERIAL',
+            descripcion: desc,
+            proveedor:   proveedor,
+            cantidad:    1,
+            costo:       costo,
+            venta:       cobrar ? costo : 0,
+            esCobrar:    cobrar,
+            horas:       0,
+            estadoTarea: 'HECHO',
+            notaVisita:  ''
+        };
+
+        // Optimistic update
+        currentProjectItems.push({ ...payload, fecha: new Date().toISOString() });
+        let tCosto = 0, tVenta = 0;
+        currentProjectItems.forEach(m => {
+            tCosto += m.costo * m.cantidad;
+            if (m.esCobrar === true || m.esCobrar === 'TRUE') tVenta += m.venta * m.cantidad;
+        });
+        currentProjectData.totalCostos  = tCosto;
+        currentProjectData.totalCobrado = tVenta;
+        currentProjectData.utilidad     = tVenta - tCosto;
+        const pIdx = projects.findIndex(p => p.id === currentProject);
+        if (pIdx !== -1) {
+            projects[pIdx].totalCostos  = tCosto;
+            projects[pIdx].totalCobrado = tVenta;
+            projects[pIdx].utilidad     = tVenta - tCosto;
+        }
+        renderProjectItems();
+        calculateDashboard();
+
+        const mi = bootstrap.Modal.getInstance(document.getElementById('bulkItemModal'));
+        if (mi) { mi.hide(); cleanBackdrops(); }
+
+        const res = await callApi('addProjectMovement', payload);
+        if (res.success) {
+            showToast('✅ Factura registrada correctamente', 'success');
+        } else {
+            showToast('⚠️ Error al guardar — verifica conexión', 'warning');
+        }
+        refreshProjectsOnly();
+        if (proveedor) refreshProveedoresOnly();
+        return;
+    }
+
+    // ── MODO POR ÍTEM ────────────────────────────────────────
     if (bulkCart.length === 0) return;
 
-    const btn       = document.getElementById('bulk-register-btn');
     const proveedor = document.getElementById('bulk-proveedor').value.trim();
     const cobrar    = document.getElementById('bulk-cobrar').checked;
     const total     = bulkCart.length;
@@ -2490,7 +2611,7 @@ async function registrarComprasMasivas() {
                          style="width:0.9rem;height:0.9rem;border-width:0.15em;"></div>
                      Registrando ${total} ítem${total !== 1 ? 's' : ''}...`;
 
-    // OPTIMISTIC UPDATE — todos al estado local inmediatamente
+    // Optimistic update
     const nuevosMovs = bulkCart.map(item => ({
         idMov:       generateUUID(),
         fecha:       new Date().toISOString(),
@@ -2510,32 +2631,28 @@ async function registrarComprasMasivas() {
 
     let tCosto = 0, tVenta = 0;
     currentProjectItems.forEach(m => {
-        tCosto += (m.costo * m.cantidad);
-        if (m.esCobrar === true || m.esCobrar === 'TRUE') tVenta += (m.venta * m.cantidad);
+        tCosto += m.costo * m.cantidad;
+        if (m.esCobrar === true || m.esCobrar === 'TRUE') tVenta += m.venta * m.cantidad;
     });
     currentProjectData.totalCostos  = tCosto;
     currentProjectData.totalCobrado = tVenta;
     currentProjectData.utilidad     = tVenta - tCosto;
-
     const projIdx = projects.findIndex(p => p.id === currentProject);
     if (projIdx !== -1) {
         projects[projIdx].totalCostos  = tCosto;
         projects[projIdx].totalCobrado = tVenta;
         projects[projIdx].utilidad     = tVenta - tCosto;
     }
-
     renderProjectItems();
     calculateDashboard();
 
-    // Cerrar modal
     const mi = bootstrap.Modal.getInstance(document.getElementById('bulkItemModal'));
     if (mi) { mi.hide(); cleanBackdrops(); }
 
-    showToast(`⏳ Guardando ${total} ítems en segundo plano...`, 'info');
+    showToast(`⏳ Guardando ${total} ítems...`, 'info');
 
-    // BACKEND: llamadas en paralelo
-    const promesas = bulkCart.map(item =>
-        callApi('addProjectMovement', {
+    const resultados = await Promise.all(
+        bulkCart.map(item => callApi('addProjectMovement', {
             idMov:       generateUUID(),
             projectId:   currentProject,
             tipo:        item.tipo === 'SERVICIO' ? 'MANO_OBRA' : 'MATERIAL',
@@ -2548,29 +2665,18 @@ async function registrarComprasMasivas() {
             horas:       0,
             estadoTarea: 'PENDIENTE',
             notaVisita:  ''
-        })
+        }))
     );
 
-    const resultados = await Promise.all(promesas);
-    const errores    = resultados.filter(r => !r.success).length;
-
+    const errores = resultados.filter(r => !r.success).length;
     if (errores === 0) {
-        showToast(`✅ ${total} ítem${total !== 1 ? 's' : ''} registrados correctamente`, 'success');
+        showToast(`✅ ${total} ítem${total !== 1 ? 's' : ''} registrados`, 'success');
     } else {
-        showToast(`⚠️ ${errores} ítem(s) con error — verificando...`, 'warning');
+        showToast(`⚠️ ${errores} con error — verifica conexión`, 'warning');
     }
 
     bulkCart = [];
     refreshProjectsOnly();
     if (proveedor) refreshProveedoresOnly();
 }
-
-// Cerrar resultados al tocar fuera del buscador
-document.addEventListener('click', function(e) {
-    const search  = document.getElementById('bulk-search');
-    const results = document.getElementById('bulk-search-results');
-    if (!results) return;
-    if (search && !search.contains(e.target) && !results.contains(e.target)) {
-        results.style.display = 'none';
-    }
 });
