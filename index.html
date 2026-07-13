@@ -505,8 +505,25 @@
                         </div>
                     </div>
 
-                    <div class="p-3" id="pd-items-list">
+                   <!-- Buscador de movimientos -->
+                    <div style="padding:8px 12px; border-bottom:1px solid #1a2a3a; background:#071726; position:sticky; top:0; z-index:10;">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-dark border-secondary text-muted">
+                                <i class="bi bi-search"></i>
+                            </span>
+                            <input type="text" id="pd-search"
+                                   class="form-control bg-dark text-white border-secondary"
+                                   placeholder="Filtrar movimientos..."
+                                   oninput="filtrarMovimientosProyecto(this.value)">
+                            <button class="btn btn-outline-secondary"
+                                    onclick="document.getElementById('pd-search').value=''; filtrarMovimientosProyecto('')">
+                                <i class="bi bi-x"></i>
+                            </button>
                         </div>
+                    </div>
+
+                    <div class="p-3" id="pd-items-list">
+                    </div>
                 </div>
                 <div class="modal-footer border-top border-secondary bg-dark">
                     <button class="btn btn-outline-light flex-grow-1" onclick="openAddItemModal()">
