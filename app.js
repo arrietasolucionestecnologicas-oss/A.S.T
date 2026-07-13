@@ -2709,7 +2709,7 @@ async function registrarComprasMasivas() {
 // BUSCADOR DE MOVIMIENTOS EN PROYECTO
 // ==========================================
 function filtrarMovimientosProyecto(term) {
-    const list = document.getElementById('pd-items-list');
+    var list = document.getElementById('pd-items-list');
     if (!list) return;
 
     if (!term || term.trim() === '') {
@@ -2717,85 +2717,79 @@ function filtrarMovimientosProyecto(term) {
         return;
     }
 
-    const t = term.toLowerCase().trim();
-    const filtrados = currentProjectItems.filter(item =>
-        item.descripcion.toLowerCase().includes(t) ||
-        (item.tipo      && item.tipo.toLowerCase().includes(t)) ||
-        (item.proveedor && item.proveedor.toLowerCase().includes(t)) ||
-        (item.notaVisita && item.notaVisita.toLowerCase().includes(t))
-    );
+    var t = term.toLowerCase().trim();
+    var filtrados = currentProjectItems.filter(function(item) {
+        return item.descripcion.toLowerCase().indexOf(t) !== -1
+            || (item.proveedor  && item.proveedor.toLowerCase().indexOf(t)  !== -1)
+            || (item.tipo       && item.tipo.toLowerCase().indexOf(t)       !== -1)
+            || (item.notaVisita && item.notaVisita.toLowerCase().indexOf(t) !== -1);
+    });
 
-    const estadoMap = {
+    if (filtrados.length === 0) {
+        list.innerHTML = '<div style="text-align:center;padding:30px;color:#4A6680;">'
+            + '<i class="bi bi-search" style="font-size:1.8rem;"></i>'
+            + '<p style="font-size:0.83rem;margin-top:8px;">Sin resultados para <b style="color:#fff;">'
+            + term + '</b></p></div>';
+        return;
+    }
+
+    var estadoMap = {
         'PENDIENTE':   { color: '#ffc107', icon: 'bi-clock',         label: 'Pendiente'   },
         'EN_PROGRESO': { color: '#0dcaf0', icon: 'bi-tools',         label: 'En Progreso' },
         'HECHO':       { color: '#198754', icon: 'bi-check2-circle', label: 'Hecho'       }
     };
 
-    if (filtrados.length === 0) {
-        list.innerHTML = '<div style="text-align:center; padding:30px; color:#4A6680;">'
-            + '<i class="bi bi-search" style="font-size:1.8rem;"></i>'
-            + '<p style="font-size:0.83rem; margin-top:8px;">Sin resultados para <strong style="color:#fff;">'
-            + term + '</strong></p></div>';
-        return;
-    }
+    var html = '';
 
-    let html = '';
+    for (var i = 0; i < filtrados.length; i++) {
+        var item     = filtrados[i];
+        var cobrar   = (item.esCobrar === true || item.esCobrar === 'TRUE');
+        var eKey     = item.estadoTarea || 'PENDIENTE';
+        var estado   = estadoMap[eKey] || estadoMap['PENDIENTE'];
 
-    filtrados.forEach(function(item) {
-        const isCobrar   = (item.esCobrar === true || item.esCobrar === 'TRUE');
-        const estadoKey  = item.estadoTarea || 'PENDIENTE';
-        const estado     = estadoMap[estadoKey] || estadoMap['PENDIENTE'];
+        var cobraBadge = cobrar
+            ? '<span style="font-size:0.6rem;color:#198754;border:1px solid #198754;border-radius:3px;padding:1px 5px;">COBRABLE</span>'
+            : '<span style="font-size:0.6rem;color:#666;border:1px solid #444;border-radius:3px;padding:1px 5px;">INTERNO</span>';
 
-        const cobraBadge = isCobrar
-            ? '<span class="badge bg-success bg-opacity-25 text-success border border-success" style="font-size:0.6rem;">COBRABLE</span>'
-            : '<span class="badge bg-secondary bg-opacity-25 text-secondary border border-secondary" style="font-size:0.6rem;">INTERNO</span>';
-
-        const estadoBadge = '<span style="font-size:0.6rem;color:' + estado.color
+        var estBadge = '<span style="font-size:0.6rem;color:' + estado.color
             + ';border:1px solid ' + estado.color
             + ';border-radius:3px;padding:1px 5px;">'
             + '<i class="bi ' + estado.icon + '"></i> ' + estado.label + '</span>';
 
-        const horasHtml = (item.horas && Number(item.horas) > 0)
+        var horasHtml = (item.horas && Number(item.horas) > 0)
             ? '<span class="text-muted" style="font-size:0.65rem;"><i class="bi bi-clock"></i> ' + item.horas + 'h</span>'
             : '';
 
-        const notaHtml = item.notaVisita
-            ? '<div class="text-muted mt-1" style="font-size:0.65rem;font-style:italic;border-left:2px solid #333;padding-left:6px;">' + item.notaVisita + '</div>'
+        var notaHtml = item.notaVisita
+            ? '<div style="font-size:0.65rem;font-style:italic;color:#666;border-left:2px solid #333;padding-left:6px;margin-top:4px;">'
+              + item.notaVisita + '</div>'
             : '';
 
-        const ventaHtml = isCobrar
+        var ventaHtml = cobrar
             ? '<div class="text-success small">+' + fmt.format(item.venta * item.cantidad) + '</div>'
             : '';
 
-        // Resaltar término en descripción
-        const desc = item.descripcion.replace(
-            new RegExp('(' + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi'),
-            '<span style="background:rgba(0,200,255,0.2);color:#00C8FF;border-radius:2px;padding:0 2px;">$1</span>'
-        );
-
-        html += '<div class="border-bottom border-secondary py-2 px-1">'
-            +   '<div class="d-flex justify-content-between align-items-start">'
-            +     '<div class="overflow-hidden me-2 flex-grow-1">'
-            +       '<div class="text-white small fw-bold">' + desc + '</div>'
-            +       '<div class="d-flex align-items-center gap-2 flex-wrap mt-1" style="font-size:0.65rem;">'
-            +         '<span class="text-muted">' + item.tipo + ' | ' + (item.proveedor || '—') + '</span>'
-            +         estadoBadge
-            +         horasHtml
-            +         cobraBadge
-            +       '</div>'
-            +       notaHtml
-            +     '</div>'
-            +     '<div class="d-flex flex-column align-items-end gap-1 ms-2" style="min-width:75px;">'
-            +       '<div class="text-danger small">-' + fmt.format(item.costo * item.cantidad) + '</div>'
-            +       ventaHtml
-            +       '<div class="d-flex gap-2 mt-1">'
-            +         '<button class="btn btn-sm text-warning p-0" onclick="openEditItemModal(\'' + item.idMov + '\')"><i class="bi bi-pencil-square"></i></button>'
-            +         '<button class="btn btn-sm text-danger p-0" onclick="deleteProjectMovement(\'' + item.idMov + '\')"><i class="bi bi-trash"></i></button>'
-            +       '</div>'
-            +     '</div>'
-            +   '</div>'
-            + '</div>';
-    });
+        html += '<div class="border-bottom border-secondary py-2 px-1">';
+        html +=   '<div class="d-flex justify-content-between align-items-start">';
+        html +=     '<div class="overflow-hidden me-2 flex-grow-1">';
+        html +=       '<div class="text-white small fw-bold">' + item.descripcion + '</div>';
+        html +=       '<div class="d-flex align-items-center gap-2 flex-wrap mt-1" style="font-size:0.65rem;">';
+        html +=         '<span class="text-muted">' + item.tipo + ' | ' + (item.proveedor || '-') + '</span>';
+        html +=         estBadge + horasHtml + cobraBadge;
+        html +=       '</div>';
+        html +=       notaHtml;
+        html +=     '</div>';
+        html +=     '<div class="d-flex flex-column align-items-end gap-1 ms-2" style="min-width:75px;">';
+        html +=       '<div class="text-danger small">-' + fmt.format(item.costo * item.cantidad) + '</div>';
+        html +=       ventaHtml;
+        html +=       '<div class="d-flex gap-2 mt-1">';
+        html +=         '<button class="btn btn-sm text-warning p-0" onclick="openEditItemModal(\'' + item.idMov + '\')"><i class="bi bi-pencil-square"></i></button>';
+        html +=         '<button class="btn btn-sm text-danger p-0" onclick="deleteProjectMovement(\'' + item.idMov + '\')"><i class="bi bi-trash"></i></button>';
+        html +=       '</div>';
+        html +=     '</div>';
+        html +=   '</div>';
+        html += '</div>';
+    }
 
     list.innerHTML = html;
 }
