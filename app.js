@@ -2245,52 +2245,21 @@ function closeLightbox() {
 function openBulkItemModal() {
     bulkCart = [];
 
-    // Reset formulario
-    document.getElementById('bulk-search').value    = '';
-    document.getElementById('bulk-proveedor').value = '';
-    document.getElementById('bulk-cobrar').checked  = true;
+    document.getElementById('bulk-search').value           = '';
+    document.getElementById('bulk-proveedor').value        = '';
+    document.getElementById('bulk-cobrar').checked         = true;
+    document.getElementById('bulk-factura-desc').value     = '';
+    document.getElementById('bulk-factura-costo').value    = 0;
+    document.getElementById('bulk-factura-prov').value     = '';
+    document.getElementById('bulk-factura-cobrar').checked = true;
 
     const box = document.getElementById('bulk-search-results');
     if (box) { box.style.display = 'none'; box.innerHTML = ''; }
 
-    // Reset tab a "Por Ítem"
     switchBulkTab('items');
-    actualizarListaBulk();
 
-    // Cerrar proyecto correctamente y limpiar backdrop
-    const projEl    = document.getElementById('projectDetailModal');
-    const projModal = bootstrap.Modal.getInstance(projEl);
-
-    const abrirBulk = () => {
-        // Limpiar cualquier residuo de backdrop
-        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
-        document.body.classList.remove('modal-open');
-        document.body.style.overflow   = '';
-        document.body.style.paddingRight = '';
-
-        const bulkEl = document.getElementById('bulkItemModal');
-        const bulkModal = bootstrap.Modal.getOrCreateInstance(bulkEl);
-
-        // Al cerrar bulk reabrir proyecto
-        bulkEl.addEventListener('hidden.bs.modal', function reabrirProyecto() {
-            bulkEl.removeEventListener('hidden.bs.modal', reabrirProyecto);
-            if (currentProject) {
-                setTimeout(() => openProjectDetail(currentProject), 300);
-            }
-        }, { once: true });
-
-        bulkModal.show();
-    };
-
-    if (projModal) {
-        projEl.addEventListener('hidden.bs.modal', function onProjHidden() {
-            projEl.removeEventListener('hidden.bs.modal', onProjHidden);
-            setTimeout(abrirBulk, 300);
-        }, { once: true });
-        projModal.hide();
-    } else {
-        abrirBulk();
-    }
+    // Se abre APILADO sobre projectDetailModal — sin cerrarlo, igual que costHistoryModal
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('bulkItemModal')).show();
 }
 
 function buscarCatalogoBulk(valor) {
@@ -2523,51 +2492,52 @@ function eliminarItemBulk(uuid) {
 }
 
 function switchBulkTab(tab) {
-    const panelItems    = document.getElementById('bulk-panel-items');
-    const panelFactura  = document.getElementById('bulk-panel-factura');
-    const opcionesGlob  = document.getElementById('bulk-opciones-globales');
-    const tabItems      = document.getElementById('bulk-tab-items');
-    const tabFactura    = document.getElementById('bulk-tab-factura');
-    const btn           = document.getElementById('bulk-register-btn');
-    const countLabel    = document.getElementById('bulk-count-label');
+    const panelItems   = document.getElementById('bulk-panel-items');
+    const panelFactura = document.getElementById('bulk-panel-factura');
+    const tabItems     = document.getElementById('bulk-tab-items');
+    const tabFactura   = document.getElementById('bulk-tab-factura');
+    const btn          = document.getElementById('bulk-register-btn');
+    const countLabel   = document.getElementById('bulk-count-label');
 
     if (tab === 'items') {
-        panelItems.style.display   = '';
+        panelItems.style.display   = 'flex';
         panelFactura.style.display = 'none';
-        opcionesGlob.style.display = '';
-        tabItems.style.borderBottomColor = '#00C8FF';
-        tabItems.style.color             = '#00C8FF';
-        tabItems.style.background        = '#071726';
+
+        tabItems.style.borderBottomColor   = '#00C8FF';
+        tabItems.style.color               = '#00C8FF';
+        tabItems.style.background          = '#071726';
         tabFactura.style.borderBottomColor = 'transparent';
         tabFactura.style.color             = '#4A6680';
         tabFactura.style.background        = '#050f1a';
+
         actualizarListaBulk();
     } else {
         panelItems.style.display   = 'none';
-        panelFactura.style.display = '';
-        opcionesGlob.style.display = 'none';
-        tabItems.style.borderBottomColor = 'transparent';
-        tabItems.style.color             = '#4A6680';
-        tabItems.style.background        = '#050f1a';
+        panelFactura.style.display = 'block';
+
+        tabItems.style.borderBottomColor   = 'transparent';
+        tabItems.style.color               = '#4A6680';
+        tabItems.style.background          = '#050f1a';
         tabFactura.style.borderBottomColor = '#00C8FF';
         tabFactura.style.color             = '#00C8FF';
         tabFactura.style.background        = '#071726';
+
         btn.disabled         = false;
         countLabel.innerText = 'factura completa';
     }
 }
 async function registrarComprasMasivas() {
-    const tabFactura = document.getElementById('bulk-tab-factura');
+    const tabFactura  = document.getElementById('bulk-tab-factura');
     const modoFactura = tabFactura && tabFactura.style.color === 'rgb(0, 200, 255)';
 
     const btn = document.getElementById('bulk-register-btn');
 
     // ── MODO FACTURA TOTAL ────────────────────────────────────
     if (modoFactura) {
-        const desc     = document.getElementById('bulk-factura-desc').value.trim();
-        const costo    = Number(document.getElementById('bulk-factura-costo').value) || 0;
+        const desc      = document.getElementById('bulk-factura-desc').value.trim();
+        const costo     = Number(document.getElementById('bulk-factura-costo').value) || 0;
         const proveedor = document.getElementById('bulk-factura-prov').value.trim();
-        const cobrar   = document.getElementById('bulk-factura-cobrar').checked;
+        const cobrar    = document.getElementById('bulk-factura-cobrar').checked;
 
         if (!desc)  return showToast('Escribe una descripción', 'warning');
         if (!costo) return showToast('Escribe el total pagado', 'warning');
@@ -2592,7 +2562,6 @@ async function registrarComprasMasivas() {
             notaVisita:  ''
         };
 
-        // Optimistic update
         currentProjectItems.push({ ...payload, fecha: new Date().toISOString() });
         let tCosto = 0, tVenta = 0;
         currentProjectItems.forEach(m => {
@@ -2612,7 +2581,7 @@ async function registrarComprasMasivas() {
         calculateDashboard();
 
         const mi = bootstrap.Modal.getInstance(document.getElementById('bulkItemModal'));
-        if (mi) { mi.hide(); cleanBackdrops(); }
+        if (mi) mi.hide();
 
         const res = await callApi('addProjectMovement', payload);
         if (res.success) {
@@ -2637,7 +2606,6 @@ async function registrarComprasMasivas() {
                          style="width:0.9rem;height:0.9rem;border-width:0.15em;"></div>
                      Registrando ${total} ítem${total !== 1 ? 's' : ''}...`;
 
-    // Optimistic update
     const nuevosMovs = bulkCart.map(item => ({
         idMov:       generateUUID(),
         fecha:       new Date().toISOString(),
@@ -2673,7 +2641,7 @@ async function registrarComprasMasivas() {
     calculateDashboard();
 
     const mi = bootstrap.Modal.getInstance(document.getElementById('bulkItemModal'));
-    if (mi) { mi.hide(); cleanBackdrops(); }
+    if (mi) mi.hide();
 
     showToast(`⏳ Guardando ${total} ítems...`, 'info');
 
@@ -2705,7 +2673,6 @@ async function registrarComprasMasivas() {
     refreshProjectsOnly();
     if (proveedor) refreshProveedoresOnly();
 }
-
 // ==========================================
 // BUSCADOR DE MOVIMIENTOS EN PROYECTO
 // ==========================================
