@@ -770,11 +770,12 @@ async function openProjectDetail(id) {
     if(res.success) {
         currentProjectData  = res.data.info;
         currentProjectItems = res.data.items;
-        // Limpiar buscador al recargar
         const pdSearch = document.getElementById('pd-search');
         if (pdSearch) pdSearch.value = '';
         renderProjectItems();
     }
+}
+
 function renderProjectItems() {
     document.getElementById('pd-title').innerText = currentProjectData.nombreProyecto;
     document.getElementById('pd-subtitle').innerText = currentProjectData.cliente;
