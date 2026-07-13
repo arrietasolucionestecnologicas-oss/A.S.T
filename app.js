@@ -2720,12 +2720,11 @@ function filtrarMovimientosProyecto(term) {
     const t = term.toLowerCase().trim();
     const filtrados = currentProjectItems.filter(item =>
         item.descripcion.toLowerCase().includes(t) ||
-        (item.tipo && item.tipo.toLowerCase().includes(t)) ||
+        (item.tipo      && item.tipo.toLowerCase().includes(t)) ||
         (item.proveedor && item.proveedor.toLowerCase().includes(t)) ||
         (item.notaVisita && item.notaVisita.toLowerCase().includes(t))
     );
 
-    const DIAS_PRECIO_VIEJO = 120;
     const estadoMap = {
         'PENDIENTE':   { color: '#ffc107', icon: 'bi-clock',         label: 'Pendiente'   },
         'EN_PROGRESO': { color: '#0dcaf0', icon: 'bi-tools',         label: 'En Progreso' },
@@ -2733,64 +2732,70 @@ function filtrarMovimientosProyecto(term) {
     };
 
     if (filtrados.length === 0) {
-        list.innerHTML = `
-            <div style="text-align:center; padding:30px; color:#4A6680;">
-                <i class="bi bi-search" style="font-size:1.8rem;"></i>
-                <p style="font-size:0.83rem; margin-top:8px;">
-                    Sin resultados para "<strong style="color:#fff;">${term}</strong>"
-                </p>
-            </div>`;
+        list.innerHTML = '<div style="text-align:center; padding:30px; color:#4A6680;">'
+            + '<i class="bi bi-search" style="font-size:1.8rem;"></i>'
+            + '<p style="font-size:0.83rem; margin-top:8px;">Sin resultados para <strong style="color:#fff;">'
+            + term + '</strong></p></div>';
         return;
     }
 
-    list.innerHTML = filtrados.map(item => {
+    let html = '';
+
+    filtrados.forEach(function(item) {
         const isCobrar   = (item.esCobrar === true || item.esCobrar === 'TRUE');
+        const estadoKey  = item.estadoTarea || 'PENDIENTE';
+        const estado     = estadoMap[estadoKey] || estadoMap['PENDIENTE'];
+
         const cobraBadge = isCobrar
             ? '<span class="badge bg-success bg-opacity-25 text-success border border-success" style="font-size:0.6rem;">COBRABLE</span>'
             : '<span class="badge bg-secondary bg-opacity-25 text-secondary border border-secondary" style="font-size:0.6rem;">INTERNO</span>';
 
-        const estadoKey   = item.estadoTarea || 'PENDIENTE';
-        const estado      = estadoMap[estadoKey] || estadoMap['PENDIENTE'];
-        const estadoBadge = `<span style="font-size:0.6rem;color:${estado.color};border:1px solid ${estado.color};border-radius:3px;padding:1px 5px;">
-            <i class="bi ${estado.icon}"></i> ${estado.label}
-        </span>`;
+        const estadoBadge = '<span style="font-size:0.6rem;color:' + estado.color
+            + ';border:1px solid ' + estado.color
+            + ';border-radius:3px;padding:1px 5px;">'
+            + '<i class="bi ' + estado.icon + '"></i> ' + estado.label + '</span>';
 
         const horasHtml = (item.horas && Number(item.horas) > 0)
-            ? `<span class="text-muted" style="font-size:0.65rem;"><i class="bi bi-clock"></i> ${item.horas}h</span>`
+            ? '<span class="text-muted" style="font-size:0.65rem;"><i class="bi bi-clock"></i> ' + item.horas + 'h</span>'
             : '';
 
         const notaHtml = item.notaVisita
-            ? `<div class="text-muted mt-1" style="font-size:0.65rem;font-style:italic;border-left:2px solid #333;padding-left:6px;">${item.notaVisita}</div>`
+            ? '<div class="text-muted mt-1" style="font-size:0.65rem;font-style:italic;border-left:2px solid #333;padding-left:6px;">' + item.notaVisita + '</div>'
             : '';
 
-        // Resaltar término buscado en descripción
+        const ventaHtml = isCobrar
+            ? '<div class="text-success small">+' + fmt.format(item.venta * item.cantidad) + '</div>'
+            : '';
+
+        // Resaltar término en descripción
         const desc = item.descripcion.replace(
-            new RegExp(`(${term})`, 'gi'),
-            `<span style="background:rgba(0,200,255,0.2);color:#00C8FF;border-radius:2px;padding:0 2px;">$1</span>`
+            new RegExp('(' + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi'),
+            '<span style="background:rgba(0,200,255,0.2);color:#00C8FF;border-radius:2px;padding:0 2px;">$1</span>'
         );
 
-        return `
-        <div class="border-bottom border-secondary py-2 px-1">
-            <div class="d-flex justify-content-between align-items-start">
-                <div class="overflow-hidden me-2 flex-grow-1">
-                    <div class="text-white small fw-bold">${desc}</div>
-                    <div class="d-flex align-items-center gap-2 flex-wrap mt-1" style="font-size:0.65rem;">
-                        <span class="text-muted">${item.tipo} | ${item.proveedor || '—'}</span>
-                        ${estadoBadge}
-                        ${horasHtml}
-                        ${cobraBadge}
-                    </div>
-                    ${notaHtml}
-                </div>
-                <div class="d-flex flex-column align-items-end gap-1 ms-2" style="min-width:75px;">
-                    <div class="text-danger small">-${fmt.format(item.costo * item.cantidad)}</div>
-                    ${isCobrar ? `<div class="text-success small">+${fmt.format(item.venta * item.cantidad)}</div>` : ''}
-                    <div class="d-flex gap-2 mt-1">
-                        <button class="btn btn-sm text-warning p-0" onclick="openEditItemModal('${item.idMov}')"><i class="bi bi-pencil-square"></i></button>
-                        <button class="btn btn-sm text-danger p-0"  onclick="deleteProjectMovement('${item.idMov}')"><i class="bi bi-trash"></i></button>
-                    </div>
-                </div>
-            </div>
-        </div>`;
-    }).join('');
+        html += '<div class="border-bottom border-secondary py-2 px-1">'
+            +   '<div class="d-flex justify-content-between align-items-start">'
+            +     '<div class="overflow-hidden me-2 flex-grow-1">'
+            +       '<div class="text-white small fw-bold">' + desc + '</div>'
+            +       '<div class="d-flex align-items-center gap-2 flex-wrap mt-1" style="font-size:0.65rem;">'
+            +         '<span class="text-muted">' + item.tipo + ' | ' + (item.proveedor || '—') + '</span>'
+            +         estadoBadge
+            +         horasHtml
+            +         cobraBadge
+            +       '</div>'
+            +       notaHtml
+            +     '</div>'
+            +     '<div class="d-flex flex-column align-items-end gap-1 ms-2" style="min-width:75px;">'
+            +       '<div class="text-danger small">-' + fmt.format(item.costo * item.cantidad) + '</div>'
+            +       ventaHtml
+            +       '<div class="d-flex gap-2 mt-1">'
+            +         '<button class="btn btn-sm text-warning p-0" onclick="openEditItemModal(\'' + item.idMov + '\')"><i class="bi bi-pencil-square"></i></button>'
+            +         '<button class="btn btn-sm text-danger p-0" onclick="deleteProjectMovement(\'' + item.idMov + '\')"><i class="bi bi-trash"></i></button>'
+            +       '</div>'
+            +     '</div>'
+            +   '</div>'
+            + '</div>';
+    });
+
+    list.innerHTML = html;
 }
