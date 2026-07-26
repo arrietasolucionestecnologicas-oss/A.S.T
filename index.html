@@ -525,14 +525,19 @@
                     <div class="p-3" id="pd-items-list">
                     </div>
                 </div>
-                <div class="modal-footer border-top border-secondary bg-dark">
-                    <button class="btn btn-outline-light flex-grow-1" onclick="openAddItemModal()">
-                        <i class="bi bi-tools"></i> Ítem Manual
-                    </button>
-                    <button class="btn btn-cyan flex-grow-1" onclick="openBulkItemModal()">
-                        <i class="bi bi-cart-plus-fill"></i> Compra en Almacén
-                    </button>
-                </div>
+                <div class="modal-footer border-top border-secondary bg-dark flex-wrap gap-2">
+    <button class="btn btn-success w-100 fw-bold" onclick="generateQuoteFromProject()">
+        <i class="bi bi-file-earmark-pdf-fill"></i> Generar Cotización
+    </button>
+    <div class="d-flex w-100 gap-2">
+        <button class="btn btn-outline-light flex-grow-1" onclick="openAddItemModal()">
+            <i class="bi bi-tools"></i> Ítem Manual
+        </button>
+        <button class="btn btn-cyan flex-grow-1" onclick="openBulkItemModal()">
+            <i class="bi bi-cart-plus-fill"></i> Compra en Almacén
+        </button>
+    </div>
+</div>
             </div>
         </div>
     </div>
