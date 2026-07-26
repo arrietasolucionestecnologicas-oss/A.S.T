@@ -2761,3 +2761,54 @@ function filtrarMovimientosProyecto(term) {
 
     list.innerHTML = html;
 }
+
+// ==========================================
+// GENERAR COTIZACIÓN DESDE PROYECTO [ZONA-FE-02] v33.3
+// ==========================================
+function generateQuoteFromProject() {
+    if (!currentProjectData || !currentProjectItems) return;
+
+    const cobrables = currentProjectItems.filter(item =>
+        item.esCobrar === true || item.esCobrar === 'TRUE'
+    );
+
+    if (cobrables.length === 0) {
+        showToast('⚠️ Este proyecto no tiene ítems marcados como cobrables', 'warning');
+        return;
+    }
+
+    if (cart.length > 0) {
+        if (!confirm('⚠️ Tu carrito actual se reemplazará con los ítems de este proyecto. ¿Continuar?')) return;
+    }
+
+    // Convertir movimientos del proyecto al formato del carrito
+    cart = cobrables.map(item => ({
+        uuid:   generateUUID(),
+        nombre: item.descripcion,
+        specs:  item.notaVisita || '',
+        precio: item.venta,
+        cantidad: item.cantidad,
+        tipo:   item.tipo === 'MANO_OBRA' ? 'SERVICIO' : 'PRODUCTO'
+    }));
+
+    // Autocompletar cliente desde el proyecto
+    document.getElementById('c-nombre').value = currentProjectData.cliente || '';
+    document.getElementById('c-nit').value    = '';
+    document.getElementById('c-tel').value    = currentProjectData.contacto || '';
+
+    // Vincular automáticamente al proyecto para que el PDF se sincronice de vuelta
+    setTimeout(() => {
+        const exportSelect = document.getElementById('cart-export-project');
+        if (exportSelect) exportSelect.value = currentProject;
+    }, 100);
+
+    // Cerrar proyecto y abrir carrito
+    const projModal = bootstrap.Modal.getInstance(document.getElementById('projectDetailModal'));
+    if (projModal) projModal.hide();
+
+    setTimeout(() => {
+        updateCartUI();
+        openCart();
+        showToast(`✅ ${cobrables.length} ítem${cobrables.length !== 1 ? 's' : ''} cargado${cobrables.length !== 1 ? 's' : ''} al carrito`, 'success');
+    }, 350);
+}
