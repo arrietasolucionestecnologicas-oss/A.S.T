@@ -946,6 +946,43 @@ function openEditItemModal(idMov) {
 // BUSCADOR CATÁLOGO MÓVIL [ZONA-FE-02] v33.2
 // Reemplaza <datalist> — funciona en Android
 // ==========================================
+// ==========================================
+// BÚSQUEDA CON RELEVANCIA [ZONA-FE-02] v33.3
+// Prioriza: empieza-con > contiene-en-nombre > contiene-en-specs/codigo
+// Usa normalización de tildes para no fallar por acentos
+// ==========================================
+function _normalizeSearch(s) {
+    return String(s || '').toLowerCase().trim()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function buscarEnCatalogoConRelevancia(term, limit) {
+    const t = _normalizeSearch(term);
+    if (!t) return [];
+
+    const scored = [];
+    catalog.forEach(p => {
+        const nombre = _normalizeSearch(p.nombre);
+        const codigo = _normalizeSearch(p.codigo || '');
+        const specs  = _normalizeSearch(p.specs || '');
+
+        let score = -1;
+        if (nombre === t)                 score = 100;
+        else if (nombre.startsWith(t))     score = 90;
+        else if (codigo.startsWith(t))     score = 85;
+        else if (nombre.includes(t))       score = 70;
+        else if (codigo.includes(t))       score = 60;
+        else if (specs.includes(t))        score = 40;
+
+        if (score > -1) scored.push({ p, score, nombre });
+    });
+
+    scored.sort((a, b) => b.score - a.score || a.nombre.localeCompare(b.nombre));
+
+    return scored.slice(0, limit || 15).map(s => s.p);
+}
+
+
 let _buscarTimer = null;
 
 function buscarEnCatalogo(valor) {
@@ -960,12 +997,7 @@ function buscarEnCatalogo(valor) {
     }
 
     _buscarTimer = setTimeout(() => {
-        const term    = valor.toLowerCase().trim();
-        const matches = catalog.filter(p =>
-            p.nombre.toLowerCase().includes(term) ||
-            (p.codigo && p.codigo.toLowerCase().includes(term)) ||
-            (p.specs  && p.specs.toLowerCase().includes(term))
-        ).slice(0, 8);
+        const matches = buscarEnCatalogoConRelevancia(valor, 15);
 
         if (matches.length === 0) {
             box.innerHTML     = `<div style="padding:12px; text-align:center; color:#4A6680; font-size:0.8rem;">Sin resultados para "${valor}"</div>`;
@@ -974,15 +1006,14 @@ function buscarEnCatalogo(valor) {
         }
 
         box.innerHTML = matches.map(p => {
-            const badge      = p.tipo === 'PRODUCTO'
+            const badge = p.tipo === 'PRODUCTO'
                 ? `<span style="background:#0dcaf0;color:#000;border-radius:3px;padding:1px 5px;font-size:0.55rem;font-weight:700;">${p.codigo}</span>`
                 : `<span style="background:#ffc107;color:#000;border-radius:3px;padding:1px 5px;font-size:0.55rem;font-weight:700;">SERV</span>`;
-            const precio     = p.precio > 0 ? fmt.format(p.precio) : 'Cotizar';
+            const precio = p.precio > 0 ? fmt.format(p.precio) : 'Cotizar';
             return `
             <div onclick="seleccionarDelCatalogo('${p.uuid}')"
                  style="padding:10px 14px; border-bottom:1px solid rgba(0,200,255,0.1);
-                        cursor:pointer; transition:background 0.15s; display:flex;
-                        align-items:center; gap:10px;"
+                        cursor:pointer; display:flex; align-items:center; gap:10px;"
                  onmouseenter="this.style.background='rgba(0,200,255,0.08)'"
                  onmouseleave="this.style.background='transparent'">
                 <div style="flex:1; min-width:0;">
@@ -2274,12 +2305,7 @@ function buscarCatalogoBulk(valor) {
     }
 
     _bulkSearchTimer = setTimeout(() => {
-        const term    = valor.toLowerCase().trim();
-        const matches = catalog.filter(p =>
-            p.nombre.toLowerCase().includes(term) ||
-            (p.codigo && p.codigo.toLowerCase().includes(term)) ||
-            (p.specs  && p.specs.toLowerCase().includes(term))
-        ).slice(0, 10);
+        const matches = buscarEnCatalogoConRelevancia(valor, 15);
 
         if (matches.length === 0) {
             box.innerHTML     = `<div style="padding:14px; text-align:center; color:#4A6680; font-size:0.8rem;">Sin resultados para "${valor}"</div>`;
