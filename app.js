@@ -22,6 +22,15 @@ let _bulkSearchTimer = null;
 
 const fmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
+// --- PUENTE DE NAVEGACIÓN EXTERNA (PDFs, WhatsApp, enlaces) ---
+async function openExternalUrl(url) {
+    if (window.Capacitor && window.Capacitor.Plugins.Browser) {
+        await window.Capacitor.Plugins.Browser.open({ url });
+    } else {
+        window.open(url, '_blank');
+    }
+}
+
 function generateUUID() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
         var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -211,6 +220,34 @@ function hideSyncIndicator() {
     if (ind) ind.style.display = 'none';
 }
 
+function setOfflineIndicator(visible) {
+    const ind = document.getElementById('offline-indicator');
+    if (ind) ind.style.display = visible ? 'block' : 'none';
+}
+
+if (window.Capacitor && window.Capacitor.Plugins.App) {
+    window.Capacitor.Plugins.App.addListener('backButton', () => {
+        const openModals = Array.from(document.querySelectorAll('.modal.show'));
+        if (openModals.length > 0) {
+            let topModal = openModals[0];
+            let maxZ = parseInt(window.getComputedStyle(topModal).zIndex) || 0;
+            openModals.forEach(m => {
+                let z = parseInt(window.getComputedStyle(m).zIndex) || 0;
+                if (z > maxZ) { maxZ = z; topModal = m; }
+            });
+            const modalInstance = bootstrap.Modal.getInstance(topModal);
+            if (modalInstance) modalInstance.hide();
+        } else {
+            const mainView = document.getElementById('view-catalog');
+            if (mainView && mainView.classList.contains('hidden-section')) {
+                switchTab('PRODUCTO');
+            } else {
+                window.Capacitor.Plugins.App.exitApp();
+            }
+        }
+    });
+}
+
 function showToast(msg, type = 'info') {
     const existing = document.getElementById('ast-toast');
     if (existing) existing.remove();
@@ -226,8 +263,16 @@ function showToast(msg, type = 'info') {
 // -----------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', () => {
-    loadLocalCache(); 
-    updateClientsDatalist(); 
+    loadLocalCache();
+
+    try {
+        const savedCart = localStorage.getItem('ast_cart_draft');
+        if (savedCart) { cart = JSON.parse(savedCart); updateCartUI(); }
+    } catch (e) {
+        console.error("Error restaurando carrito guardado", e);
+    }
+
+    updateClientsDatalist();
     updateProvidersDatalist();
     
     if(currentView === 'PROYECTOS') { renderProjects(); calculateDashboard(); }
@@ -237,9 +282,41 @@ document.addEventListener('DOMContentLoaded', () => {
         const filtered = catalog.filter(p => p.tipo === currentView);
         renderGrid(filtered);
     }
-    
-    fetchAllDataBackground(); 
-    
+
+    if (window.Capacitor && window.Capacitor.Plugins.SplashScreen) {
+        window.Capacitor.Plugins.SplashScreen.hide();
+    }
+
+    const initNetworkLogic = async () => {
+        let isConnected = true;
+
+        // 1. Detección nativa de hardware (Prioridad)
+        if (window.Capacitor && window.Capacitor.Plugins.Network) {
+            const status = await window.Capacitor.Plugins.Network.getStatus();
+            isConnected = status.connected;
+
+            window.Capacitor.Plugins.Network.addListener('networkStatusChange', status => {
+                setOfflineIndicator(!status.connected);
+                if (status.connected) fetchAllDataBackground();
+            });
+        }
+        // 2. Fallback web para navegadores
+        else {
+            isConnected = navigator.onLine;
+            window.addEventListener('online', () => { setOfflineIndicator(false); fetchAllDataBackground(); });
+            window.addEventListener('offline', () => setOfflineIndicator(true));
+        }
+
+        // 3. Control visual
+        setOfflineIndicator(!isConnected);
+
+        // 4. Ejecución de seguridad incondicional:
+        // Lanzamos la petición de todas formas. Si realmente no hay red,
+        // la promesa fallará silenciosamente y el catálogo usará el caché local.
+        fetchAllDataBackground();
+    };
+    initNetworkLogic();
+
 document.getElementById('search').addEventListener('input', (e) => {
         const term = e.target.value.toLowerCase().trim();
         if (currentView === 'PROYECTOS') {
@@ -1904,7 +1981,7 @@ async function publishToGitHub() {
         navigator.clipboard.writeText(finalUrl).then(() => {
             if(confirm("✅ ¡Publicado en GitHub!\nEnlace copiado. ¿Compartir en WhatsApp ahora?")) {
                  const msgShare = `🏢 *A.S.T. Soluciones Tecnológicas*\n\nConoce más detalles y especificaciones aquí:\n${finalUrl}`;
-                 window.open(`https://wa.me/?text=${encodeURIComponent(msgShare)}`, '_blank');
+                 openExternalUrl(`https://wa.me/?text=${encodeURIComponent(msgShare)}`);
             }
         });
     } else {
@@ -1916,8 +1993,9 @@ async function publishToGitHub() {
 async function shareProductDirectly(uuid) {
     const p = catalog.find(x => x.uuid === uuid);
     if (!p) return;
-    
-    if (!navigator.share) {
+
+    const hasCapacitorShare = window.Capacitor && window.Capacitor.Plugins.Share;
+    if (!hasCapacitorShare && !navigator.share) {
         alert("Tu navegador o dispositivo no soporta el envío directo de archivos. Entra a editar y usa el botón de Publicar en Web (GitHub).");
         return;
     }
@@ -1944,19 +2022,71 @@ async function shareProductDirectly(uuid) {
     const textoShare = `🏢 *A.S.T. Soluciones Tecnológicas*\n\n📦 *Ítem:* ${p.nombre}\n💰 *Valor:* ${precioStr}\n\n*Detalles Técnicos:*\n${specsLimpio}\n\nEscríbenos, será un gusto asesorarte en tu próximo proyecto.\n\n🌐 O visita nuestra página para conocer más servicios y productos:\n${urlWeb}`;
 
     try {
-        if (p.imagen && p.imagen.startsWith('http')) {
-            const response = await fetch(p.imagen);
-            const blob = await response.blob();
-            const file = new File([blob], "AST_Catalogo.jpg", { type: blob.type });
+        if (window.Capacitor && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem) {
+            try {
+                if (p.imagen && p.imagen.startsWith('http')) {
+                    const response = await fetch(p.imagen);
+                    const blob = await response.blob();
 
-            await navigator.share({
-                text: textoShare,
-                files: [file]
-            });
-        } else {
-            await navigator.share({
-                text: textoShare
-            });
+                    // Promesa para convertir Blob a Base64 sin prefijo MIME
+                    const blobToBase64 = (b) => new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onerror = reject;
+                        reader.onload = () => resolve(reader.result.split(',')[1]);
+                        reader.readAsDataURL(b);
+                    });
+
+                    const base64String = await blobToBase64(blob);
+                    const fileName = 'share_' + Date.now() + '.jpg';
+
+                    // Escribir archivo físico en el CACHE del dispositivo
+                    const writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
+                        path: fileName,
+                        data: base64String,
+                        directory: 'CACHE'
+                    });
+
+                    // Compartir usando la URI nativa del archivo
+                    await window.Capacitor.Plugins.Share.share({
+                        title: p.nombre,
+                        text: textoShare,
+                        url: urlWeb,
+                        files: [writeResult.uri],
+                        dialogTitle: 'Compartir producto'
+                    });
+                } else {
+                    await window.Capacitor.Plugins.Share.share({
+                        title: p.nombre,
+                        text: textoShare,
+                        url: urlWeb,
+                        dialogTitle: 'Compartir producto'
+                    });
+                }
+            } catch (e) {
+                console.error("Error nativo al compartir imagen via Filesystem:", e);
+                // Fallback a texto y url si falla el sistema de archivos
+                await window.Capacitor.Plugins.Share.share({
+                    title: p.nombre,
+                    text: textoShare,
+                    url: urlWeb,
+                    dialogTitle: 'Compartir producto'
+                });
+            }
+        } else if (navigator.share) {
+            if (p.imagen && p.imagen.startsWith('http')) {
+                const response = await fetch(p.imagen);
+                const blob = await response.blob();
+                const file = new File([blob], "AST_Catalogo.jpg", { type: blob.type });
+
+                await navigator.share({
+                    text: textoShare,
+                    files: [file]
+                });
+            } else {
+                await navigator.share({
+                    text: textoShare
+                });
+            }
         }
     } catch (error) {
         if (error.name !== "AbortError") {
@@ -2067,6 +2197,8 @@ function updateCartUI() {
     const total = subtotal + ivaVal;
     document.getElementById('iva-display').innerText = `IVA: ${fmt.format(ivaVal)}`;
     document.getElementById('cart-total').innerText = fmt.format(total);
+
+    localStorage.setItem('ast_cart_draft', JSON.stringify(cart));
 }
 
 function updateCartSpec(index, value) {
@@ -2076,9 +2208,10 @@ function updateCartSpec(index, value) {
 }
 
 function updateCartItem(index, field, value) {
-    const val = Number(value);
-    if (field === 'qty') { if (val <= 0) cart.splice(index, 1); else cart[index].cantidad = val; } 
-    else if (field === 'price') { cart[index].precio = val; }
+    let numValue = Number(value);
+    if (isNaN(numValue) || numValue < 0) numValue = 0; // Evitar corrupción NaN
+    if (field === 'qty') { if (numValue <= 0) cart.splice(index, 1); else cart[index].cantidad = numValue; }
+    else if (field === 'price') { cart[index].precio = numValue; }
     updateCartUI();
 }
 
@@ -2111,7 +2244,7 @@ function sendWhatsApp() {
     const granTotal = subtotal + ivaVal;
     if (applyIva) { msg += `\nSubtotal: $${subtotal.toLocaleString()}\nIVA (19%): $${ivaVal.toLocaleString()}`; }
     msg += `\n*TOTAL: $${granTotal.toLocaleString()}*`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+    openExternalUrl(`https://wa.me/?text=${encodeURIComponent(msg)}`);
 }
 
 async function generatePDF() {
@@ -2139,15 +2272,21 @@ async function generatePDF() {
         }
     }
 
-    const payload = { 
-        tipoDoc: document.getElementById('doc-type').value, 
-        cliente: cliente, 
-        items: cart.map(c => ({
-            ...c, 
-            specs: c.specs, 
-            subtotal: c.precio * c.cantidad
-        })), 
-        totales: { subtotal: subtotal, iva: ivaVal, granTotal: subtotal + ivaVal }, 
+    // Mapeo explícito: excluye 'costo' (interno/privado) del payload enviado al backend
+    const safeItems = cart.map(c => ({
+        uuid: c.uuid,
+        nombre: c.nombre,
+        cantidad: c.cantidad,
+        precio: c.precio,
+        specs: c.specs,
+        subtotal: c.cantidad * c.precio
+    }));
+
+    const payload = {
+        tipoDoc: document.getElementById('doc-type').value,
+        cliente: cliente,
+        items: safeItems,
+        totales: { subtotal: subtotal, iva: ivaVal, granTotal: subtotal + ivaVal },
         opciones: { 
             mostrarDesc: true,
             terminos: termsText 
@@ -2171,7 +2310,21 @@ async function generatePDF() {
         refreshClientsOnly();
         if (projectIdToSync) refreshProjectsOnly();
         
-        setTimeout(() => { updateClientsDatalist(); if(confirm(`Documento ${res.data.consecutivo} Generado. ¿Abrir?`)) { window.open(res.data.url, '_blank'); } }, 500); 
+        setTimeout(() => {
+            updateClientsDatalist();
+            let tel = document.getElementById('c-tel').value.trim().replace(/\D/g, '');
+            if (tel.startsWith('57') && tel.length > 10) {
+                tel = tel.substring(2);
+            }
+
+            if (tel.length >= 10) {
+                const msg = `Hola, adjunto tu cotización: ${res.data.url}`;
+                openExternalUrl(`https://wa.me/57${tel}?text=${encodeURIComponent(msg)}`);
+            } else {
+                // Fallback si el teléfono es inválido o muy corto
+                openExternalUrl(res.data.url);
+            }
+        }, 500);
     } else { alert("Error: " + res.error); }
 }
 // ==========================================
