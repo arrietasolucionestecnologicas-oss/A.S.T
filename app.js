@@ -616,7 +616,12 @@ function renderProjects() {
         return;
     }
     projects.forEach(p => {
+        const estaCerrado = p.estado === 'CERRADO';
         const estadoClass = p.estado === 'ABIERTO' ? 'text-success' : 'text-secondary';
+        // Mientras el proyecto sigue abierto, lo cotizado no es ganancia real todavia:
+        // se etiqueta como proyectado en vez de como si ya se hubiera cobrado.
+        const labelCobrado  = estaCerrado ? 'COBRADO'  : 'COTIZADO';
+        const labelUtilidad = estaCerrado ? 'UTILIDAD' : 'UTILIDAD PROY.';
         const card = `
         <div class="project-card" onclick="openProjectDetail('${p.id}')">
             <div class="d-flex justify-content-between">
@@ -626,7 +631,7 @@ function renderProjects() {
             <small class="text-cyan d-block mb-2">${p.cliente}</small>
             <div class="row g-0 text-center" style="font-size:0.75rem;">
                 <div class="col-4 border-end border-secondary">
-                    <span class="text-muted">COBRADO</span><br>
+                    <span class="text-muted">${labelCobrado}</span><br>
                     <span class="text-white">${fmt.format(p.totalCobrado)}</span>
                 </div>
                 <div class="col-4 border-end border-secondary">
@@ -634,7 +639,7 @@ function renderProjects() {
                     <span class="text-danger">${fmt.format(p.totalCostos)}</span>
                 </div>
                 <div class="col-4">
-                    <span class="text-muted">UTILIDAD</span><br>
+                    <span class="text-muted">${labelUtilidad}</span><br>
                     <span class="${p.utilidad >= 0 ? 'text-profit' : 'text-loss'}">${fmt.format(p.utilidad)}</span>
                 </div>
             </div>
@@ -739,11 +744,15 @@ function renderHistoryFiltered(term) {
     });
 }
 function calculateDashboard() {
+    // "Gastos" refleja trabajo activo (plata ya gastada, aunque el cliente no haya pagado).
+    // "Facturado"/"Utilidad" solo cuentan proyectos CERRADOS: mientras el proyecto sigue
+    // ABIERTO, lo cotizado no es ganancia real todavía.
     let cobrado = 0, gastos = 0, utilidad = 0;
     projects.forEach(p => {
-        if(p.estado === 'ABIERTO') {
-            cobrado += p.totalCobrado;
+        if (p.estado === 'ABIERTO') {
             gastos += p.totalCostos;
+        } else if (p.estado === 'CERRADO') {
+            cobrado += p.totalCobrado;
             utilidad += p.utilidad;
         }
     });
@@ -816,6 +825,8 @@ async function openProjectDetail(id) {
         document.getElementById('pd-cobrado').innerText  = fmt.format(pInfo.totalCobrado);
         document.getElementById('pd-gastos').innerText   = fmt.format(pInfo.totalCostos);
         document.getElementById('pd-utilidad').innerText = fmt.format(pInfo.utilidad);
+        document.getElementById('pd-cobrado-label').innerText  = pInfo.estado === 'CERRADO' ? 'COBRADO' : 'COTIZADO';
+        document.getElementById('pd-utilidad-label').innerText = pInfo.estado === 'CERRADO' ? 'UTILIDAD' : 'UTILIDAD PROY.';
     }
     document.getElementById('pd-items-list').innerHTML = `
         <div class="text-center mt-3">
@@ -859,6 +870,8 @@ function renderProjectItems() {
     document.getElementById('pd-cobrado').innerText = fmt.format(currentProjectData.totalCobrado);
     document.getElementById('pd-gastos').innerText = fmt.format(currentProjectData.totalCostos);
     document.getElementById('pd-utilidad').innerText = fmt.format(currentProjectData.utilidad);
+    document.getElementById('pd-cobrado-label').innerText  = currentProjectData.estado === 'CERRADO' ? 'COBRADO' : 'COTIZADO';
+    document.getElementById('pd-utilidad-label').innerText = currentProjectData.estado === 'CERRADO' ? 'UTILIDAD' : 'UTILIDAD PROY.';
     
     const list = document.getElementById('pd-items-list');
     list.innerHTML = '';

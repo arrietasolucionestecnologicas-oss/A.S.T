@@ -148,24 +148,24 @@
             <div id="projects-dashboard" class="row g-2 mb-3 d-none">
                 <div class="col-4">
                     <div class="kpi-card">
-                        <div class="kpi-label">Facturado</div>
+                        <div class="kpi-label">Facturado (cerrados)</div>
                         <div class="kpi-value text-cyan" id="kpi-cobrado">$0</div>
                     </div>
                 </div>
                 <div class="col-4">
                     <div class="kpi-card">
-                        <div class="kpi-label">Gastos</div>
+                        <div class="kpi-label">Gastos (activos)</div>
                         <div class="kpi-value text-danger" id="kpi-gastos">$0</div>
                     </div>
                 </div>
                 <div class="col-4">
                     <div class="kpi-card">
-                        <div class="kpi-label">Utilidad</div>
+                        <div class="kpi-label">Utilidad (cerrados)</div>
                         <div class="kpi-value text-profit" id="kpi-utilidad">$0</div>
                     </div>
                 </div>
                 <div class="col-12 text-center mt-1">
-                    <small class="text-muted" style="font-size: 0.7rem;">MARGEN GLOBAL: <span id="kpi-margen" class="fw-bold text-white">0%</span></small>
+                    <small class="text-muted" style="font-size: 0.7rem;">MARGEN (cerrados): <span id="kpi-margen" class="fw-bold text-white">0%</span></small>
                 </div>
             </div>
 
@@ -496,7 +496,7 @@
                 <div class="modal-body p-0">
                     <div class="row g-0 border-bottom border-secondary text-center">
                         <div class="col-4 p-2 border-end border-secondary">
-                            <small class="text-muted d-block">COBRADO</small>
+                            <small class="text-muted d-block" id="pd-cobrado-label">COBRADO</small>
                             <span class="text-white fw-bold" id="pd-cobrado">$0</span>
                         </div>
                         <div class="col-4 p-2 border-end border-secondary">
@@ -504,7 +504,7 @@
                             <span class="text-danger fw-bold" id="pd-gastos">$0</span>
                         </div>
                         <div class="col-4 p-2">
-                            <small class="text-muted d-block">UTILIDAD</small>
+                            <small class="text-muted d-block" id="pd-utilidad-label">UTILIDAD</small>
                             <span class="text-success fw-bold" id="pd-utilidad">$0</span>
                         </div>
                     </div>
