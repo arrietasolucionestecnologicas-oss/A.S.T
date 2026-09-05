@@ -13,7 +13,8 @@ let historyDocs = [];
 let proveedores = [];
 let currentProject = null; 
 let currentProjectData = null; 
-let currentProjectItems = []; 
+let currentProjectItems = [];
+let currentProjectPagos = [];
 let currentView = 'PRODUCTO';
 let currentCatalogView = 'cards';
 let deferredPrompt; 
@@ -855,12 +856,25 @@ async function openProjectDetail(id) {
 
     currentProjectData  = res.data.info;
     currentProjectItems = res.data.items;
+    currentProjectPagos = res.data.pagosRecurrentes || [];
     if(res.success) {
         currentProjectData  = res.data.info;
         currentProjectItems = res.data.items;
+        currentProjectPagos = res.data.pagosRecurrentes || [];
         const pdSearch = document.getElementById('pd-search');
         if (pdSearch) pdSearch.value = '';
         renderProjectItems();
+    }
+}
+
+async function reloadCurrentProjectDetail() {
+    const res = await callApi('getProjectDetails', { id: currentProject });
+    if (res.success && res.data && res.data.info) {
+        currentProjectData  = res.data.info;
+        currentProjectItems = res.data.items;
+        currentProjectPagos = res.data.pagosRecurrentes || [];
+        renderProjectItems();
+        refreshProjectsOnly();
     }
 }
 
@@ -872,7 +886,8 @@ function renderProjectItems() {
     document.getElementById('pd-utilidad').innerText = fmt.format(currentProjectData.utilidad);
     document.getElementById('pd-cobrado-label').innerText  = currentProjectData.estado === 'CERRADO' ? 'COBRADO' : 'COTIZADO';
     document.getElementById('pd-utilidad-label').innerText = currentProjectData.estado === 'CERRADO' ? 'UTILIDAD' : 'UTILIDAD PROY.';
-    
+    renderRecurringSection();
+
     const list = document.getElementById('pd-items-list');
     list.innerHTML = '';
     
@@ -898,6 +913,104 @@ function renderProjectItems() {
         </div>`;
         list.innerHTML += html;
     });
+}
+
+// --- PAGOS RECURRENTES (proyectos de software pagados a credito mensual) ---
+
+function renderRecurringSection() {
+    const el = document.getElementById('pd-recurring-section');
+    if (!el || !currentProjectData) return;
+
+    if (!currentProjectData.esRecurrente) {
+        el.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center">
+            <small class="text-muted">Pago único (cotización/cuenta de cobro)</small>
+            <button class="btn btn-sm btn-outline-cyan" onclick="openRecurringConfigModal()">
+                <i class="bi bi-arrow-repeat"></i> Activar pagos recurrentes
+            </button>
+        </div>`;
+        return;
+    }
+
+    const pagos = currentProjectPagos || [];
+    const filas = pagos.map(p => {
+        const fechaObj = new Date(p.fechaVencimiento);
+        const mesRaw = fechaObj.toLocaleDateString('es-CO', { year: 'numeric', month: 'long' });
+        const mesLabel = mesRaw.charAt(0).toUpperCase() + mesRaw.slice(1);
+        const fecha = fechaObj.toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' });
+        const esPagado = p.estado === 'PAGADO';
+        const badge = esPagado
+            ? '<span class="badge bg-success">PAGADO</span>'
+            : '<span class="badge bg-warning text-dark">PENDIENTE</span>';
+        const btn = esPagado ? '' : `<button class="btn btn-sm btn-cyan" onclick="marcarPagoRecurrente('${p.idPago}')" title="Marcar como pagado"><i class="bi bi-check-lg"></i></button>`;
+        return `
+        <div class="d-flex justify-content-between align-items-center border-bottom border-secondary py-1">
+            <div>
+                <div class="text-white small fw-bold">${mesLabel} &mdash; ${fmt.format(p.monto)}</div>
+                <div class="text-muted" style="font-size:0.65rem;">Vence: ${fecha} ${badge}</div>
+            </div>
+            ${btn}
+        </div>`;
+    }).join('');
+
+    el.innerHTML = `
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <small class="text-cyan fw-bold"><i class="bi bi-arrow-repeat"></i> Pagos Recurrentes ${currentProjectData.numCuotas > 0 ? `(${currentProjectData.numCuotas} cuotas)` : '(indefinido)'}</small>
+        <small class="text-success fw-bold">Pagado real: ${fmt.format(currentProjectData.totalPagadoRecurrente || 0)}</small>
+    </div>
+    <div style="max-height:180px; overflow-y:auto;">${filas || '<div class="text-muted small">Sin cuotas generadas.</div>'}</div>`;
+}
+
+function openRecurringConfigModal() {
+    if (!currentProjectData) return;
+    document.getElementById('rc-monto').value = '';
+    document.getElementById('rc-dia').value = new Date().getDate();
+    document.getElementById('rc-cuotas').value = 0;
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('recurringConfigModal')).show();
+}
+
+async function saveRecurringConfig() {
+    const monto = Number(document.getElementById('rc-monto').value);
+    const dia = Number(document.getElementById('rc-dia').value) || 1;
+    const cuotas = Number(document.getElementById('rc-cuotas').value) || 0;
+    if (!monto || monto <= 0) return alert("Ingresa un monto mensual válido.");
+
+    const modalInstance = bootstrap.Modal.getInstance(document.getElementById('recurringConfigModal'));
+    if (modalInstance) { modalInstance.hide(); cleanBackdrops(); }
+
+    showSyncIndicator();
+    const res = await callApi('configureRecurringPayment', {
+        projectId: currentProject,
+        montoMensual: monto,
+        diaCobro: dia,
+        numCuotas: cuotas
+    });
+    hideSyncIndicator();
+
+    const ok = res.success && res.data && res.data.success !== false;
+    if (ok) {
+        showToast('✅ Pagos recurrentes activados', 'success');
+        await reloadCurrentProjectDetail();
+    } else {
+        const err = (res.data && res.data.error) ? res.data.error : (res.error || 'Error desconocido');
+        showToast('Error: ' + err, 'danger');
+    }
+}
+
+async function marcarPagoRecurrente(idPago) {
+    if (!confirm('¿Confirmas que este pago ya fue recibido?')) return;
+    showSyncIndicator();
+    const res = await callApi('registerRecurringPayment', { idPago: idPago });
+    hideSyncIndicator();
+
+    const ok = res.success && res.data && res.data.success !== false;
+    if (ok) {
+        showToast('✅ Pago registrado', 'success');
+        await reloadCurrentProjectDetail();
+    } else {
+        const err = (res.data && res.data.error) ? res.data.error : (res.error || 'Error desconocido');
+        showToast('Error: ' + err, 'danger');
+    }
 }
 
 function openEditProjectModal() {

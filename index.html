@@ -475,6 +475,34 @@
         </div>
     </div>
 
+    <div class="modal fade" id="recurringConfigModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark-panel border-cyan">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-white"><i class="bi bi-arrow-repeat"></i> Activar Pagos Recurrentes</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="text-cyan small fw-bold">Monto mensual</label>
+                        <input type="number" id="rc-monto" class="form-control bg-dark text-white border-cyan" placeholder="Ej: 500000">
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Día de cobro (1-28)</label>
+                        <input type="number" id="rc-dia" class="form-control bg-dark text-white border-secondary" value="1" min="1" max="28">
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Número de cuotas (deja en 0 si es indefinido, sin fecha de fin)</label>
+                        <input type="number" id="rc-cuotas" class="form-control bg-dark text-white border-secondary" value="0" min="0">
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button class="btn btn-cyan w-100" onclick="saveRecurringConfig()">ACTIVAR</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="projectDetailModal" tabindex="-1">
         <div class="modal-dialog modal-fullscreen">
             <div class="modal-content bg-dark-panel">
@@ -508,6 +536,8 @@
                             <span class="text-success fw-bold" id="pd-utilidad">$0</span>
                         </div>
                     </div>
+
+                    <div class="p-2 border-bottom border-secondary" id="pd-recurring-section"></div>
 
                    <!-- Buscador de movimientos -->
                     <div style="padding:8px 12px; border-bottom:1px solid #1a2a3a; background:#071726; position:sticky; top:0; z-index:10;">
