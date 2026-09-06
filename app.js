@@ -32,6 +32,50 @@ async function openExternalUrl(url) {
     }
 }
 
+// --- RECORDATORIOS DE PAGOS RECURRENTES (notificaciones locales) ---
+function hashToNotifId(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+    }
+    return Math.abs(hash);
+}
+
+async function scheduleRecurringPaymentReminders() {
+    if (!window.Capacitor || !window.Capacitor.Plugins.LocalNotifications) return;
+    try {
+        const LN = window.Capacitor.Plugins.LocalNotifications;
+        let perm = await LN.checkPermissions();
+        if (perm.display !== 'granted') {
+            perm = await LN.requestPermissions();
+            if (perm.display !== 'granted') return;
+        }
+
+        const res = await callApi('getPendingRecurringPayments', {});
+        if (!res.success || !res.data || res.data.length === 0) return;
+
+        const ahora = Date.now();
+        const notifications = res.data.map(p => {
+            const fechaAlerta = new Date(p.fechaVencimiento);
+            fechaAlerta.setHours(9, 0, 0, 0);
+            let cuandoMs = fechaAlerta.getTime();
+            if (cuandoMs < ahora) cuandoMs = ahora + 3000; // ya vencido: avisar casi de inmediato
+
+            return {
+                id: hashToNotifId(p.idPago),
+                title: 'Pago pendiente — ' + p.nombreProyecto,
+                body: `Cuota de ${fmt.format(p.monto)} (${p.periodo}) de ${p.cliente}`,
+                schedule: { at: new Date(cuandoMs) }
+            };
+        });
+
+        await LN.schedule({ notifications });
+    } catch (e) {
+        console.error('Error programando recordatorios de pago recurrente', e);
+    }
+}
+
 function generateUUID() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
         var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -317,6 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchAllDataBackground();
     };
     initNetworkLogic();
+    scheduleRecurringPaymentReminders();
 
 document.getElementById('search').addEventListener('input', (e) => {
         const term = e.target.value.toLowerCase().trim();
