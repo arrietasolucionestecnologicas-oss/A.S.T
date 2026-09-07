@@ -979,22 +979,29 @@ function renderRecurringSection() {
 
     const pagos = currentProjectPagos || [];
     const filas = pagos.map(p => {
+        const esInicial = p.periodo === 'Inicial';
         const fechaObj = new Date(p.fechaVencimiento);
-        const mesRaw = fechaObj.toLocaleDateString('es-CO', { year: 'numeric', month: 'long' });
-        const mesLabel = mesRaw.charAt(0).toUpperCase() + mesRaw.slice(1);
+        let mesLabel;
+        if (esInicial) {
+            mesLabel = 'Pago Inicial (Contraentrega)';
+        } else {
+            const mesRaw = fechaObj.toLocaleDateString('es-CO', { year: 'numeric', month: 'long' });
+            mesLabel = mesRaw.charAt(0).toUpperCase() + mesRaw.slice(1);
+        }
         const fecha = fechaObj.toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' });
         const esPagado = p.estado === 'PAGADO';
         const badge = esPagado
             ? '<span class="badge bg-success">PAGADO</span>'
             : '<span class="badge bg-warning text-dark">PENDIENTE</span>';
-        const btn = esPagado ? '' : `<button class="btn btn-sm btn-cyan" onclick="marcarPagoRecurrente('${p.idPago}')" title="Marcar como pagado"><i class="bi bi-check-lg"></i></button>`;
+        const btnCuenta = `<button class="btn btn-sm btn-outline-info" onclick="generarCuentaCobroPago('${p.idPago}')" title="Generar Cuenta de Cobro"><i class="bi bi-file-earmark-pdf"></i></button>`;
+        const btnPagar = esPagado ? '' : `<button class="btn btn-sm btn-cyan" onclick="marcarPagoRecurrente('${p.idPago}')" title="Marcar como pagado"><i class="bi bi-check-lg"></i></button>`;
         return `
         <div class="d-flex justify-content-between align-items-center border-bottom border-secondary py-1">
             <div>
                 <div class="text-white small fw-bold">${mesLabel} &mdash; ${fmt.format(p.monto)}</div>
-                <div class="text-muted" style="font-size:0.65rem;">Vence: ${fecha} ${badge}</div>
+                <div class="text-muted" style="font-size:0.65rem;">${esInicial ? 'Fecha' : 'Vence'}: ${fecha} ${badge}</div>
             </div>
-            ${btn}
+            <div class="d-flex gap-1">${btnCuenta}${btnPagar}</div>
         </div>`;
     }).join('');
 
@@ -1055,6 +1062,39 @@ async function marcarPagoRecurrente(idPago) {
     } else {
         const err = (res.data && res.data.error) ? res.data.error : (res.error || 'Error desconocido');
         showToast('Error: ' + err, 'danger');
+    }
+}
+
+async function generarCuentaCobroPago(idPago) {
+    const pago = (currentProjectPagos || []).find(p => p.idPago === idPago);
+    if (!pago || !currentProjectData) return;
+
+    const esInicial = pago.periodo === 'Inicial';
+    const descripcion = esInicial
+        ? `Pago inicial (contraentrega) — ${currentProjectData.nombreProyecto}`
+        : `Cuota ${pago.periodo} — ${currentProjectData.nombreProyecto}`;
+
+    // Sin projectId: es un documento independiente (Cuenta de Cobro puntual de
+    // esta cuota), no debe crear un movimiento nuevo — el cobro ya se sigue
+    // por separado en PAGOS_RECURRENTES.
+    const payload = {
+        tipoDoc: 'Cuenta de Cobro',
+        cliente: { nombre: currentProjectData.cliente, nit: '', telefono: currentProjectData.contacto },
+        items: [{ nombre: descripcion, specs: '', cantidad: 1, precio: pago.monto, subtotal: pago.monto }],
+        totales: { subtotal: pago.monto, iva: 0, granTotal: pago.monto },
+        opciones: { mostrarDesc: true, terminos: '', planPago: null }
+    };
+
+    showToast('⏳ Generando cuenta de cobro...', 'info');
+    const res = await callApi('createDocument', payload);
+    if (res.success) {
+        showToast(`✅ ${res.data.consecutivo} generado`, 'success');
+        refreshHistoryOnly();
+        if (confirm(`Documento ${res.data.consecutivo} generado. ¿Abrir?`)) {
+            openExternalUrl(res.data.url);
+        }
+    } else {
+        showToast('Error: ' + res.error, 'danger');
     }
 }
 
