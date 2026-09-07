@@ -358,6 +358,33 @@
 
                     <textarea id="terms-area" class="form-control form-control-sm bg-dark text-secondary border-secondary mb-3" rows="3" style="display:none;" placeholder="Escribe aquí las condiciones..."></textarea>
 
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="check-plan-pago" onchange="togglePlanPago()">
+                        <label class="form-check-label text-cyan small fw-bold" for="check-plan-pago">
+                            <i class="bi bi-calendar-check"></i> Incluir Plan de Pago (contraentrega + cuotas)
+                        </label>
+                    </div>
+                    <div id="plan-pago-area" style="display:none;" class="mb-3 p-2 rounded border" style="border-color: rgba(0,200,255,0.25) !important; background: rgba(0,200,255,0.05);">
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="small text-muted">Pago inicial (contraentrega)</label>
+                                <input type="number" id="pp-inicial" class="form-control form-control-sm bg-dark text-white border-secondary" value="0" oninput="updatePlanPagoPreview()">
+                            </div>
+                            <div class="col-6">
+                                <label class="small text-muted">Cuota mensual</label>
+                                <input type="number" id="pp-cuota" class="form-control form-control-sm bg-dark text-white border-secondary" value="0" oninput="updatePlanPagoPreview()">
+                            </div>
+                            <div class="col-6">
+                                <label class="small text-muted">Número de cuotas</label>
+                                <input type="number" id="pp-num-cuotas" class="form-control form-control-sm bg-dark text-white border-secondary" value="1" min="1" oninput="updatePlanPagoPreview()">
+                            </div>
+                            <div class="col-6 d-flex flex-column justify-content-end align-items-end">
+                                <small class="text-muted">Total del plan</small>
+                                <span class="fw-bold text-cyan" id="pp-total-preview">$0</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="p-3 mb-3 border border-secondary rounded bg-dark">
                         <h6 class="text-white mb-2">Datos del Cliente</h6>
                         <div class="row g-2">

@@ -1658,7 +1658,8 @@ async function convertQuoteToProject(index) {
             nombreProyecto: `Ejecución ${doc.consecutivo}`,
             cliente:  orderData.cliente ? orderData.cliente.nombre   : doc.cliente,
             contacto: orderData.cliente ? orderData.cliente.telefono : "",
-            items:    orderData.items || []
+            items:    orderData.items || [],
+            planPago: (orderData.opciones && orderData.opciones.planPago) ? orderData.opciones.planPago : null
         };
 
         showToast(`⏳ Creando proyecto desde ${doc.consecutivo}...`, "info");
@@ -2399,6 +2400,21 @@ function toggleTerms() {
     }
 }
 
+function togglePlanPago() {
+    const check = document.getElementById('check-plan-pago');
+    const area = document.getElementById('plan-pago-area');
+    area.style.display = check.checked ? 'block' : 'none';
+    if (check.checked) updatePlanPagoPreview();
+}
+
+function updatePlanPagoPreview() {
+    const inicial = Number(document.getElementById('pp-inicial').value) || 0;
+    const cuota = Number(document.getElementById('pp-cuota').value) || 0;
+    const numCuotas = Number(document.getElementById('pp-num-cuotas').value) || 0;
+    const total = inicial + (cuota * numCuotas);
+    document.getElementById('pp-total-preview').innerText = fmt.format(total);
+}
+
 function sendWhatsApp() {
     const clienteInput = document.getElementById('c-nombre').value;
     if (cart.length === 0) return alert("Carrito vacío.");
@@ -2453,16 +2469,24 @@ async function generatePDF() {
         subtotal: c.cantidad * c.precio
     }));
 
+    const incluyePlanPago = document.getElementById('check-plan-pago').checked;
+    const planPago = incluyePlanPago ? {
+        pagoInicial: Number(document.getElementById('pp-inicial').value) || 0,
+        cuotaMensual: Number(document.getElementById('pp-cuota').value) || 0,
+        numCuotas: Number(document.getElementById('pp-num-cuotas').value) || 0
+    } : null;
+
     const payload = {
         tipoDoc: document.getElementById('doc-type').value,
         cliente: cliente,
         items: safeItems,
         totales: { subtotal: subtotal, iva: ivaVal, granTotal: subtotal + ivaVal },
-        opciones: { 
+        opciones: {
             mostrarDesc: true,
-            terminos: termsText 
-        }, 
-        projectId: projectIdToSync 
+            terminos: termsText,
+            planPago: planPago
+        },
+        projectId: projectIdToSync
     };
     
     const res = await callApi('createDocument', payload);
