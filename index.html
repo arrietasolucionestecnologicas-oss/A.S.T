@@ -522,6 +522,15 @@
                         <label class="text-muted small">Número de cuotas (deja en 0 si es indefinido, sin fecha de fin)</label>
                         <input type="number" id="rc-cuotas" class="form-control bg-dark text-white border-secondary" value="0" min="0">
                     </div>
+                    <hr class="border-secondary my-2">
+                    <div class="mb-2">
+                        <label class="small text-muted">Pago inicial / contraentrega (opcional, déjalo en 0 si no aplica)</label>
+                        <input type="number" id="rc-inicial" class="form-control bg-dark text-white border-secondary" value="0">
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="rc-inicial-pagado">
+                        <label class="form-check-label small" for="rc-inicial-pagado">El pago inicial ya se recibió</label>
+                    </div>
                 </div>
                 <div class="modal-footer border-secondary">
                     <button class="btn btn-cyan w-100" onclick="saveRecurringConfig()">ACTIVAR</button>

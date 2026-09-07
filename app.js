@@ -1018,6 +1018,8 @@ function openRecurringConfigModal() {
     document.getElementById('rc-monto').value = '';
     document.getElementById('rc-dia').value = new Date().getDate();
     document.getElementById('rc-cuotas').value = 0;
+    document.getElementById('rc-inicial').value = 0;
+    document.getElementById('rc-inicial-pagado').checked = false;
     bootstrap.Modal.getOrCreateInstance(document.getElementById('recurringConfigModal')).show();
 }
 
@@ -1025,6 +1027,8 @@ async function saveRecurringConfig() {
     const monto = Number(document.getElementById('rc-monto').value);
     const dia = Number(document.getElementById('rc-dia').value) || 1;
     const cuotas = Number(document.getElementById('rc-cuotas').value) || 0;
+    const inicial = Number(document.getElementById('rc-inicial').value) || 0;
+    const inicialPagado = document.getElementById('rc-inicial-pagado').checked;
     if (!monto || monto <= 0) return alert("Ingresa un monto mensual válido.");
 
     const modalInstance = bootstrap.Modal.getInstance(document.getElementById('recurringConfigModal'));
@@ -1037,6 +1041,10 @@ async function saveRecurringConfig() {
         diaCobro: dia,
         numCuotas: cuotas
     });
+
+    if (inicial > 0) {
+        await callApi('addInitialPayment', { projectId: currentProject, monto: inicial, pagado: inicialPagado });
+    }
     hideSyncIndicator();
 
     const ok = res.success && res.data && res.data.success !== false;
@@ -1074,6 +1082,9 @@ async function generarCuentaCobroPago(idPago) {
         ? `Pago inicial (contraentrega) — ${currentProjectData.nombreProyecto}`
         : `Cuota ${pago.periodo} — ${currentProjectData.nombreProyecto}`;
 
+    const fechaVenceStr = new Date(pago.fechaVencimiento).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+    const clausulaSuspension = `Esta cuota vence el ${fechaVenceStr}. Si el pago no se realiza dentro de esa fecha, el servicio/acceso a la aplicación quedará suspendido hasta que se regularice el pago.`;
+
     // Sin projectId: es un documento independiente (Cuenta de Cobro puntual de
     // esta cuota), no debe crear un movimiento nuevo — el cobro ya se sigue
     // por separado en PAGOS_RECURRENTES.
@@ -1082,7 +1093,7 @@ async function generarCuentaCobroPago(idPago) {
         cliente: { nombre: currentProjectData.cliente, nit: '', telefono: currentProjectData.contacto },
         items: [{ nombre: descripcion, specs: '', cantidad: 1, precio: pago.monto, subtotal: pago.monto }],
         totales: { subtotal: pago.monto, iva: 0, granTotal: pago.monto },
-        opciones: { mostrarDesc: true, terminos: '', planPago: null }
+        opciones: { mostrarDesc: true, terminos: clausulaSuspension, planPago: null }
     };
 
     showToast('⏳ Generando cuenta de cobro...', 'info');
