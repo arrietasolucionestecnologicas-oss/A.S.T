@@ -15,6 +15,7 @@ let currentProject = null;
 let currentProjectData = null; 
 let currentProjectItems = [];
 let currentProjectPagos = [];
+let selectedMovIds = new Set();
 let currentView = 'PRODUCTO';
 let currentCatalogView = 'cards';
 let deferredPrompt; 
@@ -654,44 +655,63 @@ async function openCostHistory() {
 }
 
 // --- GESTIÓN DE PROYECTOS ---
+function buildProjectCardHtml(p) {
+    const estaCerrado = p.estado === 'CERRADO';
+    const estadoClass = p.estado === 'ABIERTO' ? 'text-success' : 'text-secondary';
+    // Mientras el proyecto sigue abierto, lo cotizado no es ganancia real todavia:
+    // se etiqueta como proyectado en vez de como si ya se hubiera cobrado.
+    const labelCobrado  = estaCerrado ? 'COBRADO'  : 'COTIZADO';
+    const labelUtilidad = estaCerrado ? 'UTILIDAD' : 'UTILIDAD PROY.';
+    return `
+    <div class="project-card" onclick="openProjectDetail('${p.id}')">
+        <div class="d-flex justify-content-between">
+            <h6 class="text-white fw-bold mb-1">${p.nombreProyecto}</h6>
+            <span class="badge bg-dark border border-secondary ${estadoClass}">${p.estado}</span>
+        </div>
+        <small class="text-cyan d-block mb-2">${p.cliente}</small>
+        <div class="row g-0 text-center" style="font-size:0.75rem;">
+            <div class="col-4 border-end border-secondary">
+                <span class="text-muted">${labelCobrado}</span><br>
+                <span class="text-white">${fmt.format(p.totalCobrado)}</span>
+            </div>
+            <div class="col-4 border-end border-secondary">
+                <span class="text-muted">COSTOS</span><br>
+                <span class="text-danger">${fmt.format(p.totalCostos)}</span>
+            </div>
+            <div class="col-4">
+                <span class="text-muted">${labelUtilidad}</span><br>
+                <span class="${p.utilidad >= 0 ? 'text-profit' : 'text-loss'}">${fmt.format(p.utilidad)}</span>
+            </div>
+        </div>
+    </div>`;
+}
+
+// Pinta primero los proyectos ABIERTO, luego un separador, luego los CERRADO —
+// antes quedaban mezclados en el orden crudo de la hoja.
+function renderProjectListGrouped(container, lista) {
+    const abiertos = lista.filter(p => p.estado !== 'CERRADO');
+    const cerrados = lista.filter(p => p.estado === 'CERRADO');
+
+    container.innerHTML = abiertos.map(buildProjectCardHtml).join('');
+
+    if (cerrados.length > 0) {
+        container.innerHTML += `
+        <div class="d-flex align-items-center gap-2 text-muted small text-uppercase mt-3 mb-2">
+            <span style="flex:1; border-top:1px solid #333;"></span>
+            Cerrados
+            <span style="flex:1; border-top:1px solid #333;"></span>
+        </div>`;
+        container.innerHTML += cerrados.map(buildProjectCardHtml).join('');
+    }
+}
+
 function renderProjects() {
     const container = document.getElementById('projects-list');
-    container.innerHTML = '';
     if (projects.length === 0) {
         container.innerHTML = '<div class="text-muted text-center mt-5">No hay trabajos activos.</div>';
         return;
     }
-    projects.forEach(p => {
-        const estaCerrado = p.estado === 'CERRADO';
-        const estadoClass = p.estado === 'ABIERTO' ? 'text-success' : 'text-secondary';
-        // Mientras el proyecto sigue abierto, lo cotizado no es ganancia real todavia:
-        // se etiqueta como proyectado en vez de como si ya se hubiera cobrado.
-        const labelCobrado  = estaCerrado ? 'COBRADO'  : 'COTIZADO';
-        const labelUtilidad = estaCerrado ? 'UTILIDAD' : 'UTILIDAD PROY.';
-        const card = `
-        <div class="project-card" onclick="openProjectDetail('${p.id}')">
-            <div class="d-flex justify-content-between">
-                <h6 class="text-white fw-bold mb-1">${p.nombreProyecto}</h6>
-                <span class="badge bg-dark border border-secondary ${estadoClass}">${p.estado}</span>
-            </div>
-            <small class="text-cyan d-block mb-2">${p.cliente}</small>
-            <div class="row g-0 text-center" style="font-size:0.75rem;">
-                <div class="col-4 border-end border-secondary">
-                    <span class="text-muted">${labelCobrado}</span><br>
-                    <span class="text-white">${fmt.format(p.totalCobrado)}</span>
-                </div>
-                <div class="col-4 border-end border-secondary">
-                    <span class="text-muted">COSTOS</span><br>
-                    <span class="text-danger">${fmt.format(p.totalCostos)}</span>
-                </div>
-                <div class="col-4">
-                    <span class="text-muted">${labelUtilidad}</span><br>
-                    <span class="${p.utilidad >= 0 ? 'text-profit' : 'text-loss'}">${fmt.format(p.utilidad)}</span>
-                </div>
-            </div>
-        </div>`;
-        container.innerHTML += card;
-    });
+    renderProjectListGrouped(container, projects);
 }
 async function fetchProjects() {
     renderProjects();
@@ -700,7 +720,6 @@ async function fetchProjects() {
 
 function renderProjectsFiltered(term) {
     const container = document.getElementById('projects-list');
-    container.innerHTML = '';
 
     let lista = projects;
     if (term) {
@@ -717,31 +736,7 @@ function renderProjectsFiltered(term) {
         return;
     }
 
-    lista.forEach(p => {
-        const estadoClass = p.estado === 'ABIERTO' ? 'text-success' : 'text-secondary';
-        container.innerHTML += `
-        <div class="project-card" onclick="openProjectDetail('${p.id}')">
-            <div class="d-flex justify-content-between">
-                <h6 class="text-white fw-bold mb-1">${p.nombreProyecto}</h6>
-                <span class="badge bg-dark border border-secondary ${estadoClass}">${p.estado}</span>
-            </div>
-            <small class="text-cyan d-block mb-2">${p.cliente}</small>
-            <div class="row g-0 text-center" style="font-size:0.75rem;">
-                <div class="col-4 border-end border-secondary">
-                    <span class="text-muted">COBRADO</span><br>
-                    <span class="text-white">${fmt.format(p.totalCobrado)}</span>
-                </div>
-                <div class="col-4 border-end border-secondary">
-                    <span class="text-muted">COSTOS</span><br>
-                    <span class="text-danger">${fmt.format(p.totalCostos)}</span>
-                </div>
-                <div class="col-4">
-                    <span class="text-muted">UTILIDAD</span><br>
-                    <span class="${p.utilidad >= 0 ? 'text-profit' : 'text-loss'}">${fmt.format(p.utilidad)}</span>
-                </div>
-            </div>
-        </div>`;
-    });
+    renderProjectListGrouped(container, lista);
 }
 
 function renderHistoryFiltered(term) {
@@ -862,6 +857,7 @@ function createNewProject() {
 // --- DETALLE DE PROYECTO ---
 async function openProjectDetail(id) {
     currentProject = id;
+    selectedMovIds.clear();
     bootstrap.Modal.getOrCreateInstance(document.getElementById('projectDetailModal')).show();
 
     const pInfo = projects.find(p => p.id === id);
@@ -938,11 +934,26 @@ function renderProjectItems() {
     
     currentProjectItems.forEach(item => {
         const isCobrar = (item.esCobrar === true || item.esCobrar === 'TRUE');
-        const badge = isCobrar ? '<span class="badge bg-success">COBRABLE</span>' : '<span class="badge bg-secondary">NO COBRABLE</span>';
-        
+        const yaFacturado = item.facturado === true;
+        let badge;
+        if (yaFacturado) badge = '<span class="badge bg-info text-dark">FACTURADO</span>';
+        else if (isCobrar) badge = '<span class="badge bg-success">COBRABLE</span>';
+        else badge = '<span class="badge bg-secondary">NO COBRABLE</span>';
+
+        // Solo se puede seleccionar para cuenta de cobro parcial lo que es
+        // cobrable y todavia no se ha facturado — asi se evita cobrar dos
+        // veces lo mismo cuando el cliente ya pago una parte.
+        const puedeSeleccionar = isCobrar && !yaFacturado;
+        const checkboxHtml = puedeSeleccionar
+            ? `<input type="checkbox" class="form-check-input" data-idmov="${item.idMov}"
+                      ${selectedMovIds.has(item.idMov) ? 'checked' : ''}
+                      onchange="toggleMovSeleccionado('${item.idMov}', this.checked)">`
+            : '';
+
         const html = `
-        <div class="d-flex justify-content-between align-items-center border-bottom border-secondary py-2">
-            <div class="overflow-hidden me-2">
+        <div class="d-flex justify-content-between align-items-start border-bottom border-secondary py-2">
+            <div class="me-2 pt-1" style="width:18px; flex-shrink:0;">${checkboxHtml}</div>
+            <div class="overflow-hidden me-2 flex-grow-1">
                 <div class="text-white small fw-bold text-truncate">${item.descripcion}</div>
                 <div class="text-muted" style="font-size:0.7rem;">${item.tipo} | ${item.proveedor || '-'}</div>
                 ${badge}
@@ -958,6 +969,74 @@ function renderProjectItems() {
         </div>`;
         list.innerHTML += html;
     });
+
+    renderBotonCuentaCobroParcial();
+}
+
+function toggleMovSeleccionado(idMov, checked) {
+    if (checked) selectedMovIds.add(idMov);
+    else selectedMovIds.delete(idMov);
+    renderBotonCuentaCobroParcial();
+}
+
+function renderBotonCuentaCobroParcial() {
+    const el = document.getElementById('pd-cuenta-cobro-parcial');
+    if (!el) return;
+
+    if (selectedMovIds.size === 0) { el.innerHTML = ''; return; }
+
+    const seleccionados = currentProjectItems.filter(i => selectedMovIds.has(i.idMov));
+    const total = seleccionados.reduce((sum, i) => sum + (i.venta * i.cantidad), 0);
+
+    el.innerHTML = `
+    <button class="btn btn-cyan w-100 fw-bold btn-sm" onclick="generarCuentaCobroSeleccionados()">
+        <i class="bi bi-file-earmark-pdf"></i> Generar Cuenta de Cobro (${seleccionados.length} ítem${seleccionados.length !== 1 ? 's' : ''}) — ${fmt.format(total)}
+    </button>`;
+}
+
+async function generarCuentaCobroSeleccionados() {
+    const seleccionados = currentProjectItems.filter(i => selectedMovIds.has(i.idMov));
+    if (seleccionados.length === 0 || !currentProjectData) return;
+
+    const items = seleccionados.map(i => ({
+        nombre: i.descripcion,
+        specs: '',
+        cantidad: i.cantidad,
+        precio: i.venta,
+        subtotal: i.venta * i.cantidad
+    }));
+    const total = items.reduce((sum, it) => sum + it.subtotal, 0);
+
+    if (!confirm(`¿Generar cuenta de cobro de ${items.length} ítem(s) por ${fmt.format(total)}?`)) return;
+
+    // Sin projectId: documento independiente, no debe volver a crear movimientos.
+    const payload = {
+        tipoDoc: 'Cuenta de Cobro',
+        cliente: { nombre: currentProjectData.cliente, nit: '', telefono: currentProjectData.contacto },
+        items: items,
+        totales: { subtotal: total, iva: 0, granTotal: total },
+        opciones: { mostrarDesc: true, terminos: '', planPago: null }
+    };
+
+    showToast('⏳ Generando cuenta de cobro...', 'info');
+    const res = await callApi('createDocument', payload);
+    if (!res.success) {
+        showToast('Error: ' + res.error, 'danger');
+        return;
+    }
+
+    // Marcar los movimientos incluidos como ya facturados, para no volver a
+    // ofrecerlos la proxima vez que se cobre el excedente del proyecto.
+    await callApi('marcarMovimientosFacturados', { idMovs: Array.from(selectedMovIds) });
+    selectedMovIds.clear();
+
+    showToast(`✅ ${res.data.consecutivo} generado`, 'success');
+    refreshHistoryOnly();
+    await reloadCurrentProjectDetail();
+
+    if (confirm(`Documento ${res.data.consecutivo} generado. ¿Abrir?`)) {
+        openExternalUrl(res.data.url);
+    }
 }
 
 // --- PAGOS RECURRENTES (proyectos de software pagados a credito mensual) ---
