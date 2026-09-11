@@ -1257,14 +1257,30 @@ async function generarCuentaCobroPago(idPago) {
     const fechaVenceStr = new Date(pago.fechaVencimiento).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
     const clausulaSuspension = `Esta cuota vence el ${fechaVenceStr}. Si el pago no se realiza dentro de esa fecha, el servicio/acceso a la aplicación quedará suspendido hasta que se regularice el pago.`;
 
+    const items = [{ nombre: descripcion, specs: '', cantidad: 1, precio: pago.monto, subtotal: pago.monto }];
+
+    // Cuota vencida: se ofrece agregar un interes/recargo por mora, pero el
+    // monto lo decides tu caso por caso -- no hay formula automatica ni tasa
+    // fija, tal como pediste.
+    const estaVencida = !esInicial && new Date(pago.fechaVencimiento).getTime() < Date.now();
+    if (estaVencida) {
+        const interesStr = prompt('Esta cuota está vencida.\n¿Quieres agregar un interés/recargo por mora? Escribe el monto en pesos (deja vacío o 0 si no aplica):', '0');
+        const interes = Number(interesStr);
+        if (interes > 0) {
+            items.push({ nombre: 'Interés / recargo por mora', specs: '', cantidad: 1, precio: interes, subtotal: interes });
+        }
+    }
+
+    const total = items.reduce((sum, it) => sum + it.subtotal, 0);
+
     // Sin projectId: es un documento independiente (Cuenta de Cobro puntual de
     // esta cuota), no debe crear un movimiento nuevo — el cobro ya se sigue
     // por separado en PAGOS_RECURRENTES.
     const payload = {
         tipoDoc: 'Cuenta de Cobro',
         cliente: { nombre: currentProjectData.cliente, nit: '', telefono: currentProjectData.contacto },
-        items: [{ nombre: descripcion, specs: '', cantidad: 1, precio: pago.monto, subtotal: pago.monto }],
-        totales: { subtotal: pago.monto, iva: 0, granTotal: pago.monto },
+        items: items,
+        totales: { subtotal: total, iva: 0, granTotal: total },
         opciones: { mostrarDesc: true, terminos: clausulaSuspension, planPago: null }
     };
 
