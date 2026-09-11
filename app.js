@@ -555,6 +555,8 @@ function switchEstimadorSubTab(sub) {
     if (sub === 'ELECTRICO') {
         poblarSelectTiposPunto();
         renderElectricoPuntos();
+    } else if (sub === 'CCTV') {
+        initCctvView();
     }
 }
 
@@ -828,6 +830,278 @@ async function guardarEstimadorConfig() {
         poblarSelectTiposPunto();
         renderElectricoPuntos();
         showToast('Configuración del estimador guardada.', 'success');
+    } catch (e) {
+        console.error(e);
+        alert('Error guardando configuración.');
+    } finally {
+        btn.disabled = false; btn.innerText = textoOriginal;
+    }
+}
+
+// --- Estimador — CCTV ---
+const ESTIMADOR_CCTV_DEFAULTS = {
+    conectoresPorCamara: 2,
+    repuestoConectoresPct: 10,
+    consumoPorCamaraW: 8,
+    margenFuentePct: 20,
+    horasGrabacionDia: 24,
+    diasRetencion: 15,
+    canalesDvrDisponibles: [4, 8, 16, 32],
+    resoluciones: [
+        { id: '2mp_1080p', nombre: '2MP (1080p)', bitrateMbps: 4 },
+        { id: '4mp',       nombre: '4MP',          bitrateMbps: 6 },
+        { id: '5mp',       nombre: '5MP',          bitrateMbps: 8 },
+        { id: '8mp_4k',    nombre: '8MP (4K)',     bitrateMbps: 12 }
+    ]
+};
+
+function getEstimadorCctvConfig() { return getEstimadorConfig('ESTIMADOR_CCTV_CONFIG', ESTIMADOR_CCTV_DEFAULTS); }
+
+let estimadorCctvCamaras = [];
+let estimadorCctvResumen = null;
+
+function initCctvView() {
+    const cfg = getEstimadorCctvConfig();
+    poblarSelectResolucion(cfg);
+    const horasEl = document.getElementById('cc-horas-dia');
+    const diasEl = document.getElementById('cc-dias-retencion');
+    if (!horasEl.value) horasEl.value = cfg.horasGrabacionDia;
+    if (!diasEl.value) diasEl.value = cfg.diasRetencion;
+    renderCctvCamaras();
+}
+
+function poblarSelectResolucion(cfg) {
+    cfg = cfg || getEstimadorCctvConfig();
+    const sel = document.getElementById('cc-resolucion');
+    const valorActual = sel.value;
+    sel.innerHTML = cfg.resoluciones.map(r => `<option value="${r.id}">${r.nombre} (${r.bitrateMbps} Mbps)</option>`).join('');
+    if (valorActual && cfg.resoluciones.some(r => r.id === valorActual)) sel.value = valorActual;
+}
+
+function agregarCamaraCctv() {
+    const distancia = Number(document.getElementById('cc-distancia').value) || 0;
+    const canalizacion = document.getElementById('cc-canalizacion').value;
+    if (distancia <= 0) return alert('Ingresa una distancia al DVR mayor a 0.');
+
+    estimadorCctvCamaras.push({ id: generateUUID(), distancia, canalizacion });
+    document.getElementById('cc-distancia').value = 0;
+    renderCctvCamaras();
+}
+
+function eliminarCamaraCctv(id) {
+    estimadorCctvCamaras = estimadorCctvCamaras.filter(c => c.id !== id);
+    renderCctvCamaras();
+}
+
+function renderCctvCamaras() {
+    const listEl = document.getElementById('cctv-camaras-list');
+    if (estimadorCctvCamaras.length === 0) {
+        listEl.innerHTML = '';
+    } else {
+        listEl.innerHTML = `
+        <div class="card bg-dark-panel border-secondary">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-dark table-sm mb-0 align-middle">
+                        <thead><tr class="text-secondary small"><th>#</th><th>Dist. al DVR (m)</th><th>Canalización</th><th></th></tr></thead>
+                        <tbody>
+                        ${estimadorCctvCamaras.map((c, i) => `<tr>
+                            <td class="small">Cámara ${i + 1}</td>
+                            <td class="small">${c.distancia}</td>
+                            <td class="small">${c.canalizacion === 'CANALETA' ? 'Canaleta' : 'Tubería'}</td>
+                            <td class="text-end"><button class="btn btn-sm text-danger p-0" onclick="eliminarCamaraCctv('${c.id}')"><i class="bi bi-trash"></i></button></td>
+                        </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>`;
+    }
+    renderCctvSummary();
+}
+
+function calcularEstimacionCctv() {
+    const comun = getEstimadorComunConfig();
+    const cfg = getEstimadorCctvConfig();
+    const holguraFactor = 1 + ((Number(comun.holguraCablePct) || 0) / 100);
+    const sobranteM = ((Number(comun.sobranteExtremoCm) || 0) * 2) / 100;
+
+    const cantidadCamaras = estimadorCctvCamaras.length;
+    let metrosCable = 0, metrosCanaleta = 0, metrosTuberia = 0;
+
+    estimadorCctvCamaras.forEach(c => {
+        metrosCable += (c.distancia * holguraFactor) + sobranteM;
+        if (c.canalizacion === 'CANALETA') metrosCanaleta += c.distancia;
+        else metrosTuberia += c.distancia;
+    });
+
+    const conectoresBase = cantidadCamaras * (Number(cfg.conectoresPorCamara) || 0);
+    const conectoresTotal = Math.ceil(conectoresBase * (1 + ((Number(cfg.repuestoConectoresPct) || 0) / 100)));
+
+    const consumoTotalW = cantidadCamaras * (Number(cfg.consumoPorCamaraW) || 0);
+    const capacidadFuenteW = Math.ceil(consumoTotalW * (1 + ((Number(cfg.margenFuentePct) || 0) / 100)));
+
+    const resolucionId = document.getElementById('cc-resolucion').value;
+    const resolucion = cfg.resoluciones.find(r => r.id === resolucionId) || cfg.resoluciones[0];
+    const horasDia = Number(document.getElementById('cc-horas-dia').value) || cfg.horasGrabacionDia;
+    const diasRetencion = Number(document.getElementById('cc-dias-retencion').value) || cfg.diasRetencion;
+
+    // bitrate en Mbps -> MB/s = Mbps / 8 ; GB = MB/s * segundos totales * cámaras / 1024
+    const segundosTotales = horasDia * 3600 * diasRetencion;
+    const bitrateMBps = (Number(resolucion.bitrateMbps) || 0) / 8;
+    const almacenamientoGB = (bitrateMBps * segundosTotales * cantidadCamaras) / 1024;
+
+    const canalesNecesarios = cantidadCamaras;
+    const canalesDvrSugeridos = (cfg.canalesDvrDisponibles || []).slice().sort((a, b) => a - b).find(n => n >= canalesNecesarios) || canalesNecesarios;
+
+    return {
+        cantidadCamaras, metrosCable, metrosCanaleta, metrosTuberia,
+        conectoresTotal, consumoTotalW, capacidadFuenteW,
+        resolucion, horasDia, diasRetencion, almacenamientoGB,
+        canalesNecesarios, canalesDvrSugeridos
+    };
+}
+
+function renderCctvSummary() {
+    const summaryEl = document.getElementById('cctv-summary');
+    const btnCarrito = document.getElementById('btn-cctv-carrito');
+
+    if (estimadorCctvCamaras.length === 0) {
+        summaryEl.innerHTML = '<p class="text-secondary mb-0">Agrega al menos una cámara para ver el resumen.</p>';
+        btnCarrito.disabled = true;
+        estimadorCctvResumen = null;
+        return;
+    }
+
+    const r = calcularEstimacionCctv();
+    estimadorCctvResumen = r;
+    btnCarrito.disabled = false;
+
+    summaryEl.innerHTML = `
+        <div class="row g-2 small mb-2">
+            <div class="col-6"><i class="bi bi-camera-video"></i> Cámaras: <strong>${r.cantidadCamaras}</strong></div>
+            <div class="col-6"><i class="bi bi-plug"></i> Cable: <strong>${r.metrosCable.toFixed(2)} m</strong></div>
+            <div class="col-6"><i class="bi bi-arrow-bar-right"></i> Canaleta: <strong>${r.metrosCanaleta.toFixed(2)} m</strong></div>
+            <div class="col-6"><i class="bi bi-arrow-bar-right"></i> Tubería: <strong>${r.metrosTuberia.toFixed(2)} m</strong></div>
+            <div class="col-6"><i class="bi bi-usb-plug"></i> Conectores (con repuesto): <strong>${r.conectoresTotal}</strong></div>
+            <div class="col-6"><i class="bi bi-battery-charging"></i> Fuente sugerida: <strong>${r.capacidadFuenteW} W</strong> (consumo real ${r.consumoTotalW} W)</div>
+            <div class="col-6"><i class="bi bi-hdd-network"></i> Canales DVR necesarios: <strong>${r.canalesNecesarios}</strong> → DVR de <strong>${r.canalesDvrSugeridos} canales</strong></div>
+            <div class="col-6"><i class="bi bi-hdd-fill"></i> Almacenamiento: <strong>${r.almacenamientoGB.toFixed(1)} GB</strong></div>
+        </div>
+        <div class="text-secondary small">Cálculo de almacenamiento: ${r.resolucion.nombre} (${r.resolucion.bitrateMbps} Mbps) × ${r.horasDia} h/día × ${r.diasRetencion} días × ${r.cantidadCamaras} cámara(s).</div>`;
+}
+
+function agregarEstimacionCctvAlCarrito() {
+    if (!estimadorCctvResumen || estimadorCctvCamaras.length === 0) return;
+    const r = estimadorCctvResumen;
+
+    cart.push({ uuid: generateUUID(), nombre: 'Cable coaxial/UTP para CCTV', precio: 0, costo: 0, cantidad: Math.ceil(r.metrosCable), specs: `Estimador CCTV — ${r.cantidadCamaras} cámara(s)` });
+    if (r.metrosCanaleta > 0) cart.push({ uuid: generateUUID(), nombre: 'Canaleta', precio: 0, costo: 0, cantidad: Math.ceil(r.metrosCanaleta), specs: 'Estimador CCTV' });
+    if (r.metrosTuberia > 0) cart.push({ uuid: generateUUID(), nombre: 'Tubería EMT/PVC', precio: 0, costo: 0, cantidad: Math.ceil(r.metrosTuberia), specs: 'Estimador CCTV' });
+    cart.push({ uuid: generateUUID(), nombre: 'Conectores video/poder', precio: 0, costo: 0, cantidad: r.conectoresTotal, specs: 'Estimador CCTV' });
+    cart.push({ uuid: generateUUID(), nombre: 'Fuente de poder', precio: 0, costo: 0, cantidad: 1, specs: `Estimador CCTV — mín. ${r.capacidadFuenteW} W` });
+    cart.push({ uuid: generateUUID(), nombre: `DVR ${r.canalesDvrSugeridos} canales`, precio: 0, costo: 0, cantidad: 1, specs: `Estimador CCTV — ${r.canalesNecesarios} cámara(s) conectadas` });
+    cart.push({ uuid: generateUUID(), nombre: 'Disco duro para grabación (HDD)', precio: 0, costo: 0, cantidad: 1, specs: `Estimador CCTV — mín. ${Math.ceil(r.almacenamientoGB)} GB (${r.resolucion.nombre}, ${r.diasRetencion} días)` });
+    Array.from({ length: r.cantidadCamaras }).forEach(() => {
+        cart.push({ uuid: generateUUID(), nombre: 'Cámara CCTV', precio: 0, costo: 0, cantidad: 1, specs: r.resolucion.nombre });
+    });
+
+    updateCartUI();
+    showToast('Materiales agregados al carrito. Revisa precios antes de cotizar.', 'success');
+    openCart();
+}
+
+// --- Configuración de CCTV (modal propio) ---
+function openEstimadorCctvConfigModal() {
+    const cfg = getEstimadorCctvConfig();
+    document.getElementById('cfg-cctv-conectores').value = cfg.conectoresPorCamara;
+    document.getElementById('cfg-cctv-repuesto-pct').value = cfg.repuestoConectoresPct;
+    document.getElementById('cfg-cctv-consumo-w').value = cfg.consumoPorCamaraW;
+    document.getElementById('cfg-cctv-margen-pct').value = cfg.margenFuentePct;
+    document.getElementById('cfg-cctv-horas-dia').value = cfg.horasGrabacionDia;
+    document.getElementById('cfg-cctv-dias-retencion').value = cfg.diasRetencion;
+    document.getElementById('cfg-cctv-canales-dvr').value = (cfg.canalesDvrDisponibles || []).join(', ');
+
+    renderResolucionesConfigList(cfg.resoluciones);
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('estimadorCctvConfigModal')).show();
+}
+
+function renderResolucionesConfigList(resoluciones) {
+    const listEl = document.getElementById('cfg-resoluciones-list');
+    listEl.innerHTML = resoluciones.map((r, i) => `
+        <div class="row g-2 align-items-end mb-2 border-bottom border-secondary pb-2" data-idx="${i}">
+            <div class="col-6">
+                <label class="small text-muted">Nombre</label>
+                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary cfg-res-nombre" value="${r.nombre}">
+            </div>
+            <div class="col-4">
+                <label class="small text-muted">Bitrate (Mbps)</label>
+                <input type="number" step="0.1" class="form-control form-control-sm bg-dark text-white border-secondary cfg-res-bitrate" value="${r.bitrateMbps}">
+            </div>
+            <div class="col-2 text-end">
+                <button class="btn btn-sm text-danger" onclick="eliminarResolucionConfig(${i})"><i class="bi bi-trash"></i></button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function agregarResolucionConfig() {
+    const cfg = getEstimadorCctvConfig();
+    const resoluciones = leerResolucionesDelForm(cfg.resoluciones);
+    resoluciones.push({ id: generateUUID(), nombre: 'Nueva resolución', bitrateMbps: 4 });
+    renderResolucionesConfigList(resoluciones);
+}
+
+function eliminarResolucionConfig(idx) {
+    const cfg = getEstimadorCctvConfig();
+    const resoluciones = leerResolucionesDelForm(cfg.resoluciones);
+    resoluciones.splice(idx, 1);
+    renderResolucionesConfigList(resoluciones);
+}
+
+function leerResolucionesDelForm(resolucionesOriginales) {
+    const rows = document.querySelectorAll('#cfg-resoluciones-list [data-idx]');
+    return Array.from(rows).map((row, i) => ({
+        id: (resolucionesOriginales[i] && resolucionesOriginales[i].id) || generateUUID(),
+        nombre: row.querySelector('.cfg-res-nombre').value || 'Sin nombre',
+        bitrateMbps: Number(row.querySelector('.cfg-res-bitrate').value) || 0
+    }));
+}
+
+async function guardarEstimadorCctvConfig() {
+    const cfgActual = getEstimadorCctvConfig();
+    const resoluciones = leerResolucionesDelForm(cfgActual.resoluciones);
+    if (resoluciones.length === 0) return alert('Debe existir al menos una resolución.');
+
+    const canalesDvrDisponibles = document.getElementById('cfg-cctv-canales-dvr').value
+        .split(',').map(s => Number(s.trim())).filter(n => n > 0);
+    if (canalesDvrDisponibles.length === 0) return alert('Ingresa al menos un tamaño de DVR (ej: 4, 8, 16, 32).');
+
+    const nuevaConfig = {
+        conectoresPorCamara: Number(document.getElementById('cfg-cctv-conectores').value) || 0,
+        repuestoConectoresPct: Number(document.getElementById('cfg-cctv-repuesto-pct').value) || 0,
+        consumoPorCamaraW: Number(document.getElementById('cfg-cctv-consumo-w').value) || 0,
+        margenFuentePct: Number(document.getElementById('cfg-cctv-margen-pct').value) || 0,
+        horasGrabacionDia: Number(document.getElementById('cfg-cctv-horas-dia').value) || 0,
+        diasRetencion: Number(document.getElementById('cfg-cctv-dias-retencion').value) || 0,
+        canalesDvrDisponibles,
+        resoluciones
+    };
+
+    const btn = document.querySelector('#estimadorCctvConfigModal .btn-cyan');
+    const textoOriginal = btn.innerText;
+    btn.disabled = true; btn.innerText = 'GUARDANDO...';
+
+    try {
+        await callApi('updateConfigValue', { clave: 'ESTIMADOR_CCTV_CONFIG', valor: JSON.stringify(nuevaConfig) });
+        configuracion['ESTIMADOR_CCTV_CONFIG'] = JSON.stringify(nuevaConfig);
+        setCacheWithTimestamp('ast_config', configuracion);
+
+        bootstrap.Modal.getInstance(document.getElementById('estimadorCctvConfigModal')).hide();
+        poblarSelectResolucion(nuevaConfig);
+        renderCctvSummary();
+        showToast('Configuración de CCTV guardada.', 'success');
     } catch (e) {
         console.error(e);
         alert('Error guardando configuración.');

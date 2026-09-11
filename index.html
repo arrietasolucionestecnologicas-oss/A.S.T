@@ -281,13 +281,135 @@
             </div>
 
             <div id="estimador-cctv" class="hidden-section">
-                <div class="text-center text-secondary py-5">
-                    <i class="bi bi-camera-video display-4"></i>
-                    <p class="mt-2">Próximamente</p>
+                <div class="d-flex justify-content-end mb-2">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="openEstimadorCctvConfigModal()">
+                        <i class="bi bi-gear-fill"></i> Configurar
+                    </button>
+                </div>
+                <div class="card bg-dark-panel border-secondary mb-3">
+                    <div class="card-body">
+                        <h6 class="text-cyan mb-3"><i class="bi bi-plus-circle"></i> Agregar Cámara</h6>
+                        <div class="row g-2">
+                            <div class="col-6 col-md-4">
+                                <label class="form-label small text-secondary">Distancia al DVR (m)</label>
+                                <input type="number" id="cc-distancia" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="0.1" value="0">
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label class="form-label small text-secondary">Canalización</label>
+                                <select id="cc-canalizacion" class="form-select form-select-sm bg-dark text-white border-secondary">
+                                    <option value="CANALETA">Canaleta</option>
+                                    <option value="TUBERIA">Tubería</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="text-end mt-2">
+                            <button class="btn btn-sm btn-cyan" onclick="agregarCamaraCctv()"><i class="bi bi-plus-lg"></i> Agregar Cámara</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="cctv-camaras-list" class="mb-3"></div>
+
+                <div class="card bg-dark-panel border-secondary mb-3">
+                    <div class="card-body">
+                        <h6 class="text-cyan mb-3"><i class="bi bi-hdd-fill"></i> Parámetros de grabación</h6>
+                        <div class="row g-2">
+                            <div class="col-6 col-md-4">
+                                <label class="form-label small text-secondary">Resolución</label>
+                                <select id="cc-resolucion" class="form-select form-select-sm bg-dark text-white border-secondary" onchange="renderCctvSummary()"></select>
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label class="form-label small text-secondary">Horas grabación/día</label>
+                                <input type="number" id="cc-horas-dia" class="form-control form-control-sm bg-dark text-white border-secondary" min="1" max="24" oninput="renderCctvSummary()">
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label class="form-label small text-secondary">Días de retención</label>
+                                <input type="number" id="cc-dias-retencion" class="form-control form-control-sm bg-dark text-white border-secondary" min="1" oninput="renderCctvSummary()">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card bg-dark-panel border-secondary mb-3">
+                    <div class="card-body">
+                        <h6 class="text-cyan mb-2"><i class="bi bi-clipboard-data"></i> Resumen de Materiales</h6>
+                        <div id="cctv-summary" class="small text-white">
+                            <p class="text-secondary mb-0">Agrega al menos una cámara para ver el resumen.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-end">
+                    <button class="btn btn-success" id="btn-cctv-carrito" onclick="agregarEstimacionCctvAlCarrito()" disabled>
+                        <i class="bi bi-cart-plus"></i> Agregar al Carrito
+                    </button>
                 </div>
             </div>
         </div>
 
+    </div>
+
+    <div class="modal fade" id="estimadorCctvConfigModal" tabindex="-1" style="z-index: 1060;">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content bg-dark-panel border-cyan">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-white"><i class="bi bi-gear-fill"></i> Configurar Estimador — CCTV</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <h6 class="text-cyan small fw-bold">Cableado</h6>
+                    <div class="mb-3">
+                        <small class="text-secondary">La holgura de cable y el sobrante por extremo se comparten con el módulo Eléctrico (⚙️ Configurar ahí).</small>
+                    </div>
+
+                    <h6 class="text-cyan small fw-bold">Conectores y energía</h6>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6 col-md-3">
+                            <label class="small text-muted">Conectores/cámara</label>
+                            <input type="number" id="cfg-cctv-conectores" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="1">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="small text-muted">% repuesto conectores</label>
+                            <input type="number" id="cfg-cctv-repuesto-pct" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="1">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="small text-muted">Consumo/cámara (W)</label>
+                            <input type="number" id="cfg-cctv-consumo-w" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="0.1">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="small text-muted">Margen fuente (%)</label>
+                            <input type="number" id="cfg-cctv-margen-pct" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="1">
+                        </div>
+                    </div>
+
+                    <h6 class="text-cyan small fw-bold">Valores por defecto de grabación</h6>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="small text-muted">Horas grabación/día (default)</label>
+                            <input type="number" id="cfg-cctv-horas-dia" class="form-control form-control-sm bg-dark text-white border-secondary" min="1" max="24">
+                        </div>
+                        <div class="col-6">
+                            <label class="small text-muted">Días de retención (default)</label>
+                            <input type="number" id="cfg-cctv-dias-retencion" class="form-control form-control-sm bg-dark text-white border-secondary" min="1">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="small text-muted">Canales de DVR disponibles (separados por coma)</label>
+                        <input type="text" id="cfg-cctv-canales-dvr" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="4, 8, 16, 32">
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-cyan small fw-bold mb-0">Resoluciones y bitrate de referencia</h6>
+                        <button class="btn btn-sm btn-outline-cyan" onclick="agregarResolucionConfig()"><i class="bi bi-plus-lg"></i> Nueva resolución</button>
+                    </div>
+                    <div id="cfg-resoluciones-list"></div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button class="btn btn-cyan w-100" onclick="guardarEstimadorCctvConfig()">GUARDAR CONFIGURACIÓN</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="modal fade" id="estimadorConfigModal" tabindex="-1" style="z-index: 1060;">
