@@ -502,7 +502,7 @@
         </div>
     </div>
 
-    <div class="modal fade" id="recurringConfigModal" tabindex="-1">
+    <div class="modal fade" id="recurringConfigModal" tabindex="-1" style="z-index: 1060;">
         <div class="modal-dialog">
             <div class="modal-content bg-dark-panel border-cyan">
                 <div class="modal-header border-secondary">
@@ -534,6 +534,31 @@
                 </div>
                 <div class="modal-footer border-secondary">
                     <button class="btn btn-cyan w-100" onclick="saveRecurringConfig()">ACTIVAR</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="pagoRecurrenteModal" tabindex="-1" style="z-index: 1060;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark-panel border-cyan">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-white" id="pr-titulo">Editar Cuota</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="pr-idpago">
+                    <div class="mb-3">
+                        <label class="text-cyan small fw-bold">Monto</label>
+                        <input type="number" id="pr-monto" class="form-control bg-dark text-white border-cyan">
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Fecha de vencimiento</label>
+                        <input type="date" id="pr-fecha" class="form-control bg-dark text-white border-secondary">
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button class="btn btn-cyan w-100" onclick="guardarPagoRecurrente()">GUARDAR</button>
                 </div>
             </div>
         </div>

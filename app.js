@@ -57,21 +57,45 @@ async function scheduleRecurringPaymentReminders() {
         if (!res.success || !res.data || res.data.length === 0) return;
 
         const ahora = Date.now();
-        const notifications = res.data.map(p => {
+        const DIAS_ENTRE_RECORDATORIOS_VENCIDO = 3;
+        const notifications = [];
+
+        res.data.forEach(p => {
             const fechaAlerta = new Date(p.fechaVencimiento);
             fechaAlerta.setHours(9, 0, 0, 0);
-            let cuandoMs = fechaAlerta.getTime();
-            if (cuandoMs < ahora) cuandoMs = ahora + 3000; // ya vencido: avisar casi de inmediato
+            const notifId = hashToNotifId(p.idPago);
 
-            return {
-                id: hashToNotifId(p.idPago),
-                title: 'Pago pendiente — ' + p.nombreProyecto,
-                body: `Cuota de ${fmt.format(p.monto)} (${p.periodo}) de ${p.cliente}`,
-                schedule: { at: new Date(cuandoMs) }
-            };
+            if (fechaAlerta.getTime() >= ahora) {
+                // Todavia no vence: se programa una sola vez para esa fecha.
+                notifications.push({
+                    id: notifId,
+                    title: 'Pago pendiente — ' + p.nombreProyecto,
+                    body: `Cuota de ${fmt.format(p.monto)} (${p.periodo}) de ${p.cliente}`,
+                    schedule: { at: fechaAlerta }
+                });
+                return;
+            }
+
+            // Ya vencido: NO se reprograma cada vez que se abre la app (eso
+            // generaba una notificacion nueva cada dia) -- solo cada
+            // DIAS_ENTRE_RECORDATORIOS_VENCIDO dias, como recordatorio
+            // periodico razonable.
+            const key = 'ast_last_reminder_' + p.idPago;
+            let ultimoAviso = 0;
+            try { ultimoAviso = Number(localStorage.getItem(key)) || 0; } catch (e) {}
+            const diasDesdeUltimoAviso = (ahora - ultimoAviso) / (1000 * 60 * 60 * 24);
+            if (ultimoAviso > 0 && diasDesdeUltimoAviso < DIAS_ENTRE_RECORDATORIOS_VENCIDO) return;
+
+            notifications.push({
+                id: notifId,
+                title: '⚠️ Pago VENCIDO — ' + p.nombreProyecto,
+                body: `Cuota de ${fmt.format(p.monto)} (${p.periodo}) de ${p.cliente} está vencida`,
+                schedule: { at: new Date(ahora + 3000) }
+            });
+            try { localStorage.setItem(key, String(ahora)); } catch (e) {}
         });
 
-        await LN.schedule({ notifications });
+        if (notifications.length > 0) await LN.schedule({ notifications });
     } catch (e) {
         console.error('Error programando recordatorios de pago recurrente', e);
     }
@@ -1069,24 +1093,32 @@ function renderRecurringSection() {
         }
         const fecha = fechaObj.toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' });
         const esPagado = p.estado === 'PAGADO';
-        const badge = esPagado
-            ? '<span class="badge bg-success">PAGADO</span>'
-            : '<span class="badge bg-warning text-dark">PENDIENTE</span>';
+        const estaVencido = !esPagado && fechaObj.getTime() < Date.now();
+        let badge;
+        if (esPagado) badge = '<span class="badge bg-success">PAGADO</span>';
+        else if (estaVencido) badge = '<span class="badge bg-danger">VENCIDO</span>';
+        else badge = '<span class="badge bg-warning text-dark">PENDIENTE</span>';
+
         const btnCuenta = `<button class="btn btn-sm btn-outline-info" onclick="generarCuentaCobroPago('${p.idPago}')" title="Generar Cuenta de Cobro"><i class="bi bi-file-earmark-pdf"></i></button>`;
-        const btnPagar = esPagado ? '' : `<button class="btn btn-sm btn-cyan" onclick="marcarPagoRecurrente('${p.idPago}')" title="Marcar como pagado"><i class="bi bi-check-lg"></i></button>`;
+        const btnPagar  = esPagado ? '' : `<button class="btn btn-sm btn-cyan" onclick="marcarPagoRecurrente('${p.idPago}')" title="Marcar como pagado"><i class="bi bi-check-lg"></i></button>`;
+        const btnEditar = esPagado ? '' : `<button class="btn btn-sm btn-outline-warning" onclick="openEditPagoModal('${p.idPago}')" title="Editar cuota"><i class="bi bi-pencil"></i></button>`;
+        const btnBorrar = esPagado ? '' : `<button class="btn btn-sm btn-outline-danger" onclick="eliminarPagoRecurrente('${p.idPago}')" title="Eliminar cuota"><i class="bi bi-trash"></i></button>`;
         return `
         <div class="d-flex justify-content-between align-items-center border-bottom border-secondary py-1">
             <div>
                 <div class="text-white small fw-bold">${mesLabel} &mdash; ${fmt.format(p.monto)}</div>
                 <div class="text-muted" style="font-size:0.65rem;">${esInicial ? 'Fecha' : 'Vence'}: ${fecha} ${badge}</div>
             </div>
-            <div class="d-flex gap-1">${btnCuenta}${btnPagar}</div>
+            <div class="d-flex gap-1">${btnCuenta}${btnEditar}${btnBorrar}${btnPagar}</div>
         </div>`;
     }).join('');
 
     el.innerHTML = `
-    <div class="d-flex justify-content-between align-items-center mb-2">
+    <div class="d-flex justify-content-between align-items-center mb-1">
         <small class="text-cyan fw-bold"><i class="bi bi-arrow-repeat"></i> Pagos Recurrentes ${currentProjectData.numCuotas > 0 ? `(${currentProjectData.numCuotas} cuotas)` : '(indefinido)'}</small>
+        <button class="btn btn-sm btn-outline-cyan py-0" onclick="openAddPagoModal()" title="Agregar cuota manual"><i class="bi bi-plus-lg"></i></button>
+    </div>
+    <div class="d-flex justify-content-end mb-2">
         <small class="text-success fw-bold">Pagado real: ${fmt.format(currentProjectData.totalPagadoRecurrente || 0)}</small>
     </div>
     <div style="max-height:180px; overflow-y:auto;">${filas || '<div class="text-muted small">Sin cuotas generadas.</div>'}</div>`;
@@ -1129,6 +1161,67 @@ async function saveRecurringConfig() {
     const ok = res.success && res.data && res.data.success !== false;
     if (ok) {
         showToast('✅ Pagos recurrentes activados', 'success');
+        await reloadCurrentProjectDetail();
+    } else {
+        const err = (res.data && res.data.error) ? res.data.error : (res.error || 'Error desconocido');
+        showToast('Error: ' + err, 'danger');
+    }
+}
+
+function openEditPagoModal(idPago) {
+    const pago = (currentProjectPagos || []).find(p => p.idPago === idPago);
+    if (!pago) return;
+    document.getElementById('pr-titulo').innerText = 'Editar Cuota';
+    document.getElementById('pr-idpago').value = pago.idPago;
+    document.getElementById('pr-monto').value = pago.monto;
+    document.getElementById('pr-fecha').value = new Date(pago.fechaVencimiento).toISOString().slice(0, 10);
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('pagoRecurrenteModal')).show();
+}
+
+function openAddPagoModal() {
+    if (!currentProjectData) return;
+    document.getElementById('pr-titulo').innerText = 'Agregar Cuota';
+    document.getElementById('pr-idpago').value = '';
+    document.getElementById('pr-monto').value = currentProjectData.montoMensual || '';
+    document.getElementById('pr-fecha').value = '';
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('pagoRecurrenteModal')).show();
+}
+
+async function guardarPagoRecurrente() {
+    const idPago = document.getElementById('pr-idpago').value;
+    const monto = Number(document.getElementById('pr-monto').value);
+    const fecha = document.getElementById('pr-fecha').value;
+    if (!monto || monto <= 0) return alert('Ingresa un monto válido.');
+    if (!fecha) return alert('Ingresa una fecha de vencimiento.');
+
+    const modalInstance = bootstrap.Modal.getInstance(document.getElementById('pagoRecurrenteModal'));
+    if (modalInstance) { modalInstance.hide(); cleanBackdrops(); }
+
+    showSyncIndicator();
+    const res = idPago
+        ? await callApi('updateRecurringPayment', { idPago, monto, fechaVencimiento: fecha })
+        : await callApi('addRecurringPayment', { projectId: currentProject, monto, fechaVencimiento: fecha });
+    hideSyncIndicator();
+
+    const ok = res.success && res.data && res.data.success !== false;
+    if (ok) {
+        showToast(idPago ? '✅ Cuota actualizada' : '✅ Cuota agregada', 'success');
+        await reloadCurrentProjectDetail();
+    } else {
+        const err = (res.data && res.data.error) ? res.data.error : (res.error || 'Error desconocido');
+        showToast('Error: ' + err, 'danger');
+    }
+}
+
+async function eliminarPagoRecurrente(idPago) {
+    if (!confirm('¿Eliminar esta cuota? Esta acción no se puede deshacer.')) return;
+    showSyncIndicator();
+    const res = await callApi('deleteRecurringPayment', { idPago });
+    hideSyncIndicator();
+
+    const ok = res.success && res.data && res.data.success !== false;
+    if (ok) {
+        showToast('✅ Cuota eliminada', 'success');
         await reloadCurrentProjectDetail();
     } else {
         const err = (res.data && res.data.error) ? res.data.error : (res.error || 'Error desconocido');
