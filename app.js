@@ -9,8 +9,9 @@ let catalog = [];
 let cart = [];
 let projects = []; 
 let clients = []; 
-let historyDocs = []; 
+let historyDocs = [];
 let proveedores = [];
+let configuracion = {};
 let currentProject = null; 
 let currentProjectData = null; 
 let currentProjectItems = [];
@@ -164,12 +165,14 @@ function loadLocalCache() {
         const cl = getCacheIfFresh('ast_clients');
         const h  = getCacheIfFresh('ast_history');
         const pr = getCacheIfFresh('ast_proveedores');
+        const cfg = getCacheIfFresh('ast_config');
 
         if (c)  catalog     = c;
         if (p)  projects    = p;
         if (cl) clients     = cl;
         if (h)  historyDocs = h;
         if (pr) proveedores = pr;
+        if (cfg) configuracion = cfg;
 
         // Si alguna entidad expiró, la señalamos para refresh inmediato
         if (!c || !p || !cl || !h || !pr) {
@@ -189,6 +192,7 @@ async function fetchAllDataBackground() {
         clients     = res.data.clients     || [];
         historyDocs = res.data.historyDocs || [];
         proveedores = res.data.proveedores || [];
+        configuracion = res.data.configuracion || {};
 
         // CAMBIO: usar setCacheWithTimestamp en lugar de setItem directo
         setCacheWithTimestamp('ast_catalog',     catalog);
@@ -196,6 +200,7 @@ async function fetchAllDataBackground() {
         setCacheWithTimestamp('ast_clients',     clients);
         setCacheWithTimestamp('ast_history',     historyDocs);
         setCacheWithTimestamp('ast_proveedores', proveedores);
+        setCacheWithTimestamp('ast_config',      configuracion);
 
         if (currentView === 'PROYECTOS')        { renderProjects(); calculateDashboard(); }
         else if (currentView === 'HISTORIAL')   { renderHistory(); }
@@ -440,17 +445,20 @@ function switchTab(viewName) {
     document.getElementById('tab-proj').className = 'nav-link';
     document.getElementById('tab-hist').className = 'nav-link';
     document.getElementById('tab-prov').className = 'nav-link';
+    document.getElementById('tab-estimador').className = 'nav-link';
 
     if(viewName === 'PRODUCTO') document.getElementById('tab-prod').className = 'nav-link active';
     if(viewName === 'SERVICIO') document.getElementById('tab-serv').className = 'nav-link active';
     if(viewName === 'PROYECTOS') document.getElementById('tab-proj').className = 'nav-link active';
     if(viewName === 'HISTORIAL') document.getElementById('tab-hist').className = 'nav-link active';
     if(viewName === 'PROVEEDORES') document.getElementById('tab-prov').className = 'nav-link active';
+    if(viewName === 'ESTIMADOR') document.getElementById('tab-estimador').className = 'nav-link active';
 
     document.getElementById('view-catalog').classList.add('hidden-section');
     document.getElementById('view-projects').classList.add('hidden-section');
     document.getElementById('view-history').classList.add('hidden-section');
     document.getElementById('view-proveedores').classList.add('hidden-section');
+    document.getElementById('view-estimador').classList.add('hidden-section');
     document.getElementById('fab-cart').style.display = 'none';
     document.getElementById('btn-main-add').style.display = 'none';
 
@@ -465,6 +473,10 @@ function switchTab(viewName) {
     else if (viewName === 'PROVEEDORES') {
         document.getElementById('view-proveedores').classList.remove('hidden-section');
         renderProveedores();
+    }
+    else if (viewName === 'ESTIMADOR') {
+        document.getElementById('view-estimador').classList.remove('hidden-section');
+        renderEstimador();
     }
     else {
         document.getElementById('view-catalog').classList.remove('hidden-section');
@@ -486,6 +498,344 @@ function switchCatalogView(mode) {
     const filtered = catalog.filter(p => p.tipo === currentView);
     renderGrid(filtered);
 }
+
+// ==========================================
+// ESTIMADOR — Eléctrico Residencial / CCTV
+// ==========================================
+// Todos los parámetros (holgura, sobrantes, factores de llenado, calibres
+// sugeridos) son convención de oficio, NO exigencia de la NTC 2050/RETIE.
+// Por eso viven en CONFIGURACION (editables desde ⚙️ Configurar) y nunca
+// están fijos en este código — Gerson los calibra con su propia experiencia.
+
+const ESTIMADOR_COMUN_DEFAULTS = {
+    holguraCablePct: 15,
+    sobranteExtremoCm: 25
+};
+
+const ESTIMADOR_ELECTRICO_DEFAULTS = {
+    factorLlenoDisenoPct: 40,
+    factorLlenoMaxPct: 60,
+    tiposPunto: [
+        { id: 'punto_luz',     nombre: 'Punto de luz',       calibreAwg: 14, amperaje: 15 },
+        { id: 'toma_normal',   nombre: 'Toma normal',        calibreAwg: 12, amperaje: 20 },
+        { id: 'toma_especial', nombre: 'Toma especial 220V', calibreAwg: 10, amperaje: 30 },
+        { id: 'interruptor',   nombre: 'Interruptor',        calibreAwg: 14, amperaje: 15 }
+    ]
+};
+
+function getEstimadorConfig(clave, defaults) {
+    const raw = configuracion[clave];
+    if (!raw) return JSON.parse(JSON.stringify(defaults));
+    try {
+        return Object.assign({}, defaults, JSON.parse(raw));
+    } catch (e) {
+        console.error('Config de estimador inválida para ' + clave, e);
+        return JSON.parse(JSON.stringify(defaults));
+    }
+}
+
+function getEstimadorComunConfig()    { return getEstimadorConfig('ESTIMADOR_COMUN_CONFIG', ESTIMADOR_COMUN_DEFAULTS); }
+function getEstimadorElectricoConfig(){ return getEstimadorConfig('ESTIMADOR_ELECTRICO_CONFIG', ESTIMADOR_ELECTRICO_DEFAULTS); }
+
+let estimadorSubTab = 'ELECTRICO';
+let estimadorElectricoPuntos = [];
+let estimadorElectricoResumen = null;
+
+function renderEstimador() {
+    switchEstimadorSubTab(estimadorSubTab);
+}
+
+function switchEstimadorSubTab(sub) {
+    estimadorSubTab = sub;
+    document.getElementById('subtab-electrico').className = sub === 'ELECTRICO' ? 'nav-link active' : 'nav-link';
+    document.getElementById('subtab-cctv').className = sub === 'CCTV' ? 'nav-link active' : 'nav-link';
+    document.getElementById('estimador-electrico').classList.toggle('hidden-section', sub !== 'ELECTRICO');
+    document.getElementById('estimador-cctv').classList.toggle('hidden-section', sub !== 'CCTV');
+
+    if (sub === 'ELECTRICO') {
+        poblarSelectTiposPunto();
+        renderElectricoPuntos();
+    }
+}
+
+function poblarSelectTiposPunto() {
+    const cfg = getEstimadorElectricoConfig();
+    const sel = document.getElementById('el-tipo-punto');
+    const valorActual = sel.value;
+    sel.innerHTML = cfg.tiposPunto.map(t => `<option value="${t.id}">${t.nombre}</option>`).join('');
+    if (valorActual && cfg.tiposPunto.some(t => t.id === valorActual)) sel.value = valorActual;
+}
+
+function agregarPuntoElectrico() {
+    const tipoId = document.getElementById('el-tipo-punto').value;
+    const distancia = Number(document.getElementById('el-distancia').value) || 0;
+    const canalizacion = document.getElementById('el-canalizacion').value;
+    const caja = document.getElementById('el-caja').value;
+
+    if (!tipoId) return alert('Configura al menos un tipo de punto primero (⚙️ Configurar).');
+    if (distancia <= 0) return alert('Ingresa una distancia al tablero mayor a 0.');
+
+    estimadorElectricoPuntos.push({ id: generateUUID(), tipoId, distancia, canalizacion, caja });
+
+    document.getElementById('el-distancia').value = 0;
+    renderElectricoPuntos();
+}
+
+function eliminarPuntoElectrico(id) {
+    estimadorElectricoPuntos = estimadorElectricoPuntos.filter(p => p.id !== id);
+    renderElectricoPuntos();
+}
+
+function calcularEstimacionElectrica() {
+    const comun = getEstimadorComunConfig();
+    const elec = getEstimadorElectricoConfig();
+    const holguraFactor = 1 + ((Number(comun.holguraCablePct) || 0) / 100);
+    const sobranteM = ((Number(comun.sobranteExtremoCm) || 0) * 2) / 100; // 2 extremos: caja + tablero
+
+    const porTipo = {};
+    let metrosCanaleta = 0;
+    let metrosTuberia = 0;
+    let cajasEmpotradas = 0;
+    let cajasSobrepuestas = 0;
+
+    estimadorElectricoPuntos.forEach(p => {
+        const tipo = elec.tiposPunto.find(t => t.id === p.tipoId) || { id: p.tipoId, nombre: p.tipoId, calibreAwg: '-', amperaje: '-' };
+        const metrosCableUnitario = (p.distancia * holguraFactor) + sobranteM;
+
+        if (!porTipo[tipo.id]) {
+            porTipo[tipo.id] = { nombre: tipo.nombre, calibreAwg: tipo.calibreAwg, amperaje: tipo.amperaje, cantidadPuntos: 0, metrosCable: 0 };
+        }
+        porTipo[tipo.id].cantidadPuntos++;
+        porTipo[tipo.id].metrosCable += metrosCableUnitario;
+
+        if (p.canalizacion === 'CANALETA') metrosCanaleta += p.distancia;
+        else metrosTuberia += p.distancia;
+
+        if (p.caja === 'EMPOTRADA') cajasEmpotradas++;
+        else cajasSobrepuestas++;
+    });
+
+    const totalMetrosCable = Object.values(porTipo).reduce((s, t) => s + t.metrosCable, 0);
+
+    return {
+        totalPuntos: estimadorElectricoPuntos.length,
+        porTipo,
+        totalMetrosCable,
+        metrosCanaleta,
+        metrosTuberia,
+        cajasEmpotradas,
+        cajasSobrepuestas,
+        factorLlenoDisenoPct: elec.factorLlenoDisenoPct,
+        factorLlenoMaxPct: elec.factorLlenoMaxPct
+    };
+}
+
+function renderElectricoPuntos() {
+    const listEl = document.getElementById('electrico-puntos-list');
+    const elec = getEstimadorElectricoConfig();
+
+    if (estimadorElectricoPuntos.length === 0) {
+        listEl.innerHTML = '';
+    } else {
+        listEl.innerHTML = `
+        <div class="card bg-dark-panel border-secondary">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-dark table-sm mb-0 align-middle">
+                        <thead>
+                            <tr class="text-secondary small">
+                                <th>Tipo</th><th>Dist. (m)</th><th>Canalización</th><th>Caja</th><th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        ${estimadorElectricoPuntos.map(p => {
+                            const tipo = elec.tiposPunto.find(t => t.id === p.tipoId);
+                            return `<tr>
+                                <td class="small">${tipo ? tipo.nombre : p.tipoId}</td>
+                                <td class="small">${p.distancia}</td>
+                                <td class="small">${p.canalizacion === 'CANALETA' ? 'Canaleta' : 'Tubería'}</td>
+                                <td class="small">${p.caja === 'EMPOTRADA' ? 'Empotrada' : 'Sobrepuesta'}</td>
+                                <td class="text-end"><button class="btn btn-sm text-danger p-0" onclick="eliminarPuntoElectrico('${p.id}')"><i class="bi bi-trash"></i></button></td>
+                            </tr>`;
+                        }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    renderElectricoSummary();
+}
+
+function renderElectricoSummary() {
+    const summaryEl = document.getElementById('electrico-summary');
+    const btnCarrito = document.getElementById('btn-electrico-carrito');
+
+    if (estimadorElectricoPuntos.length === 0) {
+        summaryEl.innerHTML = '<p class="text-secondary mb-0">Agrega al menos un punto para ver el resumen.</p>';
+        btnCarrito.disabled = true;
+        estimadorElectricoResumen = null;
+        return;
+    }
+
+    const r = calcularEstimacionElectrica();
+    estimadorElectricoResumen = r;
+    btnCarrito.disabled = false;
+
+    let html = `<div class="mb-2"><span class="text-secondary">Total de puntos:</span> <strong>${r.totalPuntos}</strong></div>`;
+    html += '<table class="table table-dark table-sm mb-2"><thead><tr class="text-secondary small"><th>Tipo</th><th>Cant.</th><th>Calibre</th><th>Cable (m)</th></tr></thead><tbody>';
+    Object.values(r.porTipo).forEach(t => {
+        html += `<tr><td class="small">${t.nombre}</td><td class="small">${t.cantidadPuntos}</td><td class="small">${t.calibreAwg} AWG (${t.amperaje}A)</td><td class="small">${t.metrosCable.toFixed(2)}</td></tr>`;
+    });
+    html += `<tr class="fw-bold"><td colspan="3" class="small">Total cable</td><td class="small">${r.totalMetrosCable.toFixed(2)} m</td></tr>`;
+    html += '</tbody></table>';
+
+    html += `<div class="row g-2 small">
+        <div class="col-6"><i class="bi bi-arrow-bar-right"></i> Canaleta: <strong>${r.metrosCanaleta.toFixed(2)} m</strong></div>
+        <div class="col-6"><i class="bi bi-arrow-bar-right"></i> Tubería: <strong>${r.metrosTuberia.toFixed(2)} m</strong></div>
+        <div class="col-6"><i class="bi bi-box"></i> Cajas empotradas: <strong>${r.cajasEmpotradas}</strong></div>
+        <div class="col-6"><i class="bi bi-box"></i> Cajas sobrepuestas: <strong>${r.cajasSobrepuestas}</strong></div>
+    </div>
+    <div class="text-secondary small mt-2">Factor de llenado: diseño ${r.factorLlenoDisenoPct}% / máximo ${r.factorLlenoMaxPct}% (informativo, según primeros capítulos NTC 2050).</div>`;
+
+    summaryEl.innerHTML = html;
+}
+
+function agregarEstimacionElectricaAlCarrito() {
+    if (!estimadorElectricoResumen || estimadorElectricoPuntos.length === 0) return;
+    const r = estimadorElectricoResumen;
+
+    Object.values(r.porTipo).forEach(t => {
+        cart.push({
+            uuid: generateUUID(),
+            nombre: `Cable ${t.calibreAwg} AWG — ${t.nombre}`,
+            precio: 0,
+            costo: 0,
+            cantidad: Math.ceil(t.metrosCable),
+            specs: `Estimador Eléctrico — ${t.cantidadPuntos} punto(s) de ${t.nombre}`
+        });
+    });
+
+    if (r.metrosCanaleta > 0) {
+        cart.push({ uuid: generateUUID(), nombre: 'Canaleta', precio: 0, costo: 0, cantidad: Math.ceil(r.metrosCanaleta), specs: 'Estimador Eléctrico' });
+    }
+    if (r.metrosTuberia > 0) {
+        cart.push({ uuid: generateUUID(), nombre: 'Tubería EMT/PVC', precio: 0, costo: 0, cantidad: Math.ceil(r.metrosTuberia), specs: 'Estimador Eléctrico' });
+    }
+    if (r.cajasEmpotradas > 0) {
+        cart.push({ uuid: generateUUID(), nombre: 'Caja empotrada', precio: 0, costo: 0, cantidad: r.cajasEmpotradas, specs: 'Estimador Eléctrico' });
+    }
+    if (r.cajasSobrepuestas > 0) {
+        cart.push({ uuid: generateUUID(), nombre: 'Caja sobrepuesta', precio: 0, costo: 0, cantidad: r.cajasSobrepuestas, specs: 'Estimador Eléctrico' });
+    }
+
+    updateCartUI();
+    showToast('Materiales agregados al carrito. Revisa precios antes de cotizar.', 'success');
+    openCart();
+}
+
+// --- Configuración del Estimador (modal compartido) ---
+function openEstimadorConfigModal(modulo) {
+    const comun = getEstimadorComunConfig();
+    const elec = getEstimadorElectricoConfig();
+
+    document.getElementById('cfg-holgura-pct').value = comun.holguraCablePct;
+    document.getElementById('cfg-sobrante-cm').value = comun.sobranteExtremoCm;
+    document.getElementById('cfg-llenado-diseno').value = elec.factorLlenoDisenoPct;
+    document.getElementById('cfg-llenado-max').value = elec.factorLlenoMaxPct;
+
+    renderTiposPuntoConfigList(elec.tiposPunto);
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('estimadorConfigModal')).show();
+}
+
+function renderTiposPuntoConfigList(tipos) {
+    const listEl = document.getElementById('cfg-tipos-punto-list');
+    listEl.innerHTML = tipos.map((t, i) => `
+        <div class="row g-2 align-items-end mb-2 border-bottom border-secondary pb-2" data-idx="${i}">
+            <div class="col-4">
+                <label class="small text-muted">Nombre</label>
+                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary cfg-tipo-nombre" value="${t.nombre}">
+            </div>
+            <div class="col-3">
+                <label class="small text-muted">Calibre (AWG)</label>
+                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary cfg-tipo-calibre" value="${t.calibreAwg}">
+            </div>
+            <div class="col-3">
+                <label class="small text-muted">Amperaje (A)</label>
+                <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary cfg-tipo-amperaje" value="${t.amperaje}">
+            </div>
+            <div class="col-2 text-end">
+                <button class="btn btn-sm text-danger" onclick="eliminarTipoPuntoConfig(${i})"><i class="bi bi-trash"></i></button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function agregarTipoPuntoConfig() {
+    const elec = getEstimadorElectricoConfig();
+    const tipos = leerTiposPuntoDelForm(elec.tiposPunto);
+    tipos.push({ id: generateUUID(), nombre: 'Nuevo tipo', calibreAwg: 14, amperaje: 15 });
+    renderTiposPuntoConfigList(tipos);
+}
+
+function eliminarTipoPuntoConfig(idx) {
+    const elec = getEstimadorElectricoConfig();
+    const tipos = leerTiposPuntoDelForm(elec.tiposPunto);
+    tipos.splice(idx, 1);
+    renderTiposPuntoConfigList(tipos);
+}
+
+function leerTiposPuntoDelForm(tiposOriginales) {
+    const rows = document.querySelectorAll('#cfg-tipos-punto-list [data-idx]');
+    return Array.from(rows).map((row, i) => ({
+        id: (tiposOriginales[i] && tiposOriginales[i].id) || generateUUID(),
+        nombre: row.querySelector('.cfg-tipo-nombre').value || 'Sin nombre',
+        calibreAwg: row.querySelector('.cfg-tipo-calibre').value,
+        amperaje: Number(row.querySelector('.cfg-tipo-amperaje').value) || 0
+    }));
+}
+
+async function guardarEstimadorConfig() {
+    const comun = {
+        holguraCablePct: Number(document.getElementById('cfg-holgura-pct').value) || 0,
+        sobranteExtremoCm: Number(document.getElementById('cfg-sobrante-cm').value) || 0
+    };
+    const elecActual = getEstimadorElectricoConfig();
+    const tipos = leerTiposPuntoDelForm(elecActual.tiposPunto);
+    if (tipos.length === 0) return alert('Debe existir al menos un tipo de punto.');
+
+    const electricoConfig = {
+        factorLlenoDisenoPct: Number(document.getElementById('cfg-llenado-diseno').value) || 0,
+        factorLlenoMaxPct: Number(document.getElementById('cfg-llenado-max').value) || 0,
+        tiposPunto: tipos
+    };
+
+    const btn = document.querySelector('#estimadorConfigModal .btn-cyan');
+    const textoOriginal = btn.innerText;
+    btn.disabled = true; btn.innerText = 'GUARDANDO...';
+
+    try {
+        await callApi('updateConfigValue', { clave: 'ESTIMADOR_COMUN_CONFIG', valor: JSON.stringify(comun) });
+        await callApi('updateConfigValue', { clave: 'ESTIMADOR_ELECTRICO_CONFIG', valor: JSON.stringify(electricoConfig) });
+
+        configuracion['ESTIMADOR_COMUN_CONFIG'] = JSON.stringify(comun);
+        configuracion['ESTIMADOR_ELECTRICO_CONFIG'] = JSON.stringify(electricoConfig);
+        setCacheWithTimestamp('ast_config', configuracion);
+
+        bootstrap.Modal.getInstance(document.getElementById('estimadorConfigModal')).hide();
+        poblarSelectTiposPunto();
+        renderElectricoPuntos();
+        showToast('Configuración del estimador guardada.', 'success');
+    } catch (e) {
+        console.error(e);
+        alert('Error guardando configuración.');
+    } finally {
+        btn.disabled = false; btn.innerText = textoOriginal;
+    }
+}
+
 async function callApi(action, payload = {}) {
     try {
         const response = await fetch(API_URL, {

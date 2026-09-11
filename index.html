@@ -112,6 +112,9 @@
                     <li class="nav-item">
                         <button class="nav-link" id="tab-prov" onclick="switchTab('PROVEEDORES')">PROVEEDORES</button>
                     </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="tab-estimador" onclick="switchTab('ESTIMADOR')">ESTIMADOR</button>
+                    </li>
                 </ul>
             </div>
         </div>
@@ -206,6 +209,132 @@
             <div id="proveedores-list"></div>
         </div>
 
+        <div id="view-estimador" class="hidden-section">
+            <ul class="nav nav-pills nav-fill mb-3">
+                <li class="nav-item">
+                    <button class="nav-link active" id="subtab-electrico" onclick="switchEstimadorSubTab('ELECTRICO')">
+                        <i class="bi bi-lightning-charge-fill"></i> Eléctrico Residencial
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" id="subtab-cctv" onclick="switchEstimadorSubTab('CCTV')">
+                        <i class="bi bi-camera-video-fill"></i> CCTV
+                    </button>
+                </li>
+            </ul>
+
+            <div id="estimador-electrico">
+                <div class="d-flex justify-content-end mb-2">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="openEstimadorConfigModal('ELECTRICO')">
+                        <i class="bi bi-gear-fill"></i> Configurar
+                    </button>
+                </div>
+                <div class="card bg-dark-panel border-secondary mb-3">
+                    <div class="card-body">
+                        <h6 class="text-cyan mb-3"><i class="bi bi-plus-circle"></i> Agregar Punto</h6>
+                        <div class="row g-2">
+                            <div class="col-6 col-md-3">
+                                <label class="form-label small text-secondary">Tipo de punto</label>
+                                <select id="el-tipo-punto" class="form-select form-select-sm bg-dark text-white border-secondary"></select>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="form-label small text-secondary">Distancia al tablero (m)</label>
+                                <input type="number" id="el-distancia" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="0.1" value="0">
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="form-label small text-secondary">Canalización</label>
+                                <select id="el-canalizacion" class="form-select form-select-sm bg-dark text-white border-secondary">
+                                    <option value="CANALETA">Canaleta</option>
+                                    <option value="TUBERIA">Tubería</option>
+                                </select>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="form-label small text-secondary">Caja</label>
+                                <select id="el-caja" class="form-select form-select-sm bg-dark text-white border-secondary">
+                                    <option value="EMPOTRADA">Empotrada</option>
+                                    <option value="SOBREPUESTA">Sobrepuesta</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="text-end mt-2">
+                            <button class="btn btn-sm btn-cyan" onclick="agregarPuntoElectrico()"><i class="bi bi-plus-lg"></i> Agregar Punto</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="electrico-puntos-list" class="mb-3"></div>
+
+                <div class="card bg-dark-panel border-secondary mb-3">
+                    <div class="card-body">
+                        <h6 class="text-cyan mb-2"><i class="bi bi-clipboard-data"></i> Resumen de Materiales</h6>
+                        <div id="electrico-summary" class="small text-white">
+                            <p class="text-secondary mb-0">Agrega al menos un punto para ver el resumen.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-end">
+                    <button class="btn btn-success" id="btn-electrico-carrito" onclick="agregarEstimacionElectricaAlCarrito()" disabled>
+                        <i class="bi bi-cart-plus"></i> Agregar al Carrito
+                    </button>
+                </div>
+            </div>
+
+            <div id="estimador-cctv" class="hidden-section">
+                <div class="text-center text-secondary py-5">
+                    <i class="bi bi-camera-video display-4"></i>
+                    <p class="mt-2">Próximamente</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="modal fade" id="estimadorConfigModal" tabindex="-1" style="z-index: 1060;">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content bg-dark-panel border-cyan">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-white"><i class="bi bi-gear-fill"></i> Configurar Estimador — Eléctrico Residencial</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <h6 class="text-cyan small fw-bold">Parámetros generales de cableado</h6>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="small text-muted">Holgura de cable (%)</label>
+                            <input type="number" id="cfg-holgura-pct" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="1">
+                            <small class="text-secondary">Recomendado 10-20%</small>
+                        </div>
+                        <div class="col-6">
+                            <label class="small text-muted">Sobrante fijo por extremo (cm)</label>
+                            <input type="number" id="cfg-sobrante-cm" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="1">
+                            <small class="text-secondary">Recomendado 20-30 cm</small>
+                        </div>
+                    </div>
+
+                    <h6 class="text-cyan small fw-bold">Factor de llenado de canalización</h6>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="small text-muted">Diseño (%)</label>
+                            <input type="number" id="cfg-llenado-diseno" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" max="100" step="1">
+                        </div>
+                        <div class="col-6">
+                            <label class="small text-muted">Máximo NTC 2050 (%)</label>
+                            <input type="number" id="cfg-llenado-max" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" max="100" step="1">
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-cyan small fw-bold mb-0">Tipos de punto y calibre sugerido</h6>
+                        <button class="btn btn-sm btn-outline-cyan" onclick="agregarTipoPuntoConfig()"><i class="bi bi-plus-lg"></i> Nuevo tipo</button>
+                    </div>
+                    <div id="cfg-tipos-punto-list"></div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button class="btn btn-cyan w-100" onclick="guardarEstimadorConfig()">GUARDAR CONFIGURACIÓN</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="fab-cart" id="fab-cart" onclick="openCart()">
