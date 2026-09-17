@@ -2056,15 +2056,15 @@ function abrirWhatsAppConTelefono(telefonoRaw, mensaje) {
     let tel = String(telefonoRaw || '').trim().replace(/\D/g, '');
     if (tel.startsWith('57') && tel.length > 10) tel = tel.substring(2);
 
-    if (tel.length < 10) {
-        const manual = prompt('No hay un teléfono válido guardado para este cliente.\nEscribe el número de WhatsApp (10 dígitos):', '');
-        if (!manual) return;
-        tel = manual.trim().replace(/\D/g, '');
-        if (tel.startsWith('57') && tel.length > 10) tel = tel.substring(2);
-        if (tel.length < 10) return alert('Número inválido.');
-    }
+    // Con número válido: abre directo el chat de ese contacto, con el texto
+    // ya escrito pero SIN enviarlo -- lo revisas/editas y le das enviar tú.
+    // Sin número: deja que sea WhatsApp quien te muestre la lista de chats
+    // para elegir a quién mandárselo, en vez de pedirlo por un prompt().
+    const url = tel.length >= 10
+        ? `https://wa.me/57${tel}?text=${encodeURIComponent(mensaje)}`
+        : `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
 
-    openExternalUrl(`https://wa.me/57${tel}?text=${encodeURIComponent(mensaje)}`);
+    openExternalUrl(url);
 }
 
 async function enviarCuentaCobroSeleccionadosWhatsApp() {
