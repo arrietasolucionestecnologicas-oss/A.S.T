@@ -1576,6 +1576,7 @@ function renderProjectItems() {
     document.getElementById('pd-cobrado-label').innerText  = currentProjectData.estado === 'CERRADO' ? 'COBRADO' : 'COTIZADO';
     document.getElementById('pd-utilidad-label').innerText = currentProjectData.estado === 'CERRADO' ? 'UTILIDAD' : 'UTILIDAD PROY.';
     renderRecurringSection();
+    renderHerramientasChecklist();
 
     const list = document.getElementById('pd-items-list');
     list.innerHTML = '';
@@ -1637,9 +1638,14 @@ function renderBotonCuentaCobroParcial() {
     const total = seleccionados.reduce((sum, i) => sum + (i.venta * i.cantidad), 0);
 
     el.innerHTML = `
-    <button class="btn btn-cyan w-100 fw-bold btn-sm" onclick="generarCuentaCobroSeleccionados()">
-        <i class="bi bi-file-earmark-pdf"></i> Generar Cuenta de Cobro (${seleccionados.length} ítem${seleccionados.length !== 1 ? 's' : ''}) — ${fmt.format(total)}
-    </button>`;
+    <div class="d-flex gap-2">
+        <button class="btn btn-cyan flex-grow-1 fw-bold btn-sm" onclick="generarCuentaCobroSeleccionados()">
+            <i class="bi bi-file-earmark-pdf"></i> PDF (${seleccionados.length} ítem${seleccionados.length !== 1 ? 's' : ''}) — ${fmt.format(total)}
+        </button>
+        <button class="btn btn-success btn-sm" onclick="enviarCuentaCobroSeleccionadosWhatsApp()" title="Enviar cuenta de cobro por WhatsApp (texto)">
+            <i class="bi bi-whatsapp"></i>
+        </button>
+    </div>`;
 }
 
 async function generarCuentaCobroSeleccionados() {
@@ -1723,7 +1729,8 @@ function renderRecurringSection() {
         else if (estaVencido) badge = '<span class="badge bg-danger">VENCIDO</span>';
         else badge = '<span class="badge bg-warning text-dark">PENDIENTE</span>';
 
-        const btnCuenta = `<button class="btn btn-sm btn-outline-info" onclick="generarCuentaCobroPago('${p.idPago}')" title="Generar Cuenta de Cobro"><i class="bi bi-file-earmark-pdf"></i></button>`;
+        const btnCuenta = `<button class="btn btn-sm btn-outline-info" onclick="generarCuentaCobroPago('${p.idPago}')" title="Generar Cuenta de Cobro (PDF)"><i class="bi bi-file-earmark-pdf"></i></button>`;
+        const btnCuentaWa = `<button class="btn btn-sm btn-outline-success" onclick="enviarCuentaCobroPagoWhatsApp('${p.idPago}')" title="Enviar Cuenta de Cobro por WhatsApp"><i class="bi bi-whatsapp"></i></button>`;
         const btnPagar  = esPagado ? '' : `<button class="btn btn-sm btn-cyan" onclick="marcarPagoRecurrente('${p.idPago}')" title="Marcar como pagado"><i class="bi bi-check-lg"></i></button>`;
         const btnEditar = esPagado ? '' : `<button class="btn btn-sm btn-outline-warning" onclick="openEditPagoModal('${p.idPago}')" title="Editar cuota"><i class="bi bi-pencil"></i></button>`;
         const btnBorrar = esPagado ? '' : `<button class="btn btn-sm btn-outline-danger" onclick="eliminarPagoRecurrente('${p.idPago}')" title="Eliminar cuota"><i class="bi bi-trash"></i></button>`;
@@ -1733,7 +1740,7 @@ function renderRecurringSection() {
                 <div class="text-white small fw-bold">${mesLabel} &mdash; ${fmt.format(p.monto)}</div>
                 <div class="text-muted" style="font-size:0.65rem;">${esInicial ? 'Fecha' : 'Vence'}: ${fecha} ${badge}</div>
             </div>
-            <div class="d-flex gap-1">${btnCuenta}${btnEditar}${btnBorrar}${btnPagar}</div>
+            <div class="d-flex gap-1">${btnCuenta}${btnCuentaWa}${btnEditar}${btnBorrar}${btnPagar}</div>
         </div>`;
     }).join('');
 
@@ -1867,6 +1874,245 @@ async function marcarPagoRecurrente(idPago) {
         const err = (res.data && res.data.error) ? res.data.error : (res.error || 'Error desconocido');
         showToast('Error: ' + err, 'danger');
     }
+}
+
+// --- CHECKLIST DE HERRAMIENTAS POR PROYECTO (con kits reutilizables) ---
+// Los kits (ej: "CCTV", "Eléctrico") viven en CONFIGURACION bajo
+// HERRAMIENTAS_KITS_CONFIG, mismo patrón genérico que usa el Estimador
+// (getEstimadorConfig / updateConfigValue) — reutilizado aquí tal cual.
+function getHerramientasKits() {
+    return getEstimadorConfig('HERRAMIENTAS_KITS_CONFIG', { kits: [] }).kits || [];
+}
+
+function poblarSelectKits() {
+    const sel = document.getElementById('pd-kit-select');
+    if (!sel) return;
+    const kits = getHerramientasKits();
+    sel.innerHTML = kits.length === 0
+        ? '<option value="">Sin kits — crea uno</option>'
+        : kits.map(k => `<option value="${k.id}">${k.nombre}</option>`).join('');
+}
+
+function renderHerramientasChecklist() {
+    poblarSelectKits();
+    const listEl = document.getElementById('pd-herramientas-list');
+    if (!listEl || !currentProjectData) return;
+    const checklist = currentProjectData.herramientasChecklist || [];
+
+    if (checklist.length === 0) {
+        listEl.innerHTML = '<p class="text-secondary small mb-0">Sin herramientas en el checklist. Aplica un kit o agrega una suelta.</p>';
+        return;
+    }
+
+    listEl.innerHTML = checklist.map((h, i) => `
+        <div class="d-flex align-items-center justify-content-between py-1 border-bottom border-secondary">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="pd-herr-${i}" ${h.checked ? 'checked' : ''} onchange="toggleHerramientaChecklist(${i}, this.checked)">
+                <label class="form-check-label small ${h.checked ? 'text-secondary text-decoration-line-through' : 'text-white'}" for="pd-herr-${i}">${h.nombre}</label>
+            </div>
+            <button class="btn btn-sm text-danger p-0" onclick="eliminarHerramientaChecklist(${i})"><i class="bi bi-trash"></i></button>
+        </div>
+    `).join('');
+}
+
+function guardarChecklistActual() {
+    if (!currentProjectData) return;
+    callApi('updateProjectChecklist', { id: currentProjectData.id, checklist: currentProjectData.herramientasChecklist || [] });
+}
+
+function toggleHerramientaChecklist(idx, checked) {
+    if (!currentProjectData || !currentProjectData.herramientasChecklist[idx]) return;
+    currentProjectData.herramientasChecklist[idx].checked = checked;
+    renderHerramientasChecklist();
+    guardarChecklistActual();
+}
+
+function eliminarHerramientaChecklist(idx) {
+    if (!currentProjectData) return;
+    currentProjectData.herramientasChecklist.splice(idx, 1);
+    renderHerramientasChecklist();
+    guardarChecklistActual();
+}
+
+function agregarHerramientaSuelta() {
+    if (!currentProjectData) return;
+    const input = document.getElementById('pd-herramienta-nueva');
+    const nombre = input.value.trim();
+    if (!nombre) return;
+    if (!currentProjectData.herramientasChecklist) currentProjectData.herramientasChecklist = [];
+    currentProjectData.herramientasChecklist.push({ nombre, checked: false });
+    input.value = '';
+    renderHerramientasChecklist();
+    guardarChecklistActual();
+}
+
+function aplicarKitHerramientas() {
+    if (!currentProjectData) return;
+    const kitId = document.getElementById('pd-kit-select').value;
+    if (!kitId) return alert('No hay ningún kit configurado. Usa el botón ⚙️ para crear uno.');
+    const kit = getHerramientasKits().find(k => k.id === kitId);
+    if (!kit) return;
+
+    if (!currentProjectData.herramientasChecklist) currentProjectData.herramientasChecklist = [];
+    const existentes = new Set(currentProjectData.herramientasChecklist.map(h => h.nombre.trim().toLowerCase()));
+    (kit.herramientas || []).forEach(nombre => {
+        if (!existentes.has(nombre.trim().toLowerCase())) {
+            currentProjectData.herramientasChecklist.push({ nombre, checked: false });
+        }
+    });
+
+    renderHerramientasChecklist();
+    guardarChecklistActual();
+    showToast(`Kit "${kit.nombre}" aplicado al checklist.`, 'success');
+}
+
+// --- Gestión de Kits de herramientas (modal propio, mismo patrón que Estimador) ---
+function openHerramientasKitsModal() {
+    renderKitsConfigList(getHerramientasKits());
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('herramientasKitsModal')).show();
+}
+
+function renderKitsConfigList(kits) {
+    const listEl = document.getElementById('cfg-kits-list');
+    if (kits.length === 0) {
+        listEl.innerHTML = '<p class="text-secondary small">No hay kits todavía. Crea el primero con "Nuevo kit".</p>';
+        return;
+    }
+    listEl.innerHTML = kits.map((k, i) => `
+        <div class="card bg-dark border-secondary mb-2" data-idx="${i}">
+            <div class="card-body p-2">
+                <div class="d-flex gap-2 align-items-start mb-2">
+                    <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary cfg-kit-nombre" value="${k.nombre}" placeholder="Nombre del kit (ej: CCTV)">
+                    <button class="btn btn-sm text-danger" onclick="eliminarKitConfig(${i})"><i class="bi bi-trash"></i></button>
+                </div>
+                <label class="small text-muted">Herramientas (una por línea)</label>
+                <textarea class="form-control form-control-sm bg-dark text-white border-secondary cfg-kit-herramientas" rows="4" placeholder="Taladro&#10;Escalera&#10;Multímetro">${(k.herramientas || []).join('\n')}</textarea>
+            </div>
+        </div>
+    `).join('');
+}
+
+function agregarKitConfig() {
+    const kits = leerKitsDelForm();
+    kits.push({ id: generateUUID(), nombre: 'Nuevo kit', herramientas: [] });
+    renderKitsConfigList(kits);
+}
+
+function eliminarKitConfig(idx) {
+    const kits = leerKitsDelForm();
+    kits.splice(idx, 1);
+    renderKitsConfigList(kits);
+}
+
+function leerKitsDelForm() {
+    const kitsOriginales = getHerramientasKits();
+    const cards = document.querySelectorAll('#cfg-kits-list [data-idx]');
+    return Array.from(cards).map((card, i) => ({
+        id: (kitsOriginales[i] && kitsOriginales[i].id) || generateUUID(),
+        nombre: card.querySelector('.cfg-kit-nombre').value || 'Sin nombre',
+        herramientas: card.querySelector('.cfg-kit-herramientas').value
+            .split('\n').map(s => s.trim()).filter(s => s.length > 0)
+    }));
+}
+
+async function guardarHerramientasKits() {
+    const kits = leerKitsDelForm();
+
+    const btn = document.querySelector('#herramientasKitsModal .btn-cyan');
+    const textoOriginal = btn.innerText;
+    btn.disabled = true; btn.innerText = 'GUARDANDO...';
+
+    try {
+        await callApi('updateConfigValue', { clave: 'HERRAMIENTAS_KITS_CONFIG', valor: JSON.stringify({ kits }) });
+        configuracion['HERRAMIENTAS_KITS_CONFIG'] = JSON.stringify({ kits });
+        setCacheWithTimestamp('ast_config', configuracion);
+
+        bootstrap.Modal.getInstance(document.getElementById('herramientasKitsModal')).hide();
+        poblarSelectKits();
+        showToast('Kits de herramientas guardados.', 'success');
+    } catch (e) {
+        console.error(e);
+        alert('Error guardando los kits.');
+    } finally {
+        btn.disabled = false; btn.innerText = textoOriginal;
+    }
+}
+
+// --- CUENTA DE COBRO POR WHATSAPP (texto plano, sin PDF) ---
+// Complementa el flujo de PDF existente -- para clientes que piden la cuenta
+// de cobro directo por WhatsApp en vez del enlace al documento.
+function construirMensajeCuentaCobroWhatsApp(cliente, items, total, notaExtra) {
+    let msg = `Hola${cliente ? ' *' + cliente + '*' : ''} 👋\n\nTe compartimos tu cuenta de cobro de *A.S.T. (Arrieta Soluciones Tecnológicas)*:\n\n`;
+    items.forEach(it => {
+        msg += `▪ ${it.nombre} — ${fmt.format(it.subtotal)}\n`;
+    });
+    msg += `\n💰 *Total a pagar: ${fmt.format(total)}*\n`;
+    if (notaExtra) msg += `\n${notaExtra}\n`;
+    msg += `\nGracias por confiar en A.S.T. y en nuestros servicios. Quedamos atentos para coordinar el pago. 🙏`;
+    return msg;
+}
+
+function abrirWhatsAppConTelefono(telefonoRaw, mensaje) {
+    let tel = String(telefonoRaw || '').trim().replace(/\D/g, '');
+    if (tel.startsWith('57') && tel.length > 10) tel = tel.substring(2);
+
+    if (tel.length < 10) {
+        const manual = prompt('No hay un teléfono válido guardado para este cliente.\nEscribe el número de WhatsApp (10 dígitos):', '');
+        if (!manual) return;
+        tel = manual.trim().replace(/\D/g, '');
+        if (tel.startsWith('57') && tel.length > 10) tel = tel.substring(2);
+        if (tel.length < 10) return alert('Número inválido.');
+    }
+
+    openExternalUrl(`https://wa.me/57${tel}?text=${encodeURIComponent(mensaje)}`);
+}
+
+async function enviarCuentaCobroSeleccionadosWhatsApp() {
+    const seleccionados = currentProjectItems.filter(i => selectedMovIds.has(i.idMov));
+    if (seleccionados.length === 0 || !currentProjectData) return;
+
+    const items = seleccionados.map(i => ({ nombre: i.descripcion, subtotal: i.venta * i.cantidad }));
+    const total = items.reduce((sum, it) => sum + it.subtotal, 0);
+
+    if (!confirm(`¿Enviar por WhatsApp la cuenta de cobro de ${items.length} ítem(s) por ${fmt.format(total)}?`)) return;
+
+    const mensaje = construirMensajeCuentaCobroWhatsApp(currentProjectData.cliente, items, total);
+
+    // Igual que la versión PDF: se marcan como facturados para no ofrecerlos
+    // de nuevo, ya que el cobro se está comunicando formalmente al cliente.
+    await callApi('marcarMovimientosFacturados', { idMovs: Array.from(selectedMovIds) });
+    selectedMovIds.clear();
+
+    abrirWhatsAppConTelefono(currentProjectData.contacto, mensaje);
+    showToast('✅ Cuenta de cobro marcada como facturada', 'success');
+    await reloadCurrentProjectDetail();
+}
+
+async function enviarCuentaCobroPagoWhatsApp(idPago) {
+    const pago = (currentProjectPagos || []).find(p => p.idPago === idPago);
+    if (!pago || !currentProjectData) return;
+
+    const esInicial = pago.periodo === 'Inicial';
+    const descripcion = esInicial
+        ? `Pago inicial (contraentrega) — ${currentProjectData.nombreProyecto}`
+        : `Cuota ${pago.periodo} — ${currentProjectData.nombreProyecto}`;
+
+    const items = [{ nombre: descripcion, subtotal: pago.monto }];
+
+    const estaVencida = !esInicial && new Date(pago.fechaVencimiento).getTime() < Date.now();
+    let notaExtra = '';
+    if (estaVencida) {
+        const fechaVenceStr = new Date(pago.fechaVencimiento).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+        notaExtra = `⚠️ Esta cuota venció el ${fechaVenceStr}. Si el pago no se realiza pronto, el servicio/acceso a la aplicación quedará suspendido hasta que se regularice.`;
+
+        const interesStr = prompt('Esta cuota está vencida.\n¿Quieres agregar un interés/recargo por mora? Escribe el monto en pesos (deja vacío o 0 si no aplica):', '0');
+        const interes = Number(interesStr);
+        if (interes > 0) items.push({ nombre: 'Interés / recargo por mora', subtotal: interes });
+    }
+
+    const total = items.reduce((sum, it) => sum + it.subtotal, 0);
+    const mensaje = construirMensajeCuentaCobroWhatsApp(currentProjectData.cliente, items, total, notaExtra);
+    abrirWhatsAppConTelefono(currentProjectData.contacto, mensaje);
 }
 
 async function generarCuentaCobroPago(idPago) {

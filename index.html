@@ -815,6 +815,27 @@
         </div>
     </div>
 
+    <div class="modal fade" id="herramientasKitsModal" tabindex="-1" style="z-index: 1060;">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content bg-dark-panel border-cyan">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-white"><i class="bi bi-tools"></i> Kits de Herramientas</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-secondary small">Define un kit por tipo de servicio (ej: "CCTV", "Eléctrico") con las herramientas que sueles necesitar. Luego, desde el checklist de cada proyecto, puedes aplicar el kit con un clic en vez de escribir todo de nuevo.</p>
+                    <div class="d-flex justify-content-end mb-2">
+                        <button class="btn btn-sm btn-outline-cyan" onclick="agregarKitConfig()"><i class="bi bi-plus-lg"></i> Nuevo kit</button>
+                    </div>
+                    <div id="cfg-kits-list"></div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button class="btn btn-cyan w-100" onclick="guardarHerramientasKits()">GUARDAR KITS</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="projectDetailModal" tabindex="-1">
         <div class="modal-dialog modal-fullscreen">
             <div class="modal-content bg-dark-panel">
@@ -850,6 +871,24 @@
                     </div>
 
                     <div class="p-2 border-bottom border-secondary" id="pd-recurring-section"></div>
+
+                    <div class="p-2 border-bottom border-secondary">
+                        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-1">
+                            <small class="text-cyan fw-bold"><i class="bi bi-tools"></i> CHECKLIST DE HERRAMIENTAS</small>
+                            <div class="d-flex gap-1">
+                                <select id="pd-kit-select" class="form-select form-select-sm bg-dark text-white border-secondary" style="width:auto; font-size:0.75rem;"></select>
+                                <button class="btn btn-sm btn-outline-cyan" onclick="aplicarKitHerramientas()" title="Aplicar kit al checklist"><i class="bi bi-magic"></i></button>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="openHerramientasKitsModal()" title="Gestionar kits"><i class="bi bi-gear-fill"></i></button>
+                            </div>
+                        </div>
+                        <div id="pd-herramientas-list" class="mb-2">
+                            <p class="text-secondary small mb-0">Sin herramientas en el checklist. Aplica un kit o agrega una suelta.</p>
+                        </div>
+                        <div class="input-group input-group-sm">
+                            <input type="text" id="pd-herramienta-nueva" class="form-control bg-dark text-white border-secondary" placeholder="Agregar herramienta suelta..." onkeydown="if(event.key==='Enter'){agregarHerramientaSuelta(); event.preventDefault();}">
+                            <button class="btn btn-outline-cyan" onclick="agregarHerramientaSuelta()"><i class="bi bi-plus-lg"></i></button>
+                        </div>
+                    </div>
 
                    <!-- Buscador de movimientos -->
                     <div style="padding:8px 12px; border-bottom:1px solid #1a2a3a; background:#071726; position:sticky; top:0; z-index:10;">
