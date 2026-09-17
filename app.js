@@ -1585,7 +1585,7 @@ function renderProjectItems() {
         const isCobrar = (item.esCobrar === true || item.esCobrar === 'TRUE');
         const yaFacturado = item.facturado === true;
         let badge;
-        if (yaFacturado) badge = '<span class="badge bg-info text-dark">FACTURADO</span>';
+        if (yaFacturado) badge = `<span class="badge bg-info text-dark">FACTURADO</span> <button class="btn btn-sm text-warning p-0 ms-1" style="font-size:0.7rem;" onclick="desmarcarMovimientoFacturado('${item.idMov}')" title="Desmarcar (si quedó facturado sin haberse cobrado de verdad)"><i class="bi bi-arrow-counterclockwise"></i></button>`;
         else if (isCobrar) badge = '<span class="badge bg-success">COBRABLE</span>';
         else badge = '<span class="badge bg-secondary">NO COBRABLE</span>';
 
@@ -1626,6 +1626,22 @@ function toggleMovSeleccionado(idMov, checked) {
     if (checked) selectedMovIds.add(idMov);
     else selectedMovIds.delete(idMov);
     renderBotonCuentaCobroParcial();
+}
+
+async function desmarcarMovimientoFacturado(idMov) {
+    if (!confirm('¿Desmarcar este ítem como facturado?\nÚsalo solo si en realidad no se le cobró al cliente (ej. el envío falló o se canceló) — vuelve a estar disponible para incluirse en una cuenta de cobro.')) return;
+    showSyncIndicator();
+    const res = await callApi('marcarMovimientosFacturados', { idMovs: [idMov], facturado: false });
+    hideSyncIndicator();
+
+    const ok = res.success && res.data && res.data.success !== false;
+    if (ok) {
+        showToast('✅ Ítem desmarcado, disponible de nuevo', 'success');
+        await reloadCurrentProjectDetail();
+    } else {
+        const err = (res.data && res.data.error) ? res.data.error : (res.error || 'Error desconocido');
+        showToast('Error: ' + err, 'danger');
+    }
 }
 
 function renderBotonCuentaCobroParcial() {
@@ -2074,18 +2090,16 @@ async function enviarCuentaCobroSeleccionadosWhatsApp() {
     const items = seleccionados.map(i => ({ nombre: i.descripcion, subtotal: i.venta * i.cantidad }));
     const total = items.reduce((sum, it) => sum + it.subtotal, 0);
 
-    if (!confirm(`¿Enviar por WhatsApp la cuenta de cobro de ${items.length} ítem(s) por ${fmt.format(total)}?`)) return;
-
     const mensaje = construirMensajeCuentaCobroWhatsApp(currentProjectData.cliente, items, total);
-
-    // Igual que la versión PDF: se marcan como facturados para no ofrecerlos
-    // de nuevo, ya que el cobro se está comunicando formalmente al cliente.
-    await callApi('marcarMovimientosFacturados', { idMovs: Array.from(selectedMovIds) });
-    selectedMovIds.clear();
-
     abrirWhatsAppConTelefono(currentProjectData.contacto, mensaje);
-    showToast('✅ Cuenta de cobro marcada como facturada', 'success');
-    await reloadCurrentProjectDetail();
+
+    // A diferencia del PDF, aquí NO se marca como facturado: no hay forma de
+    // confirmar que el mensaje realmente se envió (WhatsApp es una app
+    // externa) -- si se marcara de una vez, un envío cancelado o fallido
+    // dejaría el ítem bloqueado sin haber cobrado nada. Y si más adelante el
+    // cliente pide la cuenta de cobro formal en PDF, el ítem debe seguir
+    // disponible para generarla. Queda seleccionado por si quieres generar
+    // el PDF justo después de mandar el WhatsApp.
 }
 
 async function enviarCuentaCobroPagoWhatsApp(idPago) {
