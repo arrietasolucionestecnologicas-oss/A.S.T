@@ -2057,14 +2057,17 @@ async function guardarHerramientasKits() {
 // --- CUENTA DE COBRO POR WHATSAPP (texto plano, sin PDF) ---
 // Complementa el flujo de PDF existente -- para clientes que piden la cuenta
 // de cobro directo por WhatsApp en vez del enlace al documento.
+// Sin emojis a propósito: en algunos celulares el WebView de la app los
+// entrega corruptos (símbolo "�") al pasarlos a WhatsApp por el enlace
+// wa.me -- con texto plano se ve limpio y profesional en cualquier equipo.
 function construirMensajeCuentaCobroWhatsApp(cliente, items, total, notaExtra) {
-    let msg = `Hola${cliente ? ' *' + cliente + '*' : ''} 👋\n\nTe compartimos tu cuenta de cobro de *A.S.T. (Arrieta Soluciones Tecnológicas)*:\n\n`;
+    let msg = `Hola${cliente ? ' *' + cliente + '*' : ''},\n\nTe compartimos tu cuenta de cobro de *A.S.T. (Arrieta Soluciones Tecnológicas)*:\n\n`;
     items.forEach(it => {
-        msg += `▪ ${it.nombre} — ${fmt.format(it.subtotal)}\n`;
+        msg += `- ${it.nombre}: ${fmt.format(it.subtotal)}\n`;
     });
-    msg += `\n💰 *Total a pagar: ${fmt.format(total)}*\n`;
+    msg += `\n*Total a pagar: ${fmt.format(total)}*\n`;
     if (notaExtra) msg += `\n${notaExtra}\n`;
-    msg += `\nGracias por confiar en A.S.T. y en nuestros servicios. Quedamos atentos para coordinar el pago. 🙏`;
+    msg += `\nGracias por confiar en A.S.T. y en nuestros servicios. Quedamos atentos para coordinar el pago.`;
     return msg;
 }
 
@@ -2117,7 +2120,7 @@ async function enviarCuentaCobroPagoWhatsApp(idPago) {
     let notaExtra = '';
     if (estaVencida) {
         const fechaVenceStr = new Date(pago.fechaVencimiento).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
-        notaExtra = `⚠️ Esta cuota venció el ${fechaVenceStr}. Si el pago no se realiza pronto, el servicio/acceso a la aplicación quedará suspendido hasta que se regularice.`;
+        notaExtra = `Esta cuota venció el ${fechaVenceStr}. Si el pago no se realiza pronto, el servicio/acceso a la aplicación quedará suspendido hasta que se regularice.`;
 
         const interesStr = prompt('Esta cuota está vencida.\n¿Quieres agregar un interés/recargo por mora? Escribe el monto en pesos (deja vacío o 0 si no aplica):', '0');
         const interes = Number(interesStr);
