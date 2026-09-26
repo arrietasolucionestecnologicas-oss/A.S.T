@@ -446,6 +446,7 @@ function switchTab(viewName) {
     document.getElementById('tab-hist').className = 'nav-link';
     document.getElementById('tab-prov').className = 'nav-link';
     document.getElementById('tab-estimador').className = 'nav-link';
+    document.getElementById('tab-dashboard').className = 'nav-link';
 
     if(viewName === 'PRODUCTO') document.getElementById('tab-prod').className = 'nav-link active';
     if(viewName === 'SERVICIO') document.getElementById('tab-serv').className = 'nav-link active';
@@ -453,12 +454,14 @@ function switchTab(viewName) {
     if(viewName === 'HISTORIAL') document.getElementById('tab-hist').className = 'nav-link active';
     if(viewName === 'PROVEEDORES') document.getElementById('tab-prov').className = 'nav-link active';
     if(viewName === 'ESTIMADOR') document.getElementById('tab-estimador').className = 'nav-link active';
+    if(viewName === 'DASHBOARD') document.getElementById('tab-dashboard').className = 'nav-link active';
 
     document.getElementById('view-catalog').classList.add('hidden-section');
     document.getElementById('view-projects').classList.add('hidden-section');
     document.getElementById('view-history').classList.add('hidden-section');
     document.getElementById('view-proveedores').classList.add('hidden-section');
     document.getElementById('view-estimador').classList.add('hidden-section');
+    document.getElementById('view-dashboard').classList.add('hidden-section');
     document.getElementById('fab-cart').style.display = 'none';
     document.getElementById('btn-main-add').style.display = 'none';
 
@@ -477,6 +480,10 @@ function switchTab(viewName) {
     else if (viewName === 'ESTIMADOR') {
         document.getElementById('view-estimador').classList.remove('hidden-section');
         renderEstimador();
+    }
+    else if (viewName === 'DASHBOARD') {
+        document.getElementById('view-dashboard').classList.remove('hidden-section');
+        renderDashboard();
     }
     else {
         document.getElementById('view-catalog').classList.remove('hidden-section');
@@ -1451,6 +1458,139 @@ function calculateDashboard() {
     const margen = cobrado > 0 ? ((utilidad / cobrado) * 100).toFixed(1) : 0;
     document.getElementById('kpi-margen').innerText = margen + "%";
     document.getElementById('projects-dashboard').classList.remove('d-none');
+}
+
+// --- DASHBOARD (vista dedicada, con gráfica mensual) ---
+// Mismo criterio de "facturado" que el KPI global (esCobrar=true de cada
+// movimiento), pero agrupado por el mes de la fecha del movimiento en vez
+// de por estado abierto/cerrado del proyecto -- así se puede ver mes a mes
+// qué se facturó/ganó, sin esperar a que un proyecto se cierre.
+let dashboardData = null;
+let dashboardChart = null;
+let cierreMensualCursor = null;
+
+async function renderDashboard() {
+    if (!dashboardData) {
+        const res = await callApi('getMonthlyDashboard', {});
+        if (!res.success) {
+            showToast('Error cargando el dashboard', 'danger');
+            return;
+        }
+        dashboardData = res.data;
+    }
+    if (!cierreMensualCursor) {
+        const hoy = new Date();
+        cierreMensualCursor = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    }
+    dibujarGraficaDashboard();
+    renderCierreMensual();
+}
+
+function dibujarGraficaDashboard() {
+    const rangoSel = Number(document.getElementById('dash-rango').value);
+    const meses = rangoSel > 0 ? dashboardData.slice(-rangoSel) : dashboardData;
+
+    const emptyEl = document.getElementById('dash-chart-empty');
+    const canvasEl = document.getElementById('dash-chart');
+
+    if (meses.length === 0) {
+        emptyEl.classList.remove('hidden-section');
+        canvasEl.classList.add('hidden-section');
+        document.getElementById('dash-total-facturado').innerText = fmt.format(0);
+        document.getElementById('dash-total-gastos').innerText = fmt.format(0);
+        document.getElementById('dash-total-utilidad').innerText = fmt.format(0);
+        document.getElementById('dash-margen').innerText = '0%';
+        return;
+    }
+    emptyEl.classList.add('hidden-section');
+    canvasEl.classList.remove('hidden-section');
+
+    const totalFacturado = meses.reduce((s, m) => s + m.facturado, 0);
+    const totalGastos = meses.reduce((s, m) => s + m.gastos, 0);
+    const totalUtilidad = totalFacturado - totalGastos;
+    document.getElementById('dash-total-facturado').innerText = fmt.format(totalFacturado);
+    document.getElementById('dash-total-gastos').innerText = fmt.format(totalGastos);
+    document.getElementById('dash-total-utilidad').innerText = fmt.format(totalUtilidad);
+    document.getElementById('dash-margen').innerText = (totalFacturado > 0 ? ((totalUtilidad / totalFacturado) * 100).toFixed(1) : 0) + '%';
+
+    const labels = meses.map(m => {
+        const [y, mm] = m.periodo.split('-');
+        return new Date(Number(y), Number(mm) - 1, 1).toLocaleDateString('es-CO', { month: 'short', year: '2-digit' });
+    });
+
+    if (dashboardChart) dashboardChart.destroy();
+    const ctx = document.getElementById('dash-chart').getContext('2d');
+    dashboardChart = new Chart(ctx, {
+        data: {
+            labels: labels,
+            datasets: [
+                { type: 'bar', label: 'Facturado', data: meses.map(m => m.facturado), backgroundColor: '#00c8ff' },
+                { type: 'bar', label: 'Gastos', data: meses.map(m => m.gastos), backgroundColor: '#ff4d4d' },
+                { type: 'line', label: 'Utilidad', data: meses.map(m => m.utilidad), borderColor: '#00ff88', backgroundColor: '#00ff88', tension: 0.3 }
+            ]
+        },
+        options: {
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            onClick: (evt, elements) => {
+                if (!elements.length) return;
+                const [y, mm] = meses[elements[0].index].periodo.split('-');
+                cierreMensualCursor = new Date(Number(y), Number(mm) - 1, 1);
+                renderCierreMensual();
+            },
+            plugins: {
+                legend: { labels: { color: '#ccc' } },
+                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt.format(ctx.parsed.y)}` } }
+            },
+            scales: {
+                x: { ticks: { color: '#aaa' }, grid: { color: '#222' } },
+                y: { ticks: { color: '#aaa', callback: (v) => fmt.format(v) }, grid: { color: '#222' } }
+            }
+        }
+    });
+}
+
+function cambiarMesCierre(delta) {
+    if (!cierreMensualCursor) return;
+    cierreMensualCursor = new Date(cierreMensualCursor.getFullYear(), cierreMensualCursor.getMonth() + delta, 1);
+    renderCierreMensual();
+}
+
+function renderCierreMensual() {
+    if (!cierreMensualCursor || !dashboardData) return;
+    const periodo = `${cierreMensualCursor.getFullYear()}-${String(cierreMensualCursor.getMonth() + 1).padStart(2, '0')}`;
+    const mesLabel = cierreMensualCursor.toLocaleDateString('es-CO', { year: 'numeric', month: 'long' });
+    document.getElementById('cierre-mes-label').innerText = mesLabel;
+
+    const datos = dashboardData.find(m => m.periodo === periodo) || { facturado: 0, gastos: 0, utilidad: 0, proyectos: [] };
+
+    document.getElementById('cierre-facturado').innerText = fmt.format(datos.facturado);
+    document.getElementById('cierre-gastos').innerText = fmt.format(datos.gastos);
+    document.getElementById('cierre-utilidad').innerText = fmt.format(datos.utilidad);
+
+    const listEl = document.getElementById('cierre-mensual-proyectos');
+    if (datos.proyectos.length === 0) {
+        listEl.innerHTML = '<p class="text-secondary small mb-0">Sin actividad registrada este mes.</p>';
+        return;
+    }
+
+    listEl.innerHTML = datos.proyectos.map(p => `
+        <div class="d-flex justify-content-between align-items-center border-bottom border-secondary py-2" style="cursor:pointer;" onclick="abrirProyectoDesdeDashboard('${p.id}')">
+            <div class="overflow-hidden me-2">
+                <div class="text-white small fw-bold text-truncate">${p.nombreProyecto}</div>
+                <div class="text-muted" style="font-size:0.7rem;">${p.cliente}</div>
+            </div>
+            <div class="text-end" style="min-width:110px;">
+                <div class="text-cyan small">${fmt.format(p.facturado)}</div>
+                <div class="text-success" style="font-size:0.7rem;">${fmt.format(p.utilidad)} util.</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function abrirProyectoDesdeDashboard(projectId) {
+    switchTab('PROYECTOS');
+    openProjectDetail(projectId);
 }
 
 function openNewProjectModal() {

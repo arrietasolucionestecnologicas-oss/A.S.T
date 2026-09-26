@@ -115,6 +115,9 @@
                     <li class="nav-item">
                         <button class="nav-link" id="tab-estimador" onclick="switchTab('ESTIMADOR')">ESTIMADOR</button>
                     </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="tab-dashboard" onclick="switchTab('DASHBOARD')"><i class="bi bi-bar-chart-line-fill"></i> DASHBOARD</button>
+                    </li>
                 </ul>
             </div>
         </div>
@@ -343,6 +346,84 @@
                     <button class="btn btn-success" id="btn-cctv-carrito" onclick="agregarEstimacionCctvAlCarrito()" disabled>
                         <i class="bi bi-cart-plus"></i> Agregar al Carrito
                     </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-dashboard" class="hidden-section">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <h5 class="text-white m-0"><i class="bi bi-bar-chart-line-fill text-cyan"></i> Dashboard</h5>
+                <select id="dash-rango" class="form-select form-select-sm bg-dark text-white border-secondary" style="width:auto;" onchange="renderDashboard()">
+                    <option value="6">Últimos 6 meses</option>
+                    <option value="12" selected>Últimos 12 meses</option>
+                    <option value="24">Últimos 24 meses</option>
+                    <option value="0">Todo el historial</option>
+                </select>
+            </div>
+
+            <div class="row g-2 mb-3">
+                <div class="col-4">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Facturado (rango)</div>
+                        <div class="kpi-value text-cyan" id="dash-total-facturado">$0</div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Gastos (rango)</div>
+                        <div class="kpi-value text-danger" id="dash-total-gastos">$0</div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Utilidad (rango)</div>
+                        <div class="kpi-value text-profit" id="dash-total-utilidad">$0</div>
+                    </div>
+                </div>
+                <div class="col-12 text-center mt-1">
+                    <small class="text-muted" style="font-size: 0.7rem;">MARGEN (rango): <span id="dash-margen" class="fw-bold text-white">0%</span></small>
+                </div>
+            </div>
+
+            <div class="card bg-dark-panel border-secondary mb-3">
+                <div class="card-body">
+                    <div id="dash-chart-empty" class="text-center text-secondary py-5 hidden-section">
+                        <i class="bi bi-bar-chart display-4"></i>
+                        <p class="mt-2">Aún no hay movimientos registrados para graficar.</p>
+                    </div>
+                    <canvas id="dash-chart" height="220"></canvas>
+                </div>
+            </div>
+
+            <div class="card bg-dark-panel border-secondary mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="cambiarMesCierre(-1)"><i class="bi bi-chevron-left"></i></button>
+                        <h6 class="text-cyan m-0 text-capitalize" id="cierre-mes-label">-</h6>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="cambiarMesCierre(1)"><i class="bi bi-chevron-right"></i></button>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-4">
+                            <div class="kpi-card">
+                                <div class="kpi-label">Facturado</div>
+                                <div class="kpi-value text-cyan" id="cierre-facturado">$0</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="kpi-card">
+                                <div class="kpi-label">Gastos</div>
+                                <div class="kpi-value text-danger" id="cierre-gastos">$0</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="kpi-card">
+                                <div class="kpi-label">Utilidad</div>
+                                <div class="kpi-value text-profit" id="cierre-utilidad">$0</div>
+                            </div>
+                        </div>
+                    </div>
+                    <h6 class="text-white small fw-bold mb-2">Trabajos con actividad este mes</h6>
+                    <div id="cierre-mensual-proyectos"></div>
                 </div>
             </div>
         </div>
@@ -1370,6 +1451,7 @@
     </div>
 </div>
     <script src="vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="vendor/chartjs/chart.umd.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
