@@ -1778,7 +1778,55 @@ function openRecurringConfigModal() {
     document.getElementById('rc-cuotas').value = 0;
     document.getElementById('rc-inicial').value = 0;
     document.getElementById('rc-inicial-pagado').checked = false;
+    document.getElementById('rc-valor-proyecto').innerText = fmt.format(currentProjectData.totalCobrado || 0);
+    document.getElementById('rc-cuotas-hint').innerText = '';
     bootstrap.Modal.getOrCreateInstance(document.getElementById('recurringConfigModal')).show();
+}
+
+// Calcula automáticamente cuántas cuotas mensuales hacen falta para saldar
+// el valor total del proyecto (en vez de dejar el plan "indefinido" por
+// defecto, que era lo que pasaba antes si no se llenaba a mano). Sigue
+// siendo editable: si el monto no divide exacto el saldo, se avisa la
+// diferencia para que la última cuota se ajuste manualmente si se quiere
+// que cierre exacto (no hay una fórmula que reparta el residuo sola).
+function actualizarCuotasSugeridas() {
+    if (!currentProjectData) return;
+    const total = Number(currentProjectData.totalCobrado) || 0;
+    const inicial = Number(document.getElementById('rc-inicial').value) || 0;
+    const monto = Number(document.getElementById('rc-monto').value) || 0;
+    const hint = document.getElementById('rc-cuotas-hint');
+    const cuotasInput = document.getElementById('rc-cuotas');
+
+    if (total <= 0) {
+        hint.className = 'd-block mt-1 text-secondary';
+        hint.innerText = 'Este proyecto no tiene un valor cotizado registrado — configura las cuotas manualmente o deja 0 para un plan indefinido.';
+        return;
+    }
+    if (monto <= 0) {
+        hint.innerText = '';
+        return;
+    }
+
+    const restante = total - inicial;
+    if (restante <= 0) {
+        cuotasInput.value = 0;
+        hint.className = 'd-block mt-1 text-success';
+        hint.innerText = 'El pago inicial ya cubre el valor del proyecto — no hacen falta cuotas mensuales.';
+        return;
+    }
+
+    const cuotasSugeridas = Math.ceil(restante / monto);
+    cuotasInput.value = cuotasSugeridas;
+
+    const totalConEstasCuotas = inicial + (cuotasSugeridas * monto);
+    const diferencia = totalConEstasCuotas - total;
+    if (Math.abs(diferencia) < 1) {
+        hint.className = 'd-block mt-1 text-success';
+        hint.innerText = `Calculado para saldar exactamente el valor del proyecto (${fmt.format(total)}) en ${cuotasSugeridas} cuota(s).`;
+    } else {
+        hint.className = 'd-block mt-1 text-warning';
+        hint.innerText = `Con ${cuotasSugeridas} cuota(s) de ${fmt.format(monto)} cobrarás ${fmt.format(totalConEstasCuotas)} (${fmt.format(Math.abs(diferencia))} ${diferencia > 0 ? 'más' : 'menos'} que el valor del proyecto). Puedes editar el monto de la última cuota después, desde la gestión de cuotas, si quieres que cierre exacto.`;
+    }
 }
 
 async function saveRecurringConfig() {
