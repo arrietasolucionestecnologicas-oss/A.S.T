@@ -361,27 +361,48 @@
                 </select>
             </div>
 
-            <div class="row g-2 mb-3">
+            <div class="row g-2 mb-2">
+                <div class="col-12">
+                    <small class="text-secondary" style="font-size:0.7rem;"><i class="bi bi-info-circle"></i> "Facturado" son proyectos <strong>cerrados</strong> (trabajo confirmado y terminado). Los <strong>abiertos</strong> son cotizaciones/oportunidades que el cliente aún no ha aceptado — no cuentan aquí todavía.</small>
+                </div>
                 <div class="col-4">
                     <div class="kpi-card">
-                        <div class="kpi-label">Facturado (rango)</div>
+                        <div class="kpi-label">Facturado (cerrados)</div>
                         <div class="kpi-value text-cyan" id="dash-total-facturado">$0</div>
                     </div>
                 </div>
                 <div class="col-4">
                     <div class="kpi-card">
-                        <div class="kpi-label">Gastos (rango)</div>
+                        <div class="kpi-label">Gastos (cerrados)</div>
                         <div class="kpi-value text-danger" id="dash-total-gastos">$0</div>
                     </div>
                 </div>
                 <div class="col-4">
                     <div class="kpi-card">
-                        <div class="kpi-label">Utilidad (rango)</div>
+                        <div class="kpi-label">Utilidad (cerrados)</div>
                         <div class="kpi-value text-profit" id="dash-total-utilidad">$0</div>
                     </div>
                 </div>
+            </div>
+
+            <div class="row g-2 mb-3">
+                <div class="col-12">
+                    <small class="text-secondary" style="font-size:0.7rem;"><i class="bi bi-cash-coin"></i> <strong>Ingreso Real</strong> es la plata que de verdad entró: proyectos cerrados + cuotas de pagos recurrentes ya cobradas (con su fecha real de pago).</small>
+                </div>
+                <div class="col-6">
+                    <div class="kpi-card" style="border-color: rgba(0,255,136,0.4);">
+                        <div class="kpi-label">Ingreso Real (rango)</div>
+                        <div class="kpi-value text-profit" id="dash-total-ingreso-real">$0</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="kpi-card" style="border-color: rgba(0,255,136,0.4);">
+                        <div class="kpi-label">Utilidad Real (rango)</div>
+                        <div class="kpi-value text-profit" id="dash-total-utilidad-real">$0</div>
+                    </div>
+                </div>
                 <div class="col-12 text-center mt-1">
-                    <small class="text-muted" style="font-size: 0.7rem;">MARGEN (rango): <span id="dash-margen" class="fw-bold text-white">0%</span></small>
+                    <small class="text-muted" style="font-size: 0.7rem;">MARGEN (cerrados): <span id="dash-margen" class="fw-bold text-white">0%</span></small>
                 </div>
             </div>
 

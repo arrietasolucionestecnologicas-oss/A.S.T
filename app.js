@@ -1461,10 +1461,13 @@ function calculateDashboard() {
 }
 
 // --- DASHBOARD (vista dedicada, con gráfica mensual) ---
-// Mismo criterio de "facturado" que el KPI global (esCobrar=true de cada
-// movimiento), pero agrupado por el mes de la fecha del movimiento en vez
-// de por estado abierto/cerrado del proyecto -- así se puede ver mes a mes
-// qué se facturó/ganó, sin esperar a que un proyecto se cierre.
+// "Facturado" solo cuenta proyectos CERRADOS (mismo criterio honesto que ya
+// usan los KPIs globales de Proyectos: un ABIERTO es una cotización que el
+// cliente puede no aceptar, no es plata real todavía). "Ingreso Real" es un
+// número aparte con fecha real de cobro: proyectos cerrados + cuotas de
+// pagos recurrentes ya pagadas -- así un proyecto a crédito que sigue
+// abierto (ej. $3M con cuotas) no aparece como ganancia completa de una vez,
+// solo lo que efectivamente ya se ha cobrado.
 let dashboardData = null;
 let dashboardChart = null;
 let cierreMensualCursor = null;
@@ -1499,6 +1502,8 @@ function dibujarGraficaDashboard() {
         document.getElementById('dash-total-facturado').innerText = fmt.format(0);
         document.getElementById('dash-total-gastos').innerText = fmt.format(0);
         document.getElementById('dash-total-utilidad').innerText = fmt.format(0);
+        document.getElementById('dash-total-ingreso-real').innerText = fmt.format(0);
+        document.getElementById('dash-total-utilidad-real').innerText = fmt.format(0);
         document.getElementById('dash-margen').innerText = '0%';
         return;
     }
@@ -1508,9 +1513,13 @@ function dibujarGraficaDashboard() {
     const totalFacturado = meses.reduce((s, m) => s + m.facturado, 0);
     const totalGastos = meses.reduce((s, m) => s + m.gastos, 0);
     const totalUtilidad = totalFacturado - totalGastos;
+    const totalIngresoReal = meses.reduce((s, m) => s + m.ingresoReal, 0);
+    const totalUtilidadReal = meses.reduce((s, m) => s + m.utilidadReal, 0);
     document.getElementById('dash-total-facturado').innerText = fmt.format(totalFacturado);
     document.getElementById('dash-total-gastos').innerText = fmt.format(totalGastos);
     document.getElementById('dash-total-utilidad').innerText = fmt.format(totalUtilidad);
+    document.getElementById('dash-total-ingreso-real').innerText = fmt.format(totalIngresoReal);
+    document.getElementById('dash-total-utilidad-real').innerText = fmt.format(totalUtilidadReal);
     document.getElementById('dash-margen').innerText = (totalFacturado > 0 ? ((totalUtilidad / totalFacturado) * 100).toFixed(1) : 0) + '%';
 
     const labels = meses.map(m => {
@@ -1524,9 +1533,9 @@ function dibujarGraficaDashboard() {
         data: {
             labels: labels,
             datasets: [
-                { type: 'bar', label: 'Facturado', data: meses.map(m => m.facturado), backgroundColor: '#00c8ff' },
-                { type: 'bar', label: 'Gastos', data: meses.map(m => m.gastos), backgroundColor: '#ff4d4d' },
-                { type: 'line', label: 'Utilidad', data: meses.map(m => m.utilidad), borderColor: '#00ff88', backgroundColor: '#00ff88', tension: 0.3 }
+                { type: 'bar', label: 'Facturado (cerrados)', data: meses.map(m => m.facturado), backgroundColor: '#00c8ff' },
+                { type: 'bar', label: 'Ingreso Real (cobrado)', data: meses.map(m => m.ingresoReal), backgroundColor: '#00ff88' },
+                { type: 'line', label: 'Utilidad Real', data: meses.map(m => m.utilidadReal), borderColor: '#ffcc00', backgroundColor: '#ffcc00', tension: 0.3 }
             ]
         },
         options: {
@@ -1562,30 +1571,55 @@ function renderCierreMensual() {
     const mesLabel = cierreMensualCursor.toLocaleDateString('es-CO', { year: 'numeric', month: 'long' });
     document.getElementById('cierre-mes-label').innerText = mesLabel;
 
-    const datos = dashboardData.find(m => m.periodo === periodo) || { facturado: 0, gastos: 0, utilidad: 0, proyectos: [] };
+    const datos = dashboardData.find(m => m.periodo === periodo) || { facturado: 0, gastos: 0, utilidad: 0, ingresoReal: 0, proyectos: [], ingresoRealDetalle: [] };
 
     document.getElementById('cierre-facturado').innerText = fmt.format(datos.facturado);
     document.getElementById('cierre-gastos').innerText = fmt.format(datos.gastos);
     document.getElementById('cierre-utilidad').innerText = fmt.format(datos.utilidad);
 
     const listEl = document.getElementById('cierre-mensual-proyectos');
+    let html = '';
+
+    if (datos.ingresoRealDetalle.length > 0) {
+        html += `<div class="mb-2"><small class="text-profit fw-bold"><i class="bi bi-cash-coin"></i> Ingreso real del mes: ${fmt.format(datos.ingresoReal)}</small></div>`;
+        html += datos.ingresoRealDetalle.map(d => `
+            <div class="d-flex justify-content-between align-items-center py-1" style="cursor:pointer;" onclick="abrirProyectoDesdeDashboard('${d.tipo === 'cierre_proyecto' ? d.id : d.projectId}')">
+                <div class="overflow-hidden me-2">
+                    <div class="text-white small text-truncate">${d.nombreProyecto}</div>
+                    <div class="text-muted" style="font-size:0.65rem;">${d.tipo === 'cierre_proyecto' ? 'Proyecto cerrado' : 'Cuota ' + d.periodo}${d.aproximado ? ' · fecha aproximada' : ''}</div>
+                </div>
+                <div class="text-profit small" style="min-width:90px; text-align:right;">${fmt.format(d.monto)}</div>
+            </div>
+        `).join('');
+        html += '<hr class="border-secondary my-2">';
+    }
+
     if (datos.proyectos.length === 0) {
-        listEl.innerHTML = '<p class="text-secondary small mb-0">Sin actividad registrada este mes.</p>';
+        html += '<p class="text-secondary small mb-0">Sin actividad registrada este mes.</p>';
+        listEl.innerHTML = html;
         return;
     }
 
-    listEl.innerHTML = datos.proyectos.map(p => `
-        <div class="d-flex justify-content-between align-items-center border-bottom border-secondary py-2" style="cursor:pointer;" onclick="abrirProyectoDesdeDashboard('${p.id}')">
+    html += '<small class="text-secondary d-block mb-1">Trabajos con actividad (abiertos = aún no cuentan como facturado)</small>';
+    html += datos.proyectos.map(p => {
+        const esAbierto = p.estado !== 'CERRADO';
+        const badge = esAbierto
+            ? '<span class="badge bg-secondary" style="font-size:0.6rem;">ABIERTO</span>'
+            : '<span class="badge bg-success" style="font-size:0.6rem;">CERRADO</span>';
+        return `
+        <div class="d-flex justify-content-between align-items-center border-bottom border-secondary py-2" style="cursor:pointer; ${esAbierto ? 'opacity:0.6;' : ''}" onclick="abrirProyectoDesdeDashboard('${p.id}')">
             <div class="overflow-hidden me-2">
-                <div class="text-white small fw-bold text-truncate">${p.nombreProyecto}</div>
+                <div class="text-white small fw-bold text-truncate">${p.nombreProyecto} ${badge}</div>
                 <div class="text-muted" style="font-size:0.7rem;">${p.cliente}</div>
             </div>
             <div class="text-end" style="min-width:110px;">
-                <div class="text-cyan small">${fmt.format(p.facturado)}</div>
-                <div class="text-success" style="font-size:0.7rem;">${fmt.format(p.utilidad)} util.</div>
+                <div class="text-cyan small">${esAbierto ? '—' : fmt.format(p.facturado)}</div>
+                <div class="text-success" style="font-size:0.7rem;">${esAbierto ? 'no cuenta aún' : fmt.format(p.utilidad) + ' util.'}</div>
             </div>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
+
+    listEl.innerHTML = html;
 }
 
 function abrirProyectoDesdeDashboard(projectId) {
