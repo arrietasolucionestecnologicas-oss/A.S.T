@@ -433,8 +433,40 @@ async function installApp() {
     }
 }
 
+// Grupo (nivel superior de navegación) al que pertenece cada pestaña, para
+// que al cambiar de vista se muestre/resalte el grupo correcto aunque el
+// cambio no venga de hacer clic en el grupo (ej. abrir un proyecto desde el
+// Dashboard hace switchTab('PROYECTOS') directo).
+const GRUPO_POR_VISTA = {
+    PRODUCTO: 'CATALOGO', SERVICIO: 'CATALOGO',
+    PROYECTOS: 'GESTION', HISTORIAL: 'GESTION', PROVEEDORES: 'GESTION',
+    ESTIMADOR: 'HERRAMIENTAS', DASHBOARD: 'HERRAMIENTAS'
+};
+
+function switchGrupoNav(grupo) {
+    document.getElementById('grupo-catalogo').className = 'nav-link';
+    document.getElementById('grupo-gestion').className = 'nav-link';
+    document.getElementById('grupo-herramientas').className = 'nav-link';
+    document.getElementById('subnav-catalogo').classList.add('hidden-section');
+    document.getElementById('subnav-gestion').classList.add('hidden-section');
+    document.getElementById('subnav-herramientas').classList.add('hidden-section');
+
+    if (grupo === 'CATALOGO') {
+        document.getElementById('grupo-catalogo').className = 'nav-link active';
+        document.getElementById('subnav-catalogo').classList.remove('hidden-section');
+    } else if (grupo === 'GESTION') {
+        document.getElementById('grupo-gestion').className = 'nav-link active';
+        document.getElementById('subnav-gestion').classList.remove('hidden-section');
+    } else if (grupo === 'HERRAMIENTAS') {
+        document.getElementById('grupo-herramientas').className = 'nav-link active';
+        document.getElementById('subnav-herramientas').classList.remove('hidden-section');
+    }
+}
+
 function switchTab(viewName) {
     currentView = viewName;
+
+    switchGrupoNav(GRUPO_POR_VISTA[viewName] || 'CATALOGO');
 
     // Limpiar buscador al cambiar de vista
     const searchEl = document.getElementById('search');
