@@ -1582,13 +1582,20 @@ function renderCierreMensual() {
 
     if (datos.ingresoRealDetalle.length > 0) {
         html += `<div class="mb-2"><small class="text-profit fw-bold"><i class="bi bi-cash-coin"></i> Ingreso real del mes: ${fmt.format(datos.ingresoReal)}</small></div>`;
+        // El monto del ingreso es lo COBRADO, no la ganancia -- si el proyecto
+        // tuvo gastos (materiales, mano de obra) se muestran restados aquí
+        // mismo para que no se confunda ingreso bruto con utilidad neta.
         html += datos.ingresoRealDetalle.map(d => `
-            <div class="d-flex justify-content-between align-items-center py-1" style="cursor:pointer;" onclick="abrirProyectoDesdeDashboard('${d.tipo === 'cierre_proyecto' ? d.id : d.projectId}')">
+            <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary" style="cursor:pointer;" onclick="abrirProyectoDesdeDashboard('${d.tipo === 'cierre_proyecto' ? d.id : d.projectId}')">
                 <div class="overflow-hidden me-2">
                     <div class="text-white small text-truncate">${d.nombreProyecto}</div>
                     <div class="text-muted" style="font-size:0.65rem;">${d.tipo === 'cierre_proyecto' ? 'Proyecto cerrado' : 'Cuota ' + d.periodo}${d.aproximado ? ' · fecha aproximada' : ''}</div>
                 </div>
-                <div class="text-profit small" style="min-width:90px; text-align:right;">${fmt.format(d.monto)}</div>
+                <div class="text-end" style="min-width:120px;">
+                    <div class="text-profit small">${fmt.format(d.monto)} ingreso</div>
+                    ${d.gastos > 0 ? `<div class="text-danger" style="font-size:0.65rem;">-${fmt.format(d.gastos)} gastos</div>` : ''}
+                    ${d.gastos > 0 ? `<div class="text-white fw-bold" style="font-size:0.7rem;">${fmt.format(d.utilidad)} neto</div>` : ''}
+                </div>
             </div>
         `).join('');
         html += '<hr class="border-secondary my-2">';
