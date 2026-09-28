@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icon.png">
     <link rel="apple-touch-icon" href="icon.png">
-    <meta name="theme-color" content="#0a0a0a">
+    <meta name="theme-color" content="#0B2D4A">
     
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -19,9 +19,9 @@
     
     <style>
         /* Ajuste Pestañas */
-        .nav-pills .nav-link { color: #aaa; border: 1px solid #333; margin-right: 5px; white-space: nowrap; }
-        .nav-pills .nav-link.active { background-color: var(--ast-cyan); color: #000; font-weight: bold; }
-        
+        .nav-pills .nav-link { color: #9fb3c8; border: 1px solid var(--ast-border); margin-right: 5px; white-space: nowrap; }
+        .nav-pills .nav-link.active { background-color: var(--ast-cyan); color: #041018; font-weight: 700; }
+
         /* Ocultar barra de scroll en movil */
         .scroll-hide::-webkit-scrollbar { display: none; }
         .scroll-hide { -ms-overflow-style: none; scrollbar-width: none; }
@@ -29,11 +29,11 @@
         .hidden-section { display: none !important; }
         /* Botón instalar */
         #btn-install { display: none; }
-        
+
         /* Estilos Proyectos y Historial */
         .project-card, .history-card {
             border-left: 4px solid var(--ast-cyan);
-            background: #1a1a1a;
+            background: var(--ast-panel);
             margin-bottom: 10px;
             padding: 10px;
             border-radius: 4px;
@@ -43,39 +43,42 @@
 
         /* Dashboard Cards */
         .kpi-card {
-            background: #141414;
-            border: 1px solid #333;
+            background: var(--ast-panel);
+            border: 1px solid var(--ast-border);
             border-radius: 8px;
             padding: 10px;
             text-align: center;
         }
-        .kpi-value { font-size: 1.1rem; font-weight: bold; color: white; }
-        .kpi-label { font-size: 0.7rem; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+        .kpi-value { font-size: 1.1rem; font-weight: 700; color: white; }
+        .kpi-label { font-size: 0.7rem; color: #9fb3c8; text-transform: uppercase; letter-spacing: 1px; }
 
         /* Vista Lista Catálogo */
         .list-item-row {
-            background: #1a1a1a;
-            border-bottom: 1px solid #222;
+            background: var(--ast-panel);
+            border-bottom: 1px solid var(--ast-border);
             padding: 8px 10px;
             display: flex;
             align-items: center;
             gap: 8px;
             transition: background 0.15s;
         }
-        .list-item-row:hover { background: #212121; }
-        .list-item-name { font-size: 0.85rem; font-weight: bold; color: #fff; cursor: pointer; }
+        .list-item-row:hover { background: #14304a; }
+        .list-item-name { font-size: 0.85rem; font-weight: 700; color: #fff; cursor: pointer; }
         .list-item-name:hover { color: var(--ast-cyan); }
-        .list-item-spec { font-size: 0.7rem; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+        .list-item-spec { font-size: 0.7rem; color: #7d93a8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
     </style>
 </head>
 <body>
 
     <nav class="navbar navbar-expand sticky-top px-3 border-bottom border-cyan">
-        <a class="navbar-brand fw-bold text-white" href="#">
-            <img src="icon.png" width="30" height="30" class="d-inline-block align-top rounded me-2" alt="">
-            A.S.T. <span class="text-cyan">SYSTEMS</span>
+        <a class="navbar-brand fw-bold text-white d-flex align-items-center py-1" href="#">
+            <img src="assets/brand/isotipo.png" width="34" height="34" class="d-inline-block me-2" alt="A.S.T.">
+            <span class="d-flex flex-column lh-1">
+                <span style="font-size:1rem;">A.S.T.</span>
+                <small class="text-cyan" style="font-size:0.55rem; letter-spacing:0.5px; font-weight:600;">SOLUCIONES TÉCNICAS</small>
+            </span>
         </a>
-        
+
         <button id="btn-install" class="btn btn-sm btn-outline-light ms-2 fw-bold" onclick="installApp()">
             <i class="bi bi-download"></i> INSTALAR APP
         </button>

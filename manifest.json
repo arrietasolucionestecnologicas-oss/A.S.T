@@ -1,10 +1,10 @@
 {
-  "name": "A.S.T. Soluciones Tecnológicas",
-  "short_name": "AST Manager",
+  "name": "A.S.T. Soluciones Técnicas",
+  "short_name": "A.S.T.",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#0a0a0a",
-  "theme_color": "#00e5ff",
+  "background_color": "#0B2D4A",
+  "theme_color": "#0B2D4A",
   "description": "Sistema de Gestión de Ingeniería y Servicios",
   "orientation": "portrait",
   "icons": [

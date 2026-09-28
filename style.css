@@ -1,23 +1,67 @@
+/* ==========================================
+   IDENTIDAD DE MARCA — A.S.T. SOLUCIONES TÉCNICAS
+   Ver /identidad-corporativa/IDENTIDAD.md para el manual completo.
+   ========================================== */
+
+@font-face {
+    font-family: 'Montserrat';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('vendor/fonts/montserrat/montserrat-400.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Montserrat';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('vendor/fonts/montserrat/montserrat-600.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Montserrat';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('vendor/fonts/montserrat/montserrat-700.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Montserrat';
+    font-style: normal;
+    font-weight: 800;
+    font-display: swap;
+    src: url('vendor/fonts/montserrat/montserrat-800.woff2') format('woff2');
+}
+
 :root {
-    --ast-cyan: #00e5ff;
-    --ast-dark: #0a0a0a;
-    --ast-panel: #141414;
-    --ast-border: #333;
+    --ast-cyan: #00B8FF;    /* Cian Eléctrico — acento principal */
+    --ast-navy: #0B2D4A;    /* Azul Técnico — paneles y superficies */
+    --ast-amber: #FF8A00;   /* Ámbar — acento secundario / alertas */
+    --ast-gray: #6B7280;    /* Gris — texto secundario, bordes */
+
+    --ast-dark: #050d16;    /* fondo base, azul-negro */
+    --ast-panel: #0f2438;   /* tarjetas y paneles */
+    --ast-border: #1c3a52;  /* bordes con tinte azul */
+
+    --ast-cyan-rgb: 0, 184, 255;
 }
 
 body {
     background-color: var(--ast-dark);
-    font-family: 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Montserrat', 'Segoe UI', Roboto, sans-serif;
     color: #e0e0e0;
     /* Evitar el rebote elástico en móviles */
-    overscroll-behavior-y: none; 
+    overscroll-behavior-y: none;
 }
+
+h1, h2, h3, h4, h5, h6, .navbar-brand, .btn { font-family: 'Montserrat', 'Segoe UI', Roboto, sans-serif; }
+h1, h2, h3, h4, h5, h6, .navbar-brand { font-weight: 700; }
 
 /* Utilidades */
 .text-cyan { color: var(--ast-cyan) !important; }
+.text-amber { color: var(--ast-amber) !important; }
 .bg-dark-panel { background-color: var(--ast-panel); }
 .border-cyan { border-color: var(--ast-cyan) !important; }
-.border-cyan-glow { box-shadow: 0 0 10px rgba(0, 229, 255, 0.2); }
+.border-cyan-glow { box-shadow: 0 0 10px rgba(var(--ast-cyan-rgb), 0.2); }
 
 /* Componentes */
 .product-card {
@@ -30,23 +74,23 @@ body {
 
 .product-card:hover {
     border-color: var(--ast-cyan);
-    box-shadow: 0 0 15px rgba(0, 229, 255, 0.15);
+    box-shadow: 0 0 15px rgba(var(--ast-cyan-rgb), 0.15);
     transform: translateY(-3px);
 }
 
 .btn-cyan {
     background-color: var(--ast-cyan);
-    color: #000;
-    font-weight: bold;
+    color: #041018;
+    font-weight: 700;
     border: none;
     text-transform: uppercase;
     letter-spacing: 1px;
 }
 
 .btn-cyan:hover {
-    background-color: #00b8cc;
-    color: #000;
-    box-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+    background-color: #33c9ff;
+    color: #041018;
+    box-shadow: 0 0 10px rgba(var(--ast-cyan-rgb), 0.5);
 }
 
 .btn-outline-cyan {
@@ -56,7 +100,7 @@ body {
 
 .btn-outline-cyan:hover {
     background-color: var(--ast-cyan);
-    color: #000;
+    color: #041018;
 }
 
 .status-dot {
@@ -70,11 +114,11 @@ body {
 .fab-cart {
     position: fixed; bottom: 30px; right: 30px;
     width: 60px; height: 60px;
-    background: linear-gradient(145deg, var(--ast-cyan), #00b8cc);
+    background: linear-gradient(145deg, var(--ast-cyan), #0090cc);
     border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    color: #000; font-size: 24px;
-    box-shadow: 0 5px 20px rgba(0, 229, 255, 0.4);
+    color: #041018; font-size: 24px;
+    box-shadow: 0 5px 20px rgba(var(--ast-cyan-rgb), 0.4);
     cursor: pointer; z-index: 1000;
     transition: transform 0.2s;
 }
@@ -82,7 +126,7 @@ body {
 
 .fab-badge {
     position: absolute; top: -5px; right: -5px;
-    background: #ff3333; color: white;
+    background: var(--ast-amber); color: white;
     font-size: 10px; padding: 4px 7px;
     border-radius: 10px; font-weight: bold;
 }
