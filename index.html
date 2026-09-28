@@ -713,7 +713,17 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    
+
+                    <div class="mb-3">
+                        <label class="small text-muted d-block mb-1">Cotizar como</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="emisor-tipo" id="emisor-ast" value="AST" checked>
+                            <label class="btn btn-outline-cyan btn-sm" for="emisor-ast"><i class="bi bi-building"></i> A.S.T. (empresa)</label>
+                            <input type="radio" class="btn-check" name="emisor-tipo" id="emisor-natural" value="NATURAL">
+                            <label class="btn btn-outline-cyan btn-sm" for="emisor-natural"><i class="bi bi-person-fill"></i> Persona Natural</label>
+                        </div>
+                    </div>
+
                     <div class="input-group input-group-sm mb-3">
                         <select id="cart-import-project" class="form-select bg-dark text-white border-secondary">
                             <option value="">-- Importar ítems de un Proyecto --</option>
@@ -722,7 +732,13 @@
                     </div>
 
                     <div id="cart-items" class="mb-3"></div>
-                    
+
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="check-alcance" onchange="toggleAlcance()">
+                        <label class="form-check-label text-cyan small fw-bold" for="check-alcance"><i class="bi bi-list-check"></i> Incluir Alcance del Trabajo</label>
+                    </div>
+                    <textarea id="alcance-area" class="form-control form-control-sm bg-dark text-secondary border-secondary mb-3" rows="4" style="display:none;" placeholder="Qué incluye el trabajo (ej: instalación de X, cableado de Y, no incluye Z)..."></textarea>
+
                     <div class="d-flex justify-content-between mb-3">
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" id="check-terms" onchange="toggleTerms()">

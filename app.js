@@ -3774,6 +3774,17 @@ function updateCartItem(index, field, value) {
     updateCartUI();
 }
 
+function toggleAlcance() {
+    const check = document.getElementById('check-alcance');
+    const area = document.getElementById('alcance-area');
+    area.style.display = check.checked ? 'block' : 'none';
+}
+
+function esEmisorPersonaNatural() {
+    const radio = document.querySelector('input[name="emisor-tipo"]:checked');
+    return !!radio && radio.value === 'NATURAL';
+}
+
 function toggleTerms() {
     const check = document.getElementById('check-terms');
     const area = document.getElementById('terms-area');
@@ -3806,7 +3817,12 @@ function sendWhatsApp() {
     const clienteInput = document.getElementById('c-nombre').value;
     if (cart.length === 0) return alert("Carrito vacío.");
     const saludo = clienteInput ? `Hola *${clienteInput}*` : `Hola`;
-    let msg = `${saludo}, cotización preliminar *A.S.T.*:\n\n`;
+    let nombreEmisor = 'A.S.T.';
+    if (esEmisorPersonaNatural()) {
+        const personaNatural = getEstimadorConfig('PERSONA_NATURAL_INFO', {});
+        nombreEmisor = personaNatural.nombre || 'Gerson Arrieta';
+    }
+    let msg = `${saludo}, cotización preliminar de *${nombreEmisor}*:\n\n`;
     let subtotal = 0;
     cart.forEach(item => {
         const sub = item.precio * item.cantidad;
@@ -3863,6 +3879,9 @@ async function generatePDF() {
         numCuotas: Number(document.getElementById('pp-num-cuotas').value) || 0
     } : null;
 
+    const incluyeAlcance = document.getElementById('check-alcance').checked;
+    const alcanceText = incluyeAlcance ? document.getElementById('alcance-area').value : '';
+
     const payload = {
         tipoDoc: document.getElementById('doc-type').value,
         cliente: cliente,
@@ -3871,7 +3890,9 @@ async function generatePDF() {
         opciones: {
             mostrarDesc: true,
             terminos: termsText,
-            planPago: planPago
+            alcance: alcanceText,
+            planPago: planPago,
+            emisorPersonaNatural: esEmisorPersonaNatural()
         },
         projectId: projectIdToSync
     };
