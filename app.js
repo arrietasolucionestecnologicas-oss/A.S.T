@@ -3997,6 +3997,7 @@ async function generatePDF() {
             mostrarDesc: true,
             terminos: termsText,
             alcance: alcanceText,
+            condicionesPago: document.getElementById('cart-condiciones-pago').value,
             planPago: planPago,
             emisorPersonaNatural: esEmisorPersonaNatural()
         },
