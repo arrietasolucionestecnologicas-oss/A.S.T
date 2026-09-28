@@ -736,13 +736,20 @@
 
                     <div id="cart-items" class="mb-3"></div>
 
-                    <div class="form-check form-switch mb-2">
-                        <input class="form-check-input" type="checkbox" id="check-alcance" onchange="toggleAlcance()">
-                        <label class="form-check-label text-cyan small fw-bold" for="check-alcance"><i class="bi bi-list-check"></i> Incluir Alcance del Trabajo</label>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" id="check-alcance" onchange="toggleAlcance()">
+                            <label class="form-check-label text-cyan small fw-bold" for="check-alcance"><i class="bi bi-list-check"></i> Incluir Alcance del Trabajo</label>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary py-0" style="font-size:0.7rem;" onclick="openPlantillasModal()"><i class="bi bi-gear-fill"></i> Plantillas</button>
+                    </div>
+                    <div id="alcance-plantilla-row" class="input-group input-group-sm mb-2" style="display:none;">
+                        <select id="alcance-plantilla-select" class="form-select form-select-sm bg-dark text-white border-secondary"></select>
+                        <button class="btn btn-outline-cyan" onclick="insertarPlantilla('alcance-area', 'alcance-plantilla-select')"><i class="bi bi-plus-lg"></i> Insertar</button>
                     </div>
                     <textarea id="alcance-area" class="form-control form-control-sm bg-dark text-secondary border-secondary mb-3" rows="4" style="display:none;" placeholder="Qué incluye el trabajo (ej: instalación de X, cableado de Y, no incluye Z)..."></textarea>
 
-                    <div class="d-flex justify-content-between mb-3">
+                    <div class="d-flex justify-content-between mb-2">
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" id="check-terms" onchange="toggleTerms()">
                             <label class="form-check-label text-warning small fw-bold" for="check-terms">Incluir Términos Legales</label>
@@ -753,7 +760,10 @@
                             <label class="form-check-label text-white small fw-bold" for="check-iva">Cobrar IVA (19%)</label>
                         </div>
                     </div>
-
+                    <div id="terms-plantilla-row" class="input-group input-group-sm mb-2" style="display:none;">
+                        <select id="terms-plantilla-select" class="form-select form-select-sm bg-dark text-white border-secondary"></select>
+                        <button class="btn btn-outline-cyan" onclick="insertarPlantilla('terms-area', 'terms-plantilla-select')"><i class="bi bi-plus-lg"></i> Insertar</button>
+                    </div>
                     <textarea id="terms-area" class="form-control form-control-sm bg-dark text-secondary border-secondary mb-3" rows="3" style="display:none;" placeholder="Escribe aquí las condiciones..."></textarea>
 
                     <div class="form-check form-switch mb-2">
@@ -832,6 +842,27 @@
                     </div>
                 </div>
 
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="plantillasTextoModal" tabindex="-1" style="z-index: 1060;">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content bg-dark-panel border-cyan">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-white"><i class="bi bi-journal-text"></i> Plantillas de Texto</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-secondary small">Guarda aquí textos de alcance/términos que uses seguido (ej: "Hermeticidad transformador 24h", "Instalación CCTV estándar", "Condiciones 50/50"). Luego, al armar una cotización, los insertas con un clic y solo agregas los detalles que cambien — no vuelves a escribir todo desde cero.</p>
+                    <div class="d-flex justify-content-end mb-2">
+                        <button class="btn btn-sm btn-outline-cyan" onclick="agregarPlantillaConfig()"><i class="bi bi-plus-lg"></i> Nueva plantilla</button>
+                    </div>
+                    <div id="cfg-plantillas-list"></div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button class="btn btn-cyan w-100" onclick="guardarPlantillasTexto()">GUARDAR PLANTILLAS</button>
+                </div>
             </div>
         </div>
     </div>

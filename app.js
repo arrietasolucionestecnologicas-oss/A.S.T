@@ -3777,7 +3777,10 @@ function updateCartItem(index, field, value) {
 function toggleAlcance() {
     const check = document.getElementById('check-alcance');
     const area = document.getElementById('alcance-area');
+    const plantillaRow = document.getElementById('alcance-plantilla-row');
     area.style.display = check.checked ? 'block' : 'none';
+    plantillaRow.style.display = check.checked ? 'flex' : 'none';
+    if (check.checked) poblarSelectsPlantillas();
 }
 
 function esEmisorPersonaNatural() {
@@ -3785,10 +3788,113 @@ function esEmisorPersonaNatural() {
     return !!radio && radio.value === 'NATURAL';
 }
 
+// --- Plantillas de texto reutilizables (alcance / términos) ---
+// Textos predisenados guardados en CONFIGURACION (clave
+// PLANTILLAS_TEXTO_CONFIG, mismo patrón genérico que los Kits del Estimador)
+// para no reescribir de cero cada vez -- se insertan (se agregan, no
+// reemplazan) sobre el texto que ya haya en el cuadro.
+function getPlantillasTexto() {
+    return getEstimadorConfig('PLANTILLAS_TEXTO_CONFIG', { plantillas: [] }).plantillas || [];
+}
+
+function poblarSelectsPlantillas() {
+    const plantillas = getPlantillasTexto();
+    const opciones = plantillas.length === 0
+        ? '<option value="">Sin plantillas — usa ⚙️ Plantillas para crear una</option>'
+        : plantillas.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
+    ['alcance-plantilla-select', 'terms-plantilla-select'].forEach(id => {
+        const sel = document.getElementById(id);
+        if (sel) sel.innerHTML = opciones;
+    });
+}
+
+function insertarPlantilla(textareaId, selectId) {
+    const plantillaId = document.getElementById(selectId).value;
+    if (!plantillaId) return;
+    const plantilla = getPlantillasTexto().find(p => p.id === plantillaId);
+    if (!plantilla) return;
+
+    const area = document.getElementById(textareaId);
+    area.value = area.value.trim() ? area.value.trim() + '\n\n' + plantilla.texto : plantilla.texto;
+}
+
+// --- Gestión de plantillas (modal propio, mismo patrón que Estimador/Kits) ---
+function openPlantillasModal() {
+    renderPlantillasConfigList(getPlantillasTexto());
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('plantillasTextoModal')).show();
+}
+
+function renderPlantillasConfigList(plantillas) {
+    const listEl = document.getElementById('cfg-plantillas-list');
+    if (plantillas.length === 0) {
+        listEl.innerHTML = '<p class="text-secondary small">No hay plantillas todavía. Crea la primera con "Nueva plantilla".</p>';
+        return;
+    }
+    listEl.innerHTML = plantillas.map((p, i) => `
+        <div class="card bg-dark border-secondary mb-2" data-idx="${i}">
+            <div class="card-body p-2">
+                <div class="d-flex gap-2 align-items-start mb-2">
+                    <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary cfg-plantilla-nombre" value="${p.nombre}" placeholder="Nombre (ej: Hermeticidad transformador 24h)">
+                    <button class="btn btn-sm text-danger" onclick="eliminarPlantillaConfig(${i})"><i class="bi bi-trash"></i></button>
+                </div>
+                <textarea class="form-control form-control-sm bg-dark text-white border-secondary cfg-plantilla-texto" rows="4" placeholder="Texto de la plantilla...">${p.texto}</textarea>
+            </div>
+        </div>
+    `).join('');
+}
+
+function agregarPlantillaConfig() {
+    const plantillas = leerPlantillasDelForm();
+    plantillas.push({ id: generateUUID(), nombre: 'Nueva plantilla', texto: '' });
+    renderPlantillasConfigList(plantillas);
+}
+
+function eliminarPlantillaConfig(idx) {
+    const plantillas = leerPlantillasDelForm();
+    plantillas.splice(idx, 1);
+    renderPlantillasConfigList(plantillas);
+}
+
+function leerPlantillasDelForm() {
+    const plantillasOriginales = getPlantillasTexto();
+    const cards = document.querySelectorAll('#cfg-plantillas-list [data-idx]');
+    return Array.from(cards).map((card, i) => ({
+        id: (plantillasOriginales[i] && plantillasOriginales[i].id) || generateUUID(),
+        nombre: card.querySelector('.cfg-plantilla-nombre').value || 'Sin nombre',
+        texto: card.querySelector('.cfg-plantilla-texto').value || ''
+    }));
+}
+
+async function guardarPlantillasTexto() {
+    const plantillas = leerPlantillasDelForm();
+
+    const btn = document.querySelector('#plantillasTextoModal .btn-cyan');
+    const textoOriginal = btn.innerText;
+    btn.disabled = true; btn.innerText = 'GUARDANDO...';
+
+    try {
+        await callApi('updateConfigValue', { clave: 'PLANTILLAS_TEXTO_CONFIG', valor: JSON.stringify({ plantillas }) });
+        configuracion['PLANTILLAS_TEXTO_CONFIG'] = JSON.stringify({ plantillas });
+        setCacheWithTimestamp('ast_config', configuracion);
+
+        bootstrap.Modal.getInstance(document.getElementById('plantillasTextoModal')).hide();
+        poblarSelectsPlantillas();
+        showToast('Plantillas de texto guardadas.', 'success');
+    } catch (e) {
+        console.error(e);
+        alert('Error guardando las plantillas.');
+    } finally {
+        btn.disabled = false; btn.innerText = textoOriginal;
+    }
+}
+
 function toggleTerms() {
     const check = document.getElementById('check-terms');
     const area = document.getElementById('terms-area');
+    const plantillaRow = document.getElementById('terms-plantilla-row');
+    plantillaRow.style.display = check.checked ? 'flex' : 'none';
     if (check.checked) {
+        poblarSelectsPlantillas();
         area.style.display = 'block';
         if(area.value === '') {
             area.value = "VALIDEZ DE LA OFERTA: 15 DÍAS.\nTIEMPO DE ENTREGA: A CONVENIR.\nFORMA DE PAGO: 50% ANTICIPO, 50% CONTRA ENTREGA.\nGARANTÍA: 12 MESES POR DEFECTOS DE FÁBRICA.";
