@@ -1237,6 +1237,493 @@ function agregarEstimacionCctvAlCarrito() {
     openCart();
 }
 
+// ==========================================
+// LEVANTAMIENTO DE INSTALACIONES (Fase C: captura de campo)
+// ==========================================
+// Modelo PUNTO + TRAMO persistido en backend (LEVANTAMIENTO_PUNTOS /
+// LEVANTAMIENTO_TRAMOS). Prioridad de diseño: MEDIR -> GUARDAR -> SIGUIENTE
+// MEDICIÓN con el mínimo de toques posibles, para usar caminando por una
+// obra con el celular en una mano y el metro láser en la otra. Todavía NO
+// calcula materiales/costos (eso es Fase D) -- esto solo captura y persiste
+// la topología real.
+
+const LEVANTAMIENTO_TIPOS_PUNTO = [
+    { value: 'INTERRUPTOR', label: 'Interruptor' },
+    { value: 'LUMINARIA', label: 'Luminaria' },
+    { value: 'TOMACORRIENTE', label: 'Tomacorriente' },
+    { value: 'TOMACORRIENTE_ESPECIAL', label: 'Tomacorriente especial' },
+    { value: 'CAJA_PASO', label: 'Caja de paso' },
+    { value: 'TABLERO', label: 'Tablero' },
+    { value: 'CAMARA', label: 'Cámara' },
+    { value: 'NVR', label: 'NVR' },
+    { value: 'OTRO', label: 'Otro' }
+];
+
+let levantamientoPuntos = [];
+let levantamientoTramos = [];
+let levantamientoUltimoPuntoId = null;
+let levantamientoScreen = 'HOME';
+let levantamientoDestinoModo = 'NUEVO';
+let levantamientoCadenaModo = 'PUNTOS_NUEVOS';
+let levantamientoCadenaDestinoModo = 'NUEVO';
+let levantamientoCanalizacion = 'TUBERIA';
+let levantamientoDiametro = '';
+let levantamientoVistaModo = 'LISTA';
+let levantamientoTramoEditando = null;
+
+function resultadoOk(res) {
+    return !!(res && res.success && res.data && res.data.success !== false);
+}
+
+function etiquetaPuntoLevantamiento(id) {
+    const p = levantamientoPuntos.find(x => x.id === id);
+    if (!p) return '(desconocido)';
+    const tipoInfo = LEVANTAMIENTO_TIPOS_PUNTO.find(t => t.value === p.tipo);
+    return p.nombre || (tipoInfo ? tipoInfo.label : p.tipo);
+}
+
+function sugerirNombrePuntoLevantamiento(tipo) {
+    const tipoInfo = LEVANTAMIENTO_TIPOS_PUNTO.find(t => t.value === tipo);
+    const label = tipoInfo ? tipoInfo.label : tipo;
+    const n = levantamientoPuntos.filter(p => p.tipo === tipo).length + 1;
+    return `${label} ${String(n).padStart(2, '0')}`;
+}
+
+function poblarSelectTipoLevantamiento(selectId) {
+    document.getElementById(selectId).innerHTML = LEVANTAMIENTO_TIPOS_PUNTO
+        .filter(t => t.value !== 'TABLERO') // el tablero ya existe siempre, no se crea otro
+        .map(t => `<option value="${t.value}">${t.label}</option>`).join('');
+}
+
+function poblarSelectPuntosLevantamiento(selectId) {
+    document.getElementById(selectId).innerHTML = levantamientoPuntos
+        .map(p => `<option value="${p.id}">${etiquetaPuntoLevantamiento(p.id)}</option>`).join('');
+}
+
+function mostrarErrorCampoLevantamiento(id, msg) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerText = msg;
+    el.classList.remove('hidden-section');
+}
+
+function mostrarErrorGuardadoLevantamiento(id) {
+    mostrarErrorCampoLevantamiento(id, 'Sin conexión — medición pendiente de sincronización. Intenta guardar de nuevo.');
+}
+
+function limpiarErroresLevantamiento() {
+    ['lv-error-origen', 'lv-error-distancia', 'lv-error-destino', 'lv-guardado-error', 'lv-cadena-error'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.innerText = ''; el.classList.add('hidden-section'); }
+    });
+}
+
+async function abrirLevantamiento() {
+    if (!currentProject || !currentProjectData) return;
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('levantamientoModal')).show();
+    document.getElementById('lv-proyecto-nombre').innerText = 'Levantamiento — ' + currentProjectData.nombreProyecto;
+    levantamientoPuntos = [];
+    levantamientoTramos = [];
+    levantamientoUltimoPuntoId = null;
+    mostrarPantallaLevantamiento('HOME');
+    document.getElementById('lv-ultimo-punto').innerText = 'Cargando...';
+
+    const res = await callApi('getLevantamiento', { proyectoId: currentProject });
+    if (!resultadoOk(res) || !res.data) {
+        document.getElementById('lv-ultimo-punto').innerText = 'Sin conexión';
+        showToast('No se pudo cargar el levantamiento. Revisa tu conexión.', 'danger');
+        return;
+    }
+
+    levantamientoPuntos = res.data.puntos || [];
+    levantamientoTramos = res.data.tramos || [];
+
+    if (levantamientoTramos.length > 0) {
+        const ultimoTramo = [...levantamientoTramos].sort((a, b) => new Date(b.fechaCreacion) - new Date(a.fechaCreacion))[0];
+        levantamientoUltimoPuntoId = ultimoTramo.destinoId;
+    } else {
+        const tablero = levantamientoPuntos.find(p => p.tipo === 'TABLERO');
+        levantamientoUltimoPuntoId = tablero ? tablero.id : null;
+    }
+
+    renderLevantamientoHome();
+}
+
+function renderLevantamientoHome() {
+    document.getElementById('lv-ultimo-punto').innerText = levantamientoUltimoPuntoId ? etiquetaPuntoLevantamiento(levantamientoUltimoPuntoId) : '—';
+    document.getElementById('lv-resumen').innerText = `${levantamientoPuntos.length} puntos · ${levantamientoTramos.length} tramos`;
+}
+
+function mostrarPantallaLevantamiento(pantalla) {
+    levantamientoScreen = pantalla;
+    ['HOME', 'MEDICION', 'CADENA', 'LISTA'].forEach(s => {
+        document.getElementById('lv-screen-' + s).classList.toggle('hidden-section', s !== pantalla);
+    });
+    if (pantalla === 'HOME') renderLevantamientoHome();
+}
+
+// --- Nueva Medición ---
+function irANuevaMedicion() {
+    mostrarPantallaLevantamiento('MEDICION');
+    poblarSelectPuntosLevantamiento('lv-origen');
+    document.getElementById('lv-origen').value = levantamientoUltimoPuntoId || '';
+    document.getElementById('lv-distancia').value = '';
+    document.getElementById('lv-nombre').value = '';
+    seleccionarDestinoModo('NUEVO');
+    poblarSelectTipoLevantamiento('lv-tipo');
+    actualizarPlaceholderNombre();
+    poblarSelectCanalizacionLevantamiento();
+    limpiarErroresLevantamiento();
+    document.getElementById('lv-resumen-medicion').innerText = `${levantamientoPuntos.length} puntos · ${levantamientoTramos.length} tramos`;
+    setTimeout(() => { const el = document.getElementById('lv-distancia'); if (el) el.focus(); }, 200);
+}
+
+function seleccionarDestinoModo(modo) {
+    levantamientoDestinoModo = modo;
+    document.getElementById('lv-destino-nuevo-fields').classList.toggle('hidden-section', modo !== 'NUEVO');
+    document.getElementById('lv-destino-existente-fields').classList.toggle('hidden-section', modo !== 'EXISTENTE');
+    document.getElementById('lv-btn-modo-nuevo').className = modo === 'NUEVO' ? 'btn btn-cyan btn-sm flex-fill' : 'btn btn-outline-secondary btn-sm flex-fill';
+    document.getElementById('lv-btn-modo-existente').className = modo === 'EXISTENTE' ? 'btn btn-cyan btn-sm flex-fill' : 'btn btn-outline-secondary btn-sm flex-fill';
+    if (modo === 'EXISTENTE') poblarSelectPuntosLevantamiento('lv-destino-existente');
+}
+
+function actualizarPlaceholderNombre() {
+    const tipo = document.getElementById('lv-tipo').value;
+    const el = document.getElementById('lv-nombre');
+    if (el) el.placeholder = sugerirNombrePuntoLevantamiento(tipo);
+}
+
+function poblarSelectCanalizacionLevantamiento() {
+    document.getElementById('lv-canalizacion').value = levantamientoCanalizacion;
+    document.getElementById('lv-diametro').value = levantamientoDiametro;
+    toggleDiametroField();
+}
+
+function onChangeCanalizacionLevantamiento() {
+    levantamientoCanalizacion = document.getElementById('lv-canalizacion').value;
+    toggleDiametroField();
+}
+
+function toggleDiametroField() {
+    document.getElementById('lv-diametro-wrap').style.display = document.getElementById('lv-canalizacion').value === 'TUBERIA' ? '' : 'none';
+}
+
+async function guardarNuevaMedicion() {
+    limpiarErroresLevantamiento();
+    const origenId = document.getElementById('lv-origen').value;
+    if (!origenId) { mostrarErrorCampoLevantamiento('lv-error-origen', 'Selecciona un origen.'); return; }
+
+    const distancia = parseFloat(String(document.getElementById('lv-distancia').value).replace(',', '.'));
+    if (isNaN(distancia) || distancia <= 0) { mostrarErrorCampoLevantamiento('lv-error-distancia', 'Ingresa una distancia mayor a 0.'); return; }
+
+    const canalizacion = document.getElementById('lv-canalizacion').value;
+    const diametro = document.getElementById('lv-diametro').value;
+    levantamientoCanalizacion = canalizacion;
+    levantamientoDiametro = diametro;
+
+    const btn = document.querySelector('#lv-screen-MEDICION .btn-success');
+    btn.disabled = true;
+
+    let destinoId, destinoNombre;
+    if (levantamientoDestinoModo === 'NUEVO') {
+        const tipo = document.getElementById('lv-tipo').value;
+        if (!tipo) { mostrarErrorCampoLevantamiento('lv-error-destino', 'Selecciona un tipo de punto.'); btn.disabled = false; return; }
+        const nombre = document.getElementById('lv-nombre').value.trim() || sugerirNombrePuntoLevantamiento(tipo);
+        const resPunto = await callApi('crearPuntoLevantamiento', { proyectoId: currentProject, tipo, nombre });
+        if (!resultadoOk(resPunto)) { mostrarErrorGuardadoLevantamiento('lv-guardado-error'); btn.disabled = false; return; }
+        destinoId = resPunto.data.id;
+        destinoNombre = nombre;
+        levantamientoPuntos.push({ id: destinoId, proyectoId: currentProject, nombre, tipo, fechaCreacion: new Date().toISOString() });
+    } else {
+        destinoId = document.getElementById('lv-destino-existente').value;
+        if (!destinoId) { mostrarErrorCampoLevantamiento('lv-error-destino', 'Selecciona un punto existente.'); btn.disabled = false; return; }
+        destinoNombre = etiquetaPuntoLevantamiento(destinoId);
+    }
+
+    const resTramo = await callApi('crearTramoLevantamiento', { proyectoId: currentProject, origenId, destinoId, distancia, tipoInstalacion: 'ELECTRICO', canalizacion, diametro });
+    if (!resultadoOk(resTramo)) { mostrarErrorGuardadoLevantamiento('lv-guardado-error'); btn.disabled = false; return; }
+
+    const origenNombre = etiquetaPuntoLevantamiento(origenId);
+    levantamientoTramos.push({ id: resTramo.data.id, proyectoId: currentProject, origenId, destinoId, distancia, canalizacion, diametro, fechaCreacion: new Date().toISOString() });
+    levantamientoUltimoPuntoId = destinoId;
+    btn.disabled = false;
+    prepararSiguienteMedicion(origenNombre, destinoNombre, distancia);
+}
+
+function prepararSiguienteMedicion(origenNombre, destinoNombre, distancia) {
+    showToast(`✓ ${origenNombre} → ${destinoNombre} — ${distancia} m`, 'success');
+    poblarSelectPuntosLevantamiento('lv-origen');
+    document.getElementById('lv-origen').value = levantamientoUltimoPuntoId;
+    document.getElementById('lv-distancia').value = '';
+    document.getElementById('lv-nombre').value = '';
+    seleccionarDestinoModo('NUEVO');
+    poblarSelectTipoLevantamiento('lv-tipo');
+    actualizarPlaceholderNombre();
+    limpiarErroresLevantamiento();
+    document.getElementById('lv-resumen-medicion').innerText = `${levantamientoPuntos.length} puntos · ${levantamientoTramos.length} tramos`;
+    const el = document.getElementById('lv-distancia');
+    if (el) el.focus();
+}
+
+// --- Cadena Rápida ---
+function irACadenaRapida() {
+    mostrarPantallaLevantamiento('CADENA');
+    poblarSelectPuntosLevantamiento('lv-cadena-origen');
+    document.getElementById('lv-cadena-origen').value = levantamientoUltimoPuntoId || '';
+    document.getElementById('lv-cadena-distancias').value = '';
+    document.getElementById('lv-cadena-nombre').value = '';
+    document.getElementById('lv-cadena-destino-nombre').value = '';
+    seleccionarModoCadena('PUNTOS_NUEVOS');
+    poblarSelectTipoLevantamiento('lv-cadena-tipo');
+    poblarSelectTipoLevantamiento('lv-cadena-destino-tipo');
+    seleccionarDestinoModoCadena('NUEVO');
+    poblarSelectCanalizacionLevantamientoCadena();
+    limpiarErroresLevantamiento();
+}
+
+function seleccionarModoCadena(modo) {
+    levantamientoCadenaModo = modo;
+    document.getElementById('lv-cadena-puntos-nuevos-fields').classList.toggle('hidden-section', modo !== 'PUNTOS_NUEVOS');
+    document.getElementById('lv-cadena-continuo-fields').classList.toggle('hidden-section', modo !== 'RECORRIDO_CONTINUO');
+    document.getElementById('lv-modo-puntos-radio').checked = modo === 'PUNTOS_NUEVOS';
+    document.getElementById('lv-modo-continuo-radio').checked = modo === 'RECORRIDO_CONTINUO';
+}
+
+function seleccionarDestinoModoCadena(modo) {
+    levantamientoCadenaDestinoModo = modo;
+    document.getElementById('lv-cadena-destino-nuevo-fields').classList.toggle('hidden-section', modo !== 'NUEVO');
+    document.getElementById('lv-cadena-destino-existente-fields').classList.toggle('hidden-section', modo !== 'EXISTENTE');
+    document.getElementById('lv-cadena-btn-destino-nuevo').className = modo === 'NUEVO' ? 'btn btn-cyan btn-sm flex-fill' : 'btn btn-outline-secondary btn-sm flex-fill';
+    document.getElementById('lv-cadena-btn-destino-existente').className = modo === 'EXISTENTE' ? 'btn btn-cyan btn-sm flex-fill' : 'btn btn-outline-secondary btn-sm flex-fill';
+    if (modo === 'EXISTENTE') poblarSelectPuntosLevantamiento('lv-cadena-destino-existente');
+}
+
+function poblarSelectCanalizacionLevantamientoCadena() {
+    document.getElementById('lv-cadena-canalizacion').value = levantamientoCanalizacion;
+    document.getElementById('lv-cadena-diametro').value = levantamientoDiametro;
+    toggleDiametroFieldCadena();
+}
+
+function onChangeCanalizacionLevantamientoCadena() {
+    levantamientoCanalizacion = document.getElementById('lv-cadena-canalizacion').value;
+    toggleDiametroFieldCadena();
+}
+
+function toggleDiametroFieldCadena() {
+    document.getElementById('lv-cadena-diametro-wrap').style.display = document.getElementById('lv-cadena-canalizacion').value === 'TUBERIA' ? '' : 'none';
+}
+
+async function guardarCadenaRapida() {
+    limpiarErroresLevantamiento();
+    const origenId = document.getElementById('lv-cadena-origen').value;
+    if (!origenId) { mostrarErrorCampoLevantamiento('lv-cadena-error', 'Selecciona un origen.'); return; }
+
+    const distancias = document.getElementById('lv-cadena-distancias').value
+        .split(/[,\s]+/).map(v => parseFloat(v.trim().replace(',', '.'))).filter(v => !isNaN(v) && v > 0);
+    if (distancias.length === 0) { mostrarErrorCampoLevantamiento('lv-cadena-error', 'Escribe al menos una distancia válida (ej: 3.20, 4.80, 5.40).'); return; }
+
+    const canalizacion = document.getElementById('lv-cadena-canalizacion').value;
+    const diametro = document.getElementById('lv-cadena-diametro').value;
+    levantamientoCanalizacion = canalizacion;
+    levantamientoDiametro = diametro;
+
+    const btn = document.querySelector('#lv-screen-CADENA .btn-success');
+    btn.disabled = true;
+
+    if (levantamientoCadenaModo === 'PUNTOS_NUEVOS') {
+        const tipo = document.getElementById('lv-cadena-tipo').value;
+        const nombreBase = document.getElementById('lv-cadena-nombre').value.trim();
+        let desde = origenId;
+        for (let i = 0; i < distancias.length; i++) {
+            const nombre = nombreBase ? `${nombreBase} ${String(i + 1).padStart(2, '0')}` : sugerirNombrePuntoLevantamiento(tipo);
+            const resPunto = await callApi('crearPuntoLevantamiento', { proyectoId: currentProject, tipo, nombre });
+            if (!resultadoOk(resPunto)) { mostrarErrorGuardadoLevantamiento('lv-cadena-error'); btn.disabled = false; return; }
+            const nuevoId = resPunto.data.id;
+            levantamientoPuntos.push({ id: nuevoId, proyectoId: currentProject, nombre, tipo, fechaCreacion: new Date().toISOString() });
+
+            const resTramo = await callApi('crearTramoLevantamiento', { proyectoId: currentProject, origenId: desde, destinoId: nuevoId, distancia: distancias[i], tipoInstalacion: 'ELECTRICO', canalizacion, diametro });
+            if (!resultadoOk(resTramo)) { mostrarErrorGuardadoLevantamiento('lv-cadena-error'); btn.disabled = false; return; }
+            levantamientoTramos.push({ id: resTramo.data.id, proyectoId: currentProject, origenId: desde, destinoId: nuevoId, distancia: distancias[i], canalizacion, diametro, fechaCreacion: new Date().toISOString() });
+            desde = nuevoId;
+        }
+        levantamientoUltimoPuntoId = desde;
+    } else {
+        let destinoId;
+        if (levantamientoCadenaDestinoModo === 'NUEVO') {
+            const tipo = document.getElementById('lv-cadena-destino-tipo').value;
+            const nombre = document.getElementById('lv-cadena-destino-nombre').value.trim() || sugerirNombrePuntoLevantamiento(tipo);
+            const resPunto = await callApi('crearPuntoLevantamiento', { proyectoId: currentProject, tipo, nombre });
+            if (!resultadoOk(resPunto)) { mostrarErrorGuardadoLevantamiento('lv-cadena-error'); btn.disabled = false; return; }
+            destinoId = resPunto.data.id;
+            levantamientoPuntos.push({ id: destinoId, proyectoId: currentProject, nombre, tipo, fechaCreacion: new Date().toISOString() });
+        } else {
+            destinoId = document.getElementById('lv-cadena-destino-existente').value;
+            if (!destinoId) { mostrarErrorCampoLevantamiento('lv-cadena-error', 'Selecciona el punto destino.'); btn.disabled = false; return; }
+        }
+        for (let i = 0; i < distancias.length; i++) {
+            const resTramo = await callApi('crearTramoLevantamiento', { proyectoId: currentProject, origenId, destinoId, distancia: distancias[i], tipoInstalacion: 'ELECTRICO', canalizacion, diametro, observaciones: `Segmento ${i + 1} de recorrido continuo` });
+            if (!resultadoOk(resTramo)) { mostrarErrorGuardadoLevantamiento('lv-cadena-error'); btn.disabled = false; return; }
+            levantamientoTramos.push({ id: resTramo.data.id, proyectoId: currentProject, origenId, destinoId, distancia: distancias[i], canalizacion, diametro, observaciones: `Segmento ${i + 1} de recorrido continuo`, fechaCreacion: new Date().toISOString() });
+        }
+        levantamientoUltimoPuntoId = destinoId;
+    }
+
+    btn.disabled = false;
+    showToast(`Cadena registrada: ${distancias.length} tramo(s).`, 'success');
+    document.getElementById('lv-cadena-distancias').value = '';
+    document.getElementById('lv-cadena-nombre').value = '';
+    poblarSelectPuntosLevantamiento('lv-cadena-origen');
+    document.getElementById('lv-cadena-origen').value = levantamientoUltimoPuntoId;
+}
+
+// --- Ver Levantamiento (Lista / Árbol) ---
+function irAVerLevantamiento() {
+    mostrarPantallaLevantamiento('LISTA');
+    cambiarVistaLevantamiento('LISTA');
+}
+
+function cambiarVistaLevantamiento(modo) {
+    levantamientoVistaModo = modo;
+    document.getElementById('lv-btn-vista-lista').className = modo === 'LISTA' ? 'btn btn-cyan btn-sm flex-fill' : 'btn btn-outline-secondary btn-sm flex-fill';
+    document.getElementById('lv-btn-vista-arbol').className = modo === 'ARBOL' ? 'btn btn-cyan btn-sm flex-fill' : 'btn btn-outline-secondary btn-sm flex-fill';
+    document.getElementById('lv-lista-contenido').classList.toggle('hidden-section', modo !== 'LISTA');
+    document.getElementById('lv-arbol-contenido').classList.toggle('hidden-section', modo !== 'ARBOL');
+    if (modo === 'LISTA') renderListaLevantamiento(); else renderArbolLevantamiento();
+}
+
+function etiquetaCanalizacion(t) {
+    if (t.canalizacion === 'TUBERIA') return 'Tubería' + (t.diametro ? ' ' + t.diametro : '');
+    if (t.canalizacion === 'CANALETA') return 'Canaleta';
+    return 'Sin canalización';
+}
+
+function renderListaLevantamiento() {
+    const cont = document.getElementById('lv-lista-contenido');
+    if (levantamientoTramos.length === 0) {
+        cont.innerHTML = '<p class="text-secondary small text-center mt-3">Aún no hay tramos registrados.</p>';
+        return;
+    }
+    const ordenados = [...levantamientoTramos].sort((a, b) => new Date(a.fechaCreacion) - new Date(b.fechaCreacion));
+    cont.innerHTML = ordenados.map((t, i) => `
+        <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--ast-border);">
+            <div class="small">
+                <span class="text-secondary">${i + 1}.</span>
+                <strong class="text-white">${etiquetaPuntoLevantamiento(t.origenId)} → ${etiquetaPuntoLevantamiento(t.destinoId)}</strong>
+                — <span class="text-cyan">${t.distancia} m</span>
+                <div class="text-secondary" style="font-size:0.7rem;">${etiquetaCanalizacion(t)}</div>
+            </div>
+            <div class="d-flex gap-1">
+                <button class="btn btn-sm btn-outline-secondary p-1" onclick="editarTramoLevantamiento('${t.id}')"><i class="bi bi-pencil"></i></button>
+                <button class="btn btn-sm btn-outline-danger p-1" onclick="confirmarEliminarTramoLevantamiento('${t.id}')"><i class="bi bi-trash"></i></button>
+            </div>
+        </div>`).join('');
+}
+
+function renderArbolLevantamiento() {
+    const cont = document.getElementById('lv-arbol-contenido');
+    const tablero = levantamientoPuntos.find(p => p.tipo === 'TABLERO');
+    if (!tablero) { cont.innerHTML = '<p class="text-secondary small">Sin tablero.</p>'; return; }
+
+    const hijosDe = {};
+    levantamientoTramos.forEach(t => {
+        if (!hijosDe[t.origenId]) hijosDe[t.origenId] = [];
+        hijosDe[t.origenId].push(t);
+    });
+
+    function render(puntoId, nivel, visitados) {
+        if (visitados.has(puntoId)) return '';
+        visitados.add(puntoId);
+        const tramosHijos = hijosDe[puntoId] || [];
+        return tramosHijos.map(t => {
+            const fila = `
+            <div class="d-flex justify-content-between align-items-center py-1" style="padding-left:${nivel * 18}px; border-bottom:1px solid var(--ast-border);">
+                <div class="small">
+                    <i class="bi bi-arrow-return-right text-secondary"></i>
+                    <strong class="text-white">${etiquetaPuntoLevantamiento(t.destinoId)}</strong>
+                    <span class="text-cyan"> — ${t.distancia}m</span>
+                </div>
+                <button class="btn btn-sm text-danger p-0" onclick="confirmarEliminarPuntoLevantamiento('${t.destinoId}')"><i class="bi bi-trash"></i></button>
+            </div>`;
+            return fila + render(t.destinoId, nivel + 1, visitados);
+        }).join('');
+    }
+
+    cont.innerHTML = `<div class="small text-secondary mb-1"><i class="bi bi-diagram-3"></i> ${etiquetaPuntoLevantamiento(tablero.id)}</div>` + render(tablero.id, 1, new Set());
+}
+
+function editarTramoLevantamiento(id) {
+    const t = levantamientoTramos.find(x => x.id === id);
+    if (!t) return;
+    levantamientoTramoEditando = id;
+    document.getElementById('lv-editar-distancia').value = t.distancia;
+    document.getElementById('lv-editar-canalizacion').value = t.canalizacion;
+    document.getElementById('lv-editar-diametro').value = t.diametro || '';
+    document.getElementById('lv-editar-observaciones').value = t.observaciones || '';
+    document.getElementById('lv-editar-titulo').innerText = etiquetaPuntoLevantamiento(t.origenId) + ' → ' + etiquetaPuntoLevantamiento(t.destinoId);
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('lvEditarTramoModal')).show();
+}
+
+async function guardarEdicionTramo() {
+    const distancia = parseFloat(String(document.getElementById('lv-editar-distancia').value).replace(',', '.'));
+    if (isNaN(distancia) || distancia <= 0) return alert('Distancia inválida.');
+    const canalizacion = document.getElementById('lv-editar-canalizacion').value;
+    const diametro = document.getElementById('lv-editar-diametro').value;
+    const observaciones = document.getElementById('lv-editar-observaciones').value;
+
+    const res = await callApi('actualizarTramoLevantamiento', { id: levantamientoTramoEditando, distancia, canalizacion, diametro, observaciones });
+    if (!resultadoOk(res)) { alert('Sin conexión — no se pudo guardar el cambio, intenta de nuevo.'); return; }
+
+    const t = levantamientoTramos.find(x => x.id === levantamientoTramoEditando);
+    Object.assign(t, { distancia, canalizacion, diametro, observaciones });
+    bootstrap.Modal.getInstance(document.getElementById('lvEditarTramoModal')).hide();
+    renderListaLevantamiento();
+    renderLevantamientoHome();
+    showToast('Tramo actualizado.', 'success');
+}
+
+function confirmarEliminarTramoLevantamiento(id) {
+    const t = levantamientoTramos.find(x => x.id === id);
+    if (!t) return;
+    if (!confirm(`¿Eliminar tramo ${etiquetaPuntoLevantamiento(t.origenId)} → ${etiquetaPuntoLevantamiento(t.destinoId)} de ${t.distancia} m?`)) return;
+    eliminarTramoLevantamientoConfirmado(id);
+}
+
+async function eliminarTramoLevantamientoConfirmado(id) {
+    const res = await callApi('eliminarTramoLevantamiento', { id });
+    if (!resultadoOk(res)) { alert('Sin conexión — no se pudo eliminar, intenta de nuevo.'); return; }
+    levantamientoTramos = levantamientoTramos.filter(t => t.id !== id);
+    renderListaLevantamiento();
+    renderLevantamientoHome();
+    showToast('Tramo eliminado.', 'success');
+}
+
+async function confirmarEliminarPuntoLevantamiento(id) {
+    const p = levantamientoPuntos.find(x => x.id === id);
+    if (!p) return;
+    if (p.tipo === 'TABLERO') { alert('No puedes eliminar el tablero.'); return; }
+    if (!confirm(`¿Eliminar el punto "${etiquetaPuntoLevantamiento(id)}"?`)) return;
+
+    const res = await callApi('eliminarPuntoLevantamiento', { id });
+    if (resultadoOk(res)) {
+        levantamientoPuntos = levantamientoPuntos.filter(x => x.id !== id);
+        renderArbolLevantamiento();
+        renderLevantamientoHome();
+        showToast('Punto eliminado.', 'success');
+        return;
+    }
+
+    const data = res.data || {};
+    if (data.tramosDependientes && data.tramosDependientes.length > 0) {
+        const nombres = data.tramosDependientes.map(tid => {
+            const t = levantamientoTramos.find(x => x.id === tid);
+            return t ? `${etiquetaPuntoLevantamiento(t.origenId)} → ${etiquetaPuntoLevantamiento(t.destinoId)} (${t.distancia}m)` : tid;
+        });
+        alert(`No se puede eliminar este punto porque tiene ${nombres.length} tramo(s) asociado(s):\n\n` + nombres.join('\n'));
+    } else {
+        alert('Sin conexión — no se pudo eliminar, intenta de nuevo.');
+    }
+}
+
 // --- Configuración de CCTV (modal propio) ---
 function openEstimadorCctvConfigModal() {
     const cfg = getEstimadorCctvConfig();

@@ -1084,6 +1084,9 @@
                         <small class="text-muted text-truncate d-block" id="pd-subtitle">...</small>
                     </div>
                     <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-cyan" onclick="abrirLevantamiento()" title="Levantamiento de instalación">
+                            <i class="bi bi-rulers"></i>
+                        </button>
                         <button class="btn btn-sm btn-outline-secondary" onclick="openEditProjectModal()">
                             <i class="bi bi-pencil-fill"></i>
                         </button>
@@ -1604,6 +1607,235 @@
         </div>
     </div>
 </div>
+
+<!-- LEVANTAMIENTO DE INSTALACIONES (Fase C) -->
+<div class="modal fade" id="levantamientoModal" tabindex="-1">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content bg-dark-panel">
+            <div class="modal-header border-bottom border-secondary">
+                <div class="overflow-hidden">
+                    <h5 class="modal-title text-cyan text-truncate" id="lv-proyecto-nombre">Levantamiento</h5>
+                    <small class="text-muted">Puntos y tramos medidos en campo</small>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+
+                <!-- Pantalla principal -->
+                <div id="lv-screen-HOME">
+                    <div class="text-center mb-4 mt-2">
+                        <div class="text-secondary small">ÚLTIMO PUNTO</div>
+                        <div class="text-cyan fw-bold" style="font-size:1.5rem;" id="lv-ultimo-punto">—</div>
+                    </div>
+                    <button class="btn btn-cyan w-100 mb-2 py-3" style="font-size:1.2rem;" onclick="irANuevaMedicion()">
+                        <i class="bi bi-plus-circle-fill"></i> NUEVA MEDICIÓN
+                    </button>
+                    <div class="row g-2 mb-4">
+                        <div class="col-6">
+                            <button class="btn btn-outline-cyan w-100 py-2" onclick="irACadenaRapida()"><i class="bi bi-lightning-charge"></i> Cadena Rápida</button>
+                        </div>
+                        <div class="col-6">
+                            <button class="btn btn-outline-secondary w-100 py-2" onclick="irAVerLevantamiento()"><i class="bi bi-diagram-3"></i> Ver Levantamiento</button>
+                        </div>
+                    </div>
+                    <div class="text-center text-secondary small" id="lv-resumen">0 puntos · 0 tramos</div>
+                </div>
+
+                <!-- Nueva Medición -->
+                <div id="lv-screen-MEDICION" class="hidden-section">
+                    <button class="btn btn-sm btn-outline-secondary mb-3" onclick="mostrarPantallaLevantamiento('HOME')"><i class="bi bi-arrow-left"></i> Atrás</button>
+
+                    <div class="mb-3">
+                        <label class="small text-secondary d-block">Origen</label>
+                        <select id="lv-origen" class="form-select bg-dark text-white border-secondary"></select>
+                        <div class="text-danger small hidden-section" id="lv-error-origen"></div>
+                    </div>
+
+                    <div class="mb-3 text-center">
+                        <label class="small text-secondary d-block mb-1">Distancia (m)</label>
+                        <input type="text" inputmode="decimal" id="lv-distancia" class="form-control bg-dark text-white border-cyan text-center fw-bold" style="font-size:2.2rem; padding:12px;" placeholder="0.00">
+                        <div class="text-danger small hidden-section" id="lv-error-distancia"></div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="small text-secondary d-block mb-1">Destino</label>
+                        <div class="d-flex gap-2 mb-2">
+                            <button class="btn btn-cyan btn-sm flex-fill" id="lv-btn-modo-nuevo" onclick="seleccionarDestinoModo('NUEVO')">Punto nuevo</button>
+                            <button class="btn btn-outline-secondary btn-sm flex-fill" id="lv-btn-modo-existente" onclick="seleccionarDestinoModo('EXISTENTE')">Punto existente</button>
+                        </div>
+                        <div class="text-danger small hidden-section" id="lv-error-destino"></div>
+                    </div>
+
+                    <div id="lv-destino-nuevo-fields">
+                        <div class="row g-2 mb-2">
+                            <div class="col-7">
+                                <select id="lv-tipo" class="form-select form-select-sm bg-dark text-white border-secondary" onchange="actualizarPlaceholderNombre()"></select>
+                            </div>
+                            <div class="col-5">
+                                <input type="text" id="lv-nombre" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Nombre (opcional)">
+                            </div>
+                        </div>
+                    </div>
+                    <div id="lv-destino-existente-fields" class="hidden-section mb-2">
+                        <select id="lv-destino-existente" class="form-select form-select-sm bg-dark text-white border-secondary"></select>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="small text-secondary d-block">Canalización</label>
+                            <select id="lv-canalizacion" class="form-select form-select-sm bg-dark text-white border-secondary" onchange="onChangeCanalizacionLevantamiento()">
+                                <option value="TUBERIA">Tubería</option>
+                                <option value="CANALETA">Canaleta</option>
+                                <option value="NINGUNA">Sin canalización</option>
+                            </select>
+                        </div>
+                        <div class="col-6" id="lv-diametro-wrap">
+                            <label class="small text-secondary d-block">Diámetro</label>
+                            <input type="text" id="lv-diametro" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder='Ej: 1/2"' onchange="levantamientoDiametro=this.value">
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning small hidden-section" id="lv-guardado-error"></div>
+
+                    <button class="btn btn-success w-100 py-3" style="font-size:1.1rem;" onclick="guardarNuevaMedicion()">
+                        <i class="bi bi-check-circle-fill"></i> GUARDAR
+                    </button>
+                    <div class="text-center text-secondary small mt-2" id="lv-resumen-medicion"></div>
+                </div>
+
+                <!-- Cadena Rápida -->
+                <div id="lv-screen-CADENA" class="hidden-section">
+                    <button class="btn btn-sm btn-outline-secondary mb-3" onclick="mostrarPantallaLevantamiento('HOME')"><i class="bi bi-arrow-left"></i> Atrás</button>
+
+                    <div class="mb-3">
+                        <label class="small text-secondary d-block">Origen</label>
+                        <select id="lv-cadena-origen" class="form-select bg-dark text-white border-secondary"></select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="small text-secondary d-block mb-1">¿Qué representan estas medidas?</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="lv-modo-cadena" id="lv-modo-puntos-radio" onchange="seleccionarModoCadena('PUNTOS_NUEVOS')" checked>
+                            <label class="form-check-label small text-white" for="lv-modo-puntos-radio">Cada medida termina en un punto nuevo</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="lv-modo-cadena" id="lv-modo-continuo-radio" onchange="seleccionarModoCadena('RECORRIDO_CONTINUO')">
+                            <label class="form-check-label small text-white" for="lv-modo-continuo-radio">Son segmentos de un mismo recorrido</label>
+                        </div>
+                    </div>
+
+                    <div id="lv-cadena-puntos-nuevos-fields">
+                        <div class="row g-2 mb-2">
+                            <div class="col-7">
+                                <label class="small text-secondary d-block">Tipo (para todos)</label>
+                                <select id="lv-cadena-tipo" class="form-select form-select-sm bg-dark text-white border-secondary"></select>
+                            </div>
+                            <div class="col-5">
+                                <label class="small text-secondary d-block">Nombre base</label>
+                                <input type="text" id="lv-cadena-nombre" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Opcional">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="lv-cadena-continuo-fields" class="hidden-section mb-2">
+                        <label class="small text-secondary d-block mb-1">Destino del recorrido</label>
+                        <div class="d-flex gap-2 mb-2">
+                            <button class="btn btn-cyan btn-sm flex-fill" id="lv-cadena-btn-destino-nuevo" onclick="seleccionarDestinoModoCadena('NUEVO')">Punto nuevo</button>
+                            <button class="btn btn-outline-secondary btn-sm flex-fill" id="lv-cadena-btn-destino-existente" onclick="seleccionarDestinoModoCadena('EXISTENTE')">Punto existente</button>
+                        </div>
+                        <div id="lv-cadena-destino-nuevo-fields">
+                            <div class="row g-2">
+                                <div class="col-7">
+                                    <select id="lv-cadena-destino-tipo" class="form-select form-select-sm bg-dark text-white border-secondary"></select>
+                                </div>
+                                <div class="col-5">
+                                    <input type="text" id="lv-cadena-destino-nombre" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Nombre (opcional)">
+                                </div>
+                            </div>
+                        </div>
+                        <div id="lv-cadena-destino-existente-fields" class="hidden-section">
+                            <select id="lv-cadena-destino-existente" class="form-select form-select-sm bg-dark text-white border-secondary"></select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="small text-secondary d-block mb-1">Distancias separadas por coma</label>
+                        <input type="text" id="lv-cadena-distancias" class="form-control bg-dark text-white border-cyan" placeholder="Ej: 3.20, 4.80, 5.40">
+                        <div class="text-danger small hidden-section" id="lv-cadena-error"></div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="small text-secondary d-block">Canalización</label>
+                            <select id="lv-cadena-canalizacion" class="form-select form-select-sm bg-dark text-white border-secondary" onchange="onChangeCanalizacionLevantamientoCadena()">
+                                <option value="TUBERIA">Tubería</option>
+                                <option value="CANALETA">Canaleta</option>
+                                <option value="NINGUNA">Sin canalización</option>
+                            </select>
+                        </div>
+                        <div class="col-6" id="lv-cadena-diametro-wrap">
+                            <label class="small text-secondary d-block">Diámetro</label>
+                            <input type="text" id="lv-cadena-diametro" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder='Ej: 1/2"' onchange="levantamientoDiametro=this.value">
+                        </div>
+                    </div>
+
+                    <button class="btn btn-success w-100 py-3" onclick="guardarCadenaRapida()"><i class="bi bi-check-circle-fill"></i> GUARDAR CADENA</button>
+                </div>
+
+                <!-- Ver Levantamiento -->
+                <div id="lv-screen-LISTA" class="hidden-section">
+                    <button class="btn btn-sm btn-outline-secondary mb-3" onclick="mostrarPantallaLevantamiento('HOME')"><i class="bi bi-arrow-left"></i> Atrás</button>
+                    <div class="d-flex gap-2 mb-3">
+                        <button class="btn btn-cyan btn-sm flex-fill" id="lv-btn-vista-lista" onclick="cambiarVistaLevantamiento('LISTA')">Lista</button>
+                        <button class="btn btn-outline-secondary btn-sm flex-fill" id="lv-btn-vista-arbol" onclick="cambiarVistaLevantamiento('ARBOL')">Árbol</button>
+                    </div>
+                    <div id="lv-lista-contenido"></div>
+                    <div id="lv-arbol-contenido" class="hidden-section"></div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="lvEditarTramoModal" tabindex="-1" style="z-index: 1060;">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark-panel border-cyan">
+            <div class="modal-header border-secondary">
+                <h6 class="modal-title text-white" id="lv-editar-titulo">Editar tramo</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-2">
+                    <label class="small text-secondary">Distancia (m)</label>
+                    <input type="text" inputmode="decimal" id="lv-editar-distancia" class="form-control bg-dark text-white border-secondary">
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="small text-secondary">Canalización</label>
+                        <select id="lv-editar-canalizacion" class="form-select form-select-sm bg-dark text-white border-secondary">
+                            <option value="TUBERIA">Tubería</option>
+                            <option value="CANALETA">Canaleta</option>
+                            <option value="NINGUNA">Sin canalización</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-secondary">Diámetro</label>
+                        <input type="text" id="lv-editar-diametro" class="form-control form-control-sm bg-dark text-white border-secondary">
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="small text-secondary">Observación</label>
+                    <input type="text" id="lv-editar-observaciones" class="form-control form-control-sm bg-dark text-white border-secondary">
+                </div>
+            </div>
+            <div class="modal-footer border-secondary">
+                <button class="btn btn-cyan w-100" onclick="guardarEdicionTramo()">GUARDAR CAMBIOS</button>
+            </div>
+        </div>
+    </div>
+</div>
+
     <script src="vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="vendor/chartjs/chart.umd.min.js"></script>
     <script src="app.js"></script>
