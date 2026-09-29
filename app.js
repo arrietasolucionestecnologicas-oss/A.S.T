@@ -1522,8 +1522,8 @@ async function renderDashboard() {
     renderMantenimientosCamaras();
 }
 
-// Mantenimiento de camaras: estandar trimestral (cada 3 meses) para CCTV en
-// Colombia, ver MESES_CICLO_MANTENIMIENTO_CAMARAS en el backend. Se recarga
+// Mantenimiento de camaras: ciclo cada 6 meses, ver
+// MESES_CICLO_MANTENIMIENTO_CAMARAS en el backend. Se recarga
 // siempre (no se cachea como dashboardData) porque "Marcar realizado" cambia
 // el resultado de inmediato.
 async function renderMantenimientosCamaras() {
@@ -1563,12 +1563,12 @@ async function renderMantenimientosCamaras() {
 }
 
 function enviarRecordatorioMantenimientoCamaras(id, cliente, contacto, nombreProyecto) {
-    const mensaje = `Hola${cliente ? ' *' + cliente + '*' : ''},\n\nTe escribimos de *A.S.T. Soluciones Técnicas* para recordarte que corresponde el mantenimiento preventivo trimestral de tu sistema de cámaras de seguridad (*${nombreProyecto}*).\n\nEste mantenimiento incluye revisión, limpieza y ajuste de los equipos para garantizar que sigan funcionando correctamente.\n\n¿Cuándo te queda bien para coordinar la visita?`;
+    const mensaje = `Hola${cliente ? ' *' + cliente + '*' : ''},\n\nTe escribimos de *A.S.T. Soluciones Técnicas* para recordarte que corresponde el mantenimiento preventivo semestral de tu sistema de cámaras de seguridad (*${nombreProyecto}*).\n\nEste mantenimiento incluye revisión, limpieza y ajuste de los equipos para garantizar que sigan funcionando correctamente.\n\n¿Cuándo te queda bien para coordinar la visita?`;
     abrirWhatsAppConTelefono(contacto, mensaje);
 }
 
 async function marcarMantenimientoCamarasRealizado(id) {
-    if (!confirm('¿Marcar el mantenimiento como realizado hoy? Esto reinicia el ciclo de 3 meses para este cliente.')) return;
+    if (!confirm('¿Marcar el mantenimiento como realizado hoy? Esto reinicia el ciclo de 6 meses para este cliente.')) return;
     const res = await callApi('marcarMantenimientoCamarasRealizado', { id: id });
     if (!res.success) { showToast('Error al actualizar', 'danger'); return; }
     showToast('Mantenimiento marcado como realizado.', 'success');
