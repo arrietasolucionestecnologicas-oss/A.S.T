@@ -567,14 +567,21 @@ const ESTIMADOR_ELECTRICO_DEFAULTS = {
     // distintos del mismo punto físico:
     //   Tablero -> Interruptor: FASE + TIERRA
     //   Interruptor -> Luminaria: RETORNO + NEUTRO + TIERRA
-    // En campo, esto significa crear DOS circuitos (uno "Interruptor", otro
-    // "Punto de luz") en vez de uno solo. Las tomas sí llevan FASE+NEUTRO+
-    // TIERRA de corrido porque no hay conmutación de por medio.
+    // En campo, esto significa crear el interruptor y su punto de luz como
+    // DOS PUNTOS distintos (la luz "conectada desde" su interruptor), en vez
+    // de uno solo. Las tomas sí llevan FASE+NEUTRO+TIERRA de corrido porque
+    // no hay conmutación de por medio.
+    //
+    // "Caja de paso / distribución" es para cuando varios interruptores (o
+    // puntos) NO se encadenan uno tras otro, sino que reparten desde una
+    // caja central: la caja de paso va "conectada desde" el tablero (FASE+
+    // TIERRA), y cada interruptor va "conectado desde" esa caja de paso.
     tiposPunto: [
         { id: 'punto_luz',     nombre: 'Punto de luz (interruptor→luminaria)', calibreAwg: 14, amperaje: 15, conductores: 3, colores: ['ROJO','BLANCO','VERDE'], cajaEmpotradaProducto: 'Caja Octogonal No-Halogenado Gris', cajaSobrepuestaProducto: 'Caja de sobreponer baja New Light Special' },
         { id: 'toma_normal',   nombre: 'Toma normal',        calibreAwg: 12, amperaje: 20, conductores: 3, colores: ['NEGRO','BLANCO','VERDE'], cajaEmpotradaProducto: 'Caja PVC 2x4 No-Halogenado Gris', cajaSobrepuestaProducto: 'Caja de sobreponer baja New Light Special' },
         { id: 'toma_especial', nombre: 'Toma especial 220V', calibreAwg: 10, amperaje: 30, conductores: 3, colores: ['NEGRO','BLANCO','VERDE'], cajaEmpotradaProducto: 'Caja PVC 2x4 No-Halogenado Gris', cajaSobrepuestaProducto: 'Caja de sobreponer alta New Light Special' },
-        { id: 'interruptor',   nombre: 'Interruptor (tablero→interruptor)', calibreAwg: 14, amperaje: 15, conductores: 2, colores: ['NEGRO','VERDE'], cajaEmpotradaProducto: 'Caja PVC 2x4 No-Halogenado Gris', cajaSobrepuestaProducto: 'Caja de sobreponer baja New Light Special' }
+        { id: 'interruptor',   nombre: 'Interruptor (tablero→interruptor)', calibreAwg: 14, amperaje: 15, conductores: 2, colores: ['NEGRO','VERDE'], cajaEmpotradaProducto: 'Caja PVC 2x4 No-Halogenado Gris', cajaSobrepuestaProducto: 'Caja de sobreponer baja New Light Special' },
+        { id: 'caja_paso',     nombre: 'Caja de paso / distribución', calibreAwg: 14, amperaje: 15, conductores: 2, colores: ['NEGRO','VERDE'], cajaEmpotradaProducto: 'CAJA DE PASO 10X10 ACME', cajaSobrepuestaProducto: 'CAJA DE PASO 10X10 ACME' }
     ]
 };
 
@@ -593,12 +600,15 @@ function getEstimadorComunConfig()    { return getEstimadorConfig('ESTIMADOR_COM
 function getEstimadorElectricoConfig(){ return getEstimadorConfig('ESTIMADOR_ELECTRICO_CONFIG', ESTIMADOR_ELECTRICO_DEFAULTS); }
 
 let estimadorSubTab = 'ELECTRICO';
-// Un circuito es una cadena de puntos del mismo tipo: cada "tramo" es la
-// distancia medida en campo (láser/metro) del tablero al primer punto, o de
-// un punto al siguiente -- así se cablea de verdad (no cada punto corriendo
-// independiente al tablero). El resumen suma los tramos de todos los
-// circuitos para sacar materiales reales.
-let estimadorElectricoCircuitos = [];
+// Cada punto dice DE DÓNDE viene (el tablero, o cualquier otro punto ya
+// creado) y a qué distancia -- así se arma cualquier topología real:
+// cadena (interruptor1 -> interruptor2 -> ...), ramificación desde una caja
+// de paso central (4 interruptores todos "desde" la misma caja), o un punto
+// de luz que cuelga de su interruptor. El "conectadoDesde" es solo para
+// organizar/mostrar -- el cálculo de materiales usa la distancia propia de
+// cada punto, así que no importa si la cadena se corta o un punto queda
+// huérfano al borrar otro.
+let estimadorElectricoPuntos = [];
 let estimadorElectricoResumen = null;
 
 function renderEstimador() {
@@ -613,74 +623,94 @@ function switchEstimadorSubTab(sub) {
     document.getElementById('estimador-cctv').classList.toggle('hidden-section', sub !== 'CCTV');
 
     if (sub === 'ELECTRICO') {
-        poblarSelectTiposPuntoCircuito();
-        renderElectricoCircuitos();
+        poblarSelectTiposPuntoElectrico();
+        poblarSelectConectadoDesde();
+        renderElectricoPuntos();
     } else if (sub === 'CCTV') {
         initCctvView();
     }
 }
 
-function poblarSelectTiposPuntoCircuito() {
+function poblarSelectTiposPuntoElectrico() {
     const cfg = getEstimadorElectricoConfig();
-    const sel = document.getElementById('el-circuito-tipo');
+    const sel = document.getElementById('el-tipo');
     const valorActual = sel.value;
     sel.innerHTML = cfg.tiposPunto.map(t => `<option value="${t.id}">${t.nombre}</option>`).join('');
     if (valorActual && cfg.tiposPunto.some(t => t.id === valorActual)) sel.value = valorActual;
 }
 
-function crearCircuitoElectrico() {
-    const tipoId = document.getElementById('el-circuito-tipo').value;
+function etiquetaPuntoElectrico(p) {
+    const elec = getEstimadorElectricoConfig();
+    const tipo = elec.tiposPunto.find(t => t.id === p.tipoId);
+    return p.nombre || (tipo ? tipo.nombre : p.tipoId);
+}
+
+function poblarSelectConectadoDesde() {
+    const sel = document.getElementById('el-conectado-desde');
+    const valorActual = sel.value;
+    const opciones = ['<option value="TABLERO">Tablero</option>']
+        .concat(estimadorElectricoPuntos.map(p => `<option value="${p.id}">${etiquetaPuntoElectrico(p)}</option>`));
+    sel.innerHTML = opciones.join('');
+
+    if (valorActual && (valorActual === 'TABLERO' || estimadorElectricoPuntos.some(p => p.id === valorActual))) {
+        sel.value = valorActual;
+    } else {
+        // Por defecto queda seleccionado el ÚLTIMO punto creado -- así una
+        // cadena (el caso más común) se digita sin tocar este campo cada vez.
+        sel.value = estimadorElectricoPuntos.length > 0 ? estimadorElectricoPuntos[estimadorElectricoPuntos.length - 1].id : 'TABLERO';
+    }
+}
+
+function agregarPuntoElectrico() {
+    const tipoId = document.getElementById('el-tipo').value;
     if (!tipoId) return alert('Configura al menos un tipo de punto primero (⚙️ Configurar).');
-    const nombre = document.getElementById('el-circuito-nombre').value.trim();
-    const canalizacion = document.getElementById('el-circuito-canalizacion').value;
-    const caja = document.getElementById('el-circuito-caja').value;
+    const nombre = document.getElementById('el-nombre').value.trim();
+    const conectadoDesde = document.getElementById('el-conectado-desde').value;
+    const distancia = Number(document.getElementById('el-distancia').value) || 0;
+    const canalizacion = document.getElementById('el-canalizacion').value;
+    const caja = document.getElementById('el-caja').value;
 
-    estimadorElectricoCircuitos.push({ id: generateUUID(), nombre, tipoId, canalizacion, caja, tramos: [] });
-    document.getElementById('el-circuito-nombre').value = '';
-    renderElectricoCircuitos();
-}
-
-function eliminarCircuito(id) {
-    estimadorElectricoCircuitos = estimadorElectricoCircuitos.filter(c => c.id !== id);
-    renderElectricoCircuitos();
-}
-
-function agregarTramoCircuito(circuitoId) {
-    const input = document.getElementById('tramo-input-' + circuitoId);
-    const distancia = Number(input.value) || 0;
     if (distancia <= 0) return alert('Ingresa una distancia mayor a 0.');
-    const circuito = estimadorElectricoCircuitos.find(c => c.id === circuitoId);
-    circuito.tramos.push(distancia);
-    renderElectricoCircuitos();
+
+    estimadorElectricoPuntos.push({ id: generateUUID(), nombre, tipoId, conectadoDesde, distancia, canalizacion, caja });
+    document.getElementById('el-nombre').value = '';
+    document.getElementById('el-distancia').value = '';
+    renderElectricoPuntos();
+    poblarSelectConectadoDesde();
 }
 
-function agregarTramosLoteCircuito(circuitoId) {
-    const inputCant = document.getElementById('tramo-lote-cant-' + circuitoId);
-    const inputDist = document.getElementById('tramo-lote-dist-' + circuitoId);
-    const cantidad = Number(inputCant.value) || 0;
-    const distancia = Number(inputDist.value) || 0;
-    if (cantidad <= 0 || distancia <= 0) return alert('Ingresa cantidad y distancia mayores a 0.');
-    const circuito = estimadorElectricoCircuitos.find(c => c.id === circuitoId);
-    for (let i = 0; i < cantidad; i++) circuito.tramos.push(distancia);
-    renderElectricoCircuitos();
+// Cadena rápida: varios puntos del mismo tipo seguidos uno del otro (ej. 4
+// interruptores en fila). El primero conecta desde lo elegido en "Conectado
+// desde"; cada siguiente se encadena solo del que se acaba de crear.
+function agregarCadenaElectrica() {
+    const tipoId = document.getElementById('el-tipo').value;
+    if (!tipoId) return alert('Configura al menos un tipo de punto primero (⚙️ Configurar).');
+    const conectadoDesdeInicial = document.getElementById('el-conectado-desde').value;
+    const canalizacion = document.getElementById('el-canalizacion').value;
+    const caja = document.getElementById('el-caja').value;
+    const nombreBase = document.getElementById('el-cadena-nombre').value.trim();
+    const distancias = document.getElementById('el-cadena-distancias').value
+        .split(/[,\s]+/).map(v => Number(v.trim())).filter(v => !isNaN(v) && v > 0);
+    if (distancias.length === 0) return alert('Escribe al menos una distancia válida (ej: 3, 2.5, 4).');
+
+    let desde = conectadoDesdeInicial;
+    distancias.forEach((d, i) => {
+        const id = generateUUID();
+        const nombre = nombreBase ? `${nombreBase} ${i + 1}` : '';
+        estimadorElectricoPuntos.push({ id, nombre, tipoId, conectadoDesde: desde, distancia: d, canalizacion, caja });
+        desde = id;
+    });
+
+    document.getElementById('el-cadena-distancias').value = '';
+    document.getElementById('el-cadena-nombre').value = '';
+    renderElectricoPuntos();
+    poblarSelectConectadoDesde();
 }
 
-// Para cuando cada punto queda a una distancia distinta del anterior (lo más
-// común en campo): escribe los tramos medidos separados por coma o espacio,
-// en el orden en que se miden, y se agregan todos de una vez.
-function agregarTramosListaCircuito(circuitoId) {
-    const input = document.getElementById('tramo-lista-' + circuitoId);
-    const valores = input.value.split(/[,\s]+/).map(v => Number(v.trim())).filter(v => !isNaN(v) && v > 0);
-    if (valores.length === 0) return alert('Escribe al menos un valor válido (ej: 3, 4, 2, 5).');
-    const circuito = estimadorElectricoCircuitos.find(c => c.id === circuitoId);
-    valores.forEach(v => circuito.tramos.push(v));
-    renderElectricoCircuitos();
-}
-
-function eliminarTramoCircuito(circuitoId, index) {
-    const circuito = estimadorElectricoCircuitos.find(c => c.id === circuitoId);
-    circuito.tramos.splice(index, 1);
-    renderElectricoCircuitos();
+function eliminarPuntoElectrico(id) {
+    estimadorElectricoPuntos = estimadorElectricoPuntos.filter(p => p.id !== id);
+    renderElectricoPuntos();
+    poblarSelectConectadoDesde();
 }
 
 function calcularEstimacionElectrica() {
@@ -697,11 +727,10 @@ function calcularEstimacionElectrica() {
     const cajasEmpotradas = {};
     const cajasSobrepuestas = {};
     let cajasPasoExtra = 0;
-    let totalPuntos = 0;
 
-    estimadorElectricoCircuitos.forEach(c => {
-        const tipo = elec.tiposPunto.find(t => t.id === c.tipoId) ||
-            { id: c.tipoId, nombre: c.tipoId, calibreAwg: '-', amperaje: '-', conductores: 1, colores: [] };
+    estimadorElectricoPuntos.forEach(p => {
+        const tipo = elec.tiposPunto.find(t => t.id === p.tipoId) ||
+            { id: p.tipoId, nombre: p.tipoId, calibreAwg: '-', amperaje: '-', conductores: 1, colores: [] };
 
         if (!porTipo[tipo.id]) {
             porTipo[tipo.id] = {
@@ -711,33 +740,30 @@ function calcularEstimacionElectrica() {
             };
         }
 
-        c.tramos.forEach(tramoM => {
-            const t = Number(tramoM) || 0;
-            porTipo[tipo.id].cantidadPuntos++;
-            porTipo[tipo.id].metrosRecorrido += t;
-            totalPuntos++;
+        const t = Number(p.distancia) || 0;
+        porTipo[tipo.id].cantidadPuntos++;
+        porTipo[tipo.id].metrosRecorrido += t;
 
-            if (c.canalizacion === 'CANALETA') {
-                metrosCanaleta += t;
-            } else {
-                metrosTuberia += t;
-                tramosTuberia++;
-                // Tramo de tubería más largo que el umbral: se necesita una
-                // caja de paso extra para poder halar el cable (ver nota en
-                // ESTIMADOR_ELECTRICO_DEFAULTS).
-                if (t > umbralTuberia) cajasPasoExtra += Math.floor(t / umbralTuberia);
-            }
+        if (p.canalizacion === 'CANALETA') {
+            metrosCanaleta += t;
+        } else {
+            metrosTuberia += t;
+            tramosTuberia++;
+            // Tramo de tubería más largo que el umbral: se necesita una
+            // caja de paso extra para poder halar el cable (ver nota en
+            // ESTIMADOR_ELECTRICO_DEFAULTS).
+            if (t > umbralTuberia) cajasPasoExtra += Math.floor(t / umbralTuberia);
+        }
 
-            const cajaProducto = c.caja === 'EMPOTRADA' ? tipo.cajaEmpotradaProducto : tipo.cajaSobrepuestaProducto;
-            if (cajaProducto) {
-                const bucket = c.caja === 'EMPOTRADA' ? cajasEmpotradas : cajasSobrepuestas;
-                bucket[cajaProducto] = (bucket[cajaProducto] || 0) + 1;
-            }
-        });
+        const cajaProducto = p.caja === 'EMPOTRADA' ? tipo.cajaEmpotradaProducto : tipo.cajaSobrepuestaProducto;
+        if (cajaProducto) {
+            const bucket = p.caja === 'EMPOTRADA' ? cajasEmpotradas : cajasSobrepuestas;
+            bucket[cajaProducto] = (bucket[cajaProducto] || 0) + 1;
+        }
     });
 
-    // Cable con holgura + sobrante (una vez por cada caja del circuito, más
-    // una vez al llegar al tablero), separado por color de conductor.
+    // Cable con holgura + sobrante (una vez por cada caja del tipo, más una
+    // vez adicional por grupo), separado por color de conductor.
     const cablePorColor = {};
     let totalMetrosCable = 0;
     Object.values(porTipo).forEach(t => {
@@ -753,7 +779,7 @@ function calcularEstimacionElectrica() {
     });
 
     return {
-        totalPuntos, porTipo, cablePorColor, totalMetrosCable,
+        totalPuntos: estimadorElectricoPuntos.length, porTipo, cablePorColor, totalMetrosCable,
         metrosCanaleta, metrosTuberia,
         // Un adaptador terminal PVC en cada extremo de cada tramo de tubería
         // (donde el tubo entra a una caja): 2 por tramo. Las curvas NO se
@@ -768,69 +794,56 @@ function calcularEstimacionElectrica() {
     };
 }
 
-function renderElectricoCircuitos() {
-    const listEl = document.getElementById('electrico-circuitos-list');
-    const elec = getEstimadorElectricoConfig();
+// Árbol visual: agrupa los puntos por de dónde vienen (TABLERO o el id de
+// otro punto) y los pinta con sangría según el nivel, para que se vea la
+// cadena/ramificación real de un vistazo antes de mandar al carrito.
+function renderElectricoPuntos() {
+    const listEl = document.getElementById('electrico-puntos-list');
 
-    if (estimadorElectricoCircuitos.length === 0) {
+    if (estimadorElectricoPuntos.length === 0) {
         listEl.innerHTML = '';
-    } else {
-        listEl.innerHTML = estimadorElectricoCircuitos.map(c => {
-            const tipo = elec.tiposPunto.find(t => t.id === c.tipoId);
-            const totalMetros = c.tramos.reduce((s, t) => s + t, 0);
-            return `
-            <div class="card bg-dark-panel border-secondary mb-2">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <div>
-                            <strong class="text-white">${c.nombre || (tipo ? tipo.nombre : c.tipoId)}</strong>
-                            <div class="small text-secondary">${tipo ? tipo.nombre : c.tipoId} · ${c.canalizacion === 'CANALETA' ? 'Canaleta' : 'Tubería'} · Caja ${c.caja === 'EMPOTRADA' ? 'empotrada' : 'sobrepuesta'} · ${c.tramos.length} punto(s) · ${totalMetros.toFixed(2)}m</div>
-                        </div>
-                        <button class="btn btn-sm text-danger p-0" onclick="eliminarCircuito('${c.id}')"><i class="bi bi-trash"></i></button>
-                    </div>
+        renderElectricoSummary();
+        return;
+    }
 
-                    <div class="row g-2 mb-2">
-                        <div class="col-8">
-                            <label class="small text-muted">Tramo (m) — del tablero o del punto anterior</label>
-                            <input type="number" id="tramo-input-${c.id}" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="0.1">
-                        </div>
-                        <div class="col-4 d-flex align-items-end">
-                            <button class="btn btn-sm btn-cyan w-100" onclick="agregarTramoCircuito('${c.id}')">+ Agregar</button>
-                        </div>
-                    </div>
-                    <div class="row g-2 mb-2">
-                        <div class="col-8">
-                            <label class="small text-muted">Lista de tramos con distancias distintas (separados por coma)</label>
-                            <input type="text" id="tramo-lista-${c.id}" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Ej: 3, 4, 2, 5, 3">
-                        </div>
-                        <div class="col-4 d-flex align-items-end">
-                            <button class="btn btn-sm btn-outline-cyan w-100" onclick="agregarTramosListaCircuito('${c.id}')">+ Agregar Lista</button>
-                        </div>
-                    </div>
-                    <div class="row g-2 mb-2">
-                        <div class="col-4">
-                            <label class="small text-muted">Lote: cantidad iguales</label>
-                            <input type="number" id="tramo-lote-cant-${c.id}" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="1" placeholder="Ej: 4">
-                        </div>
-                        <div class="col-4">
-                            <label class="small text-muted">Distancia c/u (m)</label>
-                            <input type="number" id="tramo-lote-dist-${c.id}" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="0.1" placeholder="Ej: 3">
-                        </div>
-                        <div class="col-4 d-flex align-items-end">
-                            <button class="btn btn-sm btn-outline-cyan w-100" onclick="agregarTramosLoteCircuito('${c.id}')">+ Lote igual</button>
-                        </div>
-                    </div>
+    // Si se borró un punto del que otros dependían, esos quedan "huérfanos"
+    // -- se siguen contando en el resumen (el cálculo no depende del árbol),
+    // pero hay que mostrarlos igual, colgados del tablero con un aviso, para
+    // que no desaparezcan silenciosamente de la vista.
+    const idsValidos = new Set(['TABLERO', ...estimadorElectricoPuntos.map(p => p.id)]);
+    const hijosDe = {};
+    estimadorElectricoPuntos.forEach(p => {
+        const huerfano = !idsValidos.has(p.conectadoDesde);
+        const key = huerfano ? 'TABLERO' : (p.conectadoDesde || 'TABLERO');
+        if (!hijosDe[key]) hijosDe[key] = [];
+        hijosDe[key].push(Object.assign({}, p, { _huerfano: huerfano }));
+    });
 
-                    ${c.tramos.length > 0 ? `
-                    <table class="table table-dark table-sm mb-0">
-                        <tbody>
-                        ${c.tramos.map((t, i) => `<tr><td class="small">Punto ${i + 1}</td><td class="small">${t} m</td><td class="text-end"><button class="btn btn-sm text-danger p-0" onclick="eliminarTramoCircuito('${c.id}',${i})"><i class="bi bi-x"></i></button></td></tr>`).join('')}
-                        </tbody>
-                    </table>` : '<div class="small text-secondary">Sin tramos aún.</div>'}
+    const elec = getEstimadorElectricoConfig();
+    function renderNivel(parentKey, nivel) {
+        const hijos = hijosDe[parentKey] || [];
+        return hijos.map(p => {
+            const tipo = elec.tiposPunto.find(t => t.id === p.tipoId);
+            const fila = `
+            <div class="d-flex justify-content-between align-items-center py-1" style="padding-left:${nivel * 18}px; border-bottom:1px solid var(--ast-border);">
+                <div class="small">
+                    ${nivel > 0 ? '<i class="bi bi-arrow-return-right text-secondary"></i> ' : ''}<strong class="text-white">${etiquetaPuntoElectrico(p)}</strong>
+                    ${p._huerfano ? '<span class="text-warning" title="El punto del que dependía fue eliminado"><i class="bi bi-exclamation-triangle"></i> sin conexión</span>' : ''}
+                    <span class="text-secondary"> — ${tipo ? tipo.nombre : p.tipoId} · ${p.distancia}m · ${p.canalizacion === 'CANALETA' ? 'Canaleta' : 'Tubería'} · ${p.caja === 'EMPOTRADA' ? 'Empotrada' : 'Sobrepuesta'}</span>
                 </div>
+                <button class="btn btn-sm text-danger p-0" onclick="eliminarPuntoElectrico('${p.id}')"><i class="bi bi-trash"></i></button>
             </div>`;
+            return fila + renderNivel(p.id, nivel + 1);
         }).join('');
     }
+
+    listEl.innerHTML = `
+    <div class="card bg-dark-panel border-secondary">
+        <div class="card-body py-2">
+            <div class="small text-secondary mb-1"><i class="bi bi-diagram-3"></i> Tablero</div>
+            ${renderNivel('TABLERO', 1)}
+        </div>
+    </div>`;
 
     renderElectricoSummary();
 }
@@ -839,9 +852,8 @@ function renderElectricoSummary() {
     const summaryEl = document.getElementById('electrico-summary');
     const btnCarrito = document.getElementById('btn-electrico-carrito');
 
-    const totalTramos = estimadorElectricoCircuitos.reduce((s, c) => s + c.tramos.length, 0);
-    if (totalTramos === 0) {
-        summaryEl.innerHTML = '<p class="text-secondary mb-0">Crea un circuito y agrega tramos para ver el resumen.</p>';
+    if (estimadorElectricoPuntos.length === 0) {
+        summaryEl.innerHTML = '<p class="text-secondary mb-0">Agrega al menos un punto para ver el resumen.</p>';
         btnCarrito.disabled = true;
         estimadorElectricoResumen = null;
         return;
@@ -1040,8 +1052,9 @@ async function guardarEstimadorConfig() {
         setCacheWithTimestamp('ast_config', configuracion);
 
         bootstrap.Modal.getInstance(document.getElementById('estimadorConfigModal')).hide();
-        poblarSelectTiposPuntoCircuito();
-        renderElectricoCircuitos();
+        poblarSelectTiposPuntoElectrico();
+        poblarSelectConectadoDesde();
+        renderElectricoPuntos();
         showToast('Configuración del estimador guardada.', 'success');
     } catch (e) {
         console.error(e);

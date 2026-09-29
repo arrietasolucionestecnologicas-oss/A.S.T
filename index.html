@@ -263,45 +263,70 @@
                 </div>
                 <div class="card bg-dark-panel border-secondary mb-3">
                     <div class="card-body">
-                        <h6 class="text-cyan mb-2"><i class="bi bi-plus-circle"></i> Nuevo Circuito</h6>
-                        <small class="text-secondary d-block mb-2">Un circuito es una cadena de puntos del mismo tipo (ej: "Alcoba principal - 4 puntos de luz"). Mide con el láser cada tramo: del tablero al primer punto, y luego de un punto al siguiente.</small>
+                        <h6 class="text-cyan mb-2"><i class="bi bi-plus-circle"></i> Agregar Punto</h6>
+                        <small class="text-secondary d-block mb-2">Cada punto dice de dónde viene (tablero u otro punto ya creado) y a qué distancia — así el sistema arma cadenas y ramificaciones reales. Mide con el láser ese tramo específico.</small>
                         <div class="row g-2">
-                            <div class="col-12 col-md-4">
-                                <label class="form-label small text-secondary">Nombre del circuito (opcional)</label>
-                                <input type="text" id="el-circuito-nombre" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Ej: Alcoba principal">
+                            <div class="col-6 col-md-3">
+                                <label class="form-label small text-secondary">Nombre (opcional)</label>
+                                <input type="text" id="el-nombre" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Ej: Int. Baño 1">
                             </div>
                             <div class="col-6 col-md-3">
                                 <label class="form-label small text-secondary">Tipo de punto</label>
-                                <select id="el-circuito-tipo" class="form-select form-select-sm bg-dark text-white border-secondary"></select>
+                                <select id="el-tipo" class="form-select form-select-sm bg-dark text-white border-secondary"></select>
                             </div>
                             <div class="col-6 col-md-3">
+                                <label class="form-label small text-secondary">Conectado desde</label>
+                                <select id="el-conectado-desde" class="form-select form-select-sm bg-dark text-white border-secondary"></select>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="form-label small text-secondary">Distancia (m)</label>
+                                <input type="number" id="el-distancia" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="0.1">
+                            </div>
+                            <div class="col-6">
                                 <label class="form-label small text-secondary">Canalización</label>
-                                <select id="el-circuito-canalizacion" class="form-select form-select-sm bg-dark text-white border-secondary">
+                                <select id="el-canalizacion" class="form-select form-select-sm bg-dark text-white border-secondary">
                                     <option value="CANALETA">Canaleta</option>
                                     <option value="TUBERIA">Tubería</option>
                                 </select>
                             </div>
-                            <div class="col-6 col-md-2">
+                            <div class="col-6">
                                 <label class="form-label small text-secondary">Caja</label>
-                                <select id="el-circuito-caja" class="form-select form-select-sm bg-dark text-white border-secondary">
+                                <select id="el-caja" class="form-select form-select-sm bg-dark text-white border-secondary">
                                     <option value="EMPOTRADA">Empotrada</option>
                                     <option value="SOBREPUESTA">Sobrepuesta</option>
                                 </select>
                             </div>
                         </div>
                         <div class="text-end mt-2">
-                            <button class="btn btn-sm btn-cyan" onclick="crearCircuitoElectrico()"><i class="bi bi-plus-lg"></i> Crear Circuito</button>
+                            <button class="btn btn-sm btn-cyan" onclick="agregarPuntoElectrico()"><i class="bi bi-plus-lg"></i> Agregar Punto</button>
+                        </div>
+
+                        <hr class="border-secondary">
+                        <h6 class="text-cyan small mb-1"><i class="bi bi-lightning-charge"></i> Cadena rápida</h6>
+                        <small class="text-secondary d-block mb-2">Varios puntos del mismo tipo, uno detrás de otro (ej: 4 interruptores en fila). El primero conecta desde lo elegido arriba en "Conectado desde"; los siguientes se encadenan solos.</small>
+                        <div class="row g-2">
+                            <div class="col-12 col-md-7">
+                                <label class="form-label small text-secondary">Distancias separadas por coma</label>
+                                <input type="text" id="el-cadena-distancias" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Ej: 3, 2.5, 4, 2">
+                            </div>
+                            <div class="col-7 col-md-3">
+                                <label class="form-label small text-secondary">Nombre base (opcional)</label>
+                                <input type="text" id="el-cadena-nombre" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Ej: Baño">
+                            </div>
+                            <div class="col-5 col-md-2 d-flex align-items-end">
+                                <button class="btn btn-sm btn-outline-cyan w-100" onclick="agregarCadenaElectrica()">+ Cadena</button>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div id="electrico-circuitos-list" class="mb-3"></div>
+                <div id="electrico-puntos-list" class="mb-3"></div>
 
                 <div class="card bg-dark-panel border-secondary mb-3">
                     <div class="card-body">
                         <h6 class="text-cyan mb-2"><i class="bi bi-clipboard-data"></i> Resumen de Materiales</h6>
                         <div id="electrico-summary" class="small text-white">
-                            <p class="text-secondary mb-0">Crea un circuito y agrega tramos para ver el resumen.</p>
+                            <p class="text-secondary mb-0">Agrega al menos un punto para ver el resumen.</p>
                         </div>
                     </div>
                 </div>
