@@ -693,6 +693,7 @@ function calcularEstimacionElectrica() {
     const porTipo = {};
     let metrosCanaleta = 0;
     let metrosTuberia = 0;
+    let tramosTuberia = 0;
     const cajasEmpotradas = {};
     const cajasSobrepuestas = {};
     let cajasPasoExtra = 0;
@@ -720,6 +721,7 @@ function calcularEstimacionElectrica() {
                 metrosCanaleta += t;
             } else {
                 metrosTuberia += t;
+                tramosTuberia++;
                 // Tramo de tubería más largo que el umbral: se necesita una
                 // caja de paso extra para poder halar el cable (ver nota en
                 // ESTIMADOR_ELECTRICO_DEFAULTS).
@@ -753,6 +755,11 @@ function calcularEstimacionElectrica() {
     return {
         totalPuntos, porTipo, cablePorColor, totalMetrosCable,
         metrosCanaleta, metrosTuberia,
+        // Un adaptador terminal PVC en cada extremo de cada tramo de tubería
+        // (donde el tubo entra a una caja): 2 por tramo. Las curvas NO se
+        // calculan solas -- dependen de la ruta física real, no de la
+        // distancia -- agrégalas a mano según lo que veas en sitio.
+        adaptadoresTerminales: tramosTuberia * 2,
         cajasEmpotradas, cajasSobrepuestas, cajasPasoExtra,
         cajaPasoProducto: elec.cajaPasoProducto,
         factorLlenoDisenoPct: elec.factorLlenoDisenoPct,
@@ -863,7 +870,9 @@ function renderElectricoSummary() {
     html += `<div class="row g-2 small mb-2">
         <div class="col-6"><i class="bi bi-arrow-bar-right"></i> Canaleta: <strong>${r.metrosCanaleta.toFixed(2)} m</strong></div>
         <div class="col-6"><i class="bi bi-arrow-bar-right"></i> Tubería: <strong>${r.metrosTuberia.toFixed(2)} m</strong></div>
-    </div>`;
+        ${r.adaptadoresTerminales > 0 ? `<div class="col-12"><i class="bi bi-plug"></i> Adaptadores terminal PVC (2 por tramo de tubería): <strong>${r.adaptadoresTerminales}</strong></div>` : ''}
+    </div>
+    ${r.metrosTuberia > 0 ? '<div class="text-warning small mb-2"><i class="bi bi-exclamation-triangle"></i> Curvas PVC no se calculan solas — dependen de la ruta real, agrégalas a mano según lo que veas en sitio.</div>' : ''}`;
 
     html += '<h6 class="text-cyan small fw-bold">Cajas</h6><ul class="small mb-2">';
     Object.entries(r.cajasEmpotradas).forEach(([nombre, cant]) => html += `<li>${nombre} (empotrada): <strong>${cant}</strong></li>`);
@@ -903,6 +912,7 @@ function agregarEstimacionElectricaAlCarrito() {
     });
     if (r.metrosCanaleta > 0) push('Canaleta Blanca 20x12mm con Adhesivo', r.metrosCanaleta, 'Estimador Eléctrico');
     if (r.metrosTuberia > 0) push('Tubo Conduit PVC 1/2 pulgada x 3MT', Math.ceil(r.metrosTuberia / 3), 'Estimador Eléctrico — tubos de 3m (ajusta el diámetro si aplica)');
+    if (r.adaptadoresTerminales > 0) push('Adaptador Terminal PVC 1/2 pulgada Conduit', r.adaptadoresTerminales, 'Estimador Eléctrico — 2 por tramo de tubería (ajusta el diámetro si aplica). Revisa curvas a mano.');
     Object.entries(r.cajasEmpotradas).forEach(([nombre, cant]) => push(nombre, cant, 'Estimador Eléctrico'));
     Object.entries(r.cajasSobrepuestas).forEach(([nombre, cant]) => push(nombre, cant, 'Estimador Eléctrico'));
     if (r.cajasPasoExtra > 0) push(r.cajaPasoProducto, r.cajasPasoExtra, `Estimador Eléctrico — tramo de tubería > ${r.umbralTuberia}m`);
