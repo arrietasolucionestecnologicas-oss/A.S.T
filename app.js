@@ -1363,6 +1363,18 @@ function mostrarPantallaLevantamiento(pantalla) {
 }
 
 // --- Nueva Medición ---
+// Pares (origen.tipo -> destino.tipo) que SÍ tienen regla de conductores
+// confirmada en el motor (ver LEVANTAMIENTO_REGLAS_MATERIALES_DEFAULTS en
+// Code.gs.js -- si cambian allá, hay que actualizar esta copia). Es solo un
+// aviso en pantalla, no bloquea nada: el tramo se puede guardar igual, pero
+// el usuario ve de una vez si le va a calcular cable o no.
+const LEVANTAMIENTO_PARES_CONFIRMADOS = new Set([
+    'TABLERO|INTERRUPTOR', 'CAJA_PASO|INTERRUPTOR',
+    'INTERRUPTOR|LUMINARIA',
+    'TABLERO|TOMACORRIENTE', 'CAJA_PASO|TOMACORRIENTE',
+    'TABLERO|TOMACORRIENTE_ESPECIAL', 'CAJA_PASO|TOMACORRIENTE_ESPECIAL'
+]);
+
 function irANuevaMedicion() {
     mostrarPantallaLevantamiento('MEDICION');
     poblarSelectPuntosLevantamiento('lv-origen');
@@ -1375,6 +1387,7 @@ function irANuevaMedicion() {
     poblarSelectCanalizacionLevantamiento();
     limpiarErroresLevantamiento();
     document.getElementById('lv-resumen-medicion').innerText = `${levantamientoPuntos.length} puntos · ${levantamientoTramos.length} tramos`;
+    renderArbolLevantamiento('lv-medicion-arbol-preview');
     setTimeout(() => { const el = document.getElementById('lv-distancia'); if (el) el.focus(); }, 200);
 }
 
@@ -1385,12 +1398,45 @@ function seleccionarDestinoModo(modo) {
     document.getElementById('lv-btn-modo-nuevo').className = modo === 'NUEVO' ? 'btn btn-cyan btn-sm flex-fill' : 'btn btn-outline-secondary btn-sm flex-fill';
     document.getElementById('lv-btn-modo-existente').className = modo === 'EXISTENTE' ? 'btn btn-cyan btn-sm flex-fill' : 'btn btn-outline-secondary btn-sm flex-fill';
     if (modo === 'EXISTENTE') poblarSelectPuntosLevantamiento('lv-destino-existente');
+    verificarReglaConfirmadaLevantamiento();
 }
 
 function actualizarPlaceholderNombre() {
     const tipo = document.getElementById('lv-tipo').value;
     const el = document.getElementById('lv-nombre');
     if (el) el.placeholder = sugerirNombrePuntoLevantamiento(tipo);
+    verificarReglaConfirmadaLevantamiento();
+}
+
+// Aviso en tiempo real (no bloqueante): compara el tipo del origen elegido
+// contra el tipo de destino (nuevo punto, o el tipo del punto existente
+// seleccionado) y avisa si esa combinación todavía no tiene regla de
+// conductores confirmada -- exactamente el caso que causó la confusión con
+// "Tablero -> Luminaria" directo.
+function verificarReglaConfirmadaLevantamiento() {
+    const aviso = document.getElementById('lv-aviso-regla');
+    if (!aviso) return;
+    const origenId = document.getElementById('lv-origen').value;
+    const origen = levantamientoPuntos.find(p => p.id === origenId);
+    if (!origen) { aviso.classList.add('hidden-section'); return; }
+
+    let destinoTipo;
+    if (levantamientoDestinoModo === 'NUEVO') {
+        destinoTipo = document.getElementById('lv-tipo').value;
+    } else {
+        const destinoId = document.getElementById('lv-destino-existente').value;
+        const destino = levantamientoPuntos.find(p => p.id === destinoId);
+        destinoTipo = destino ? destino.tipo : null;
+    }
+    if (!destinoTipo) { aviso.classList.add('hidden-section'); return; }
+
+    const clave = origen.tipo + '|' + destinoTipo;
+    if (LEVANTAMIENTO_PARES_CONFIRMADOS.has(clave)) {
+        aviso.classList.add('hidden-section');
+    } else {
+        aviso.innerHTML = `<i class="bi bi-exclamation-triangle"></i> "${origen.tipo} → ${destinoTipo}" todavía no tiene regla de cable confirmada. El tramo se guarda igual, pero no se le va a calcular material hasta que se confirme esa regla.`;
+        aviso.classList.remove('hidden-section');
+    }
 }
 
 function poblarSelectCanalizacionLevantamiento() {
@@ -1461,6 +1507,7 @@ function prepararSiguienteMedicion(origenNombre, destinoNombre, distancia) {
     actualizarPlaceholderNombre();
     limpiarErroresLevantamiento();
     document.getElementById('lv-resumen-medicion').innerText = `${levantamientoPuntos.length} puntos · ${levantamientoTramos.length} tramos`;
+    renderArbolLevantamiento('lv-medicion-arbol-preview');
     const el = document.getElementById('lv-distancia');
     if (el) el.focus();
 }
@@ -1619,8 +1666,9 @@ function renderListaLevantamiento() {
         </div>`).join('');
 }
 
-function renderArbolLevantamiento() {
-    const cont = document.getElementById('lv-arbol-contenido');
+function renderArbolLevantamiento(containerId) {
+    const cont = document.getElementById(containerId || 'lv-arbol-contenido');
+    if (!cont) return;
     const tablero = levantamientoPuntos.find(p => p.tipo === 'TABLERO');
     if (!tablero) { cont.innerHTML = '<p class="text-secondary small">Sin tablero.</p>'; return; }
 
