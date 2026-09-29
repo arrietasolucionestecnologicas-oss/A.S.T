@@ -263,51 +263,52 @@
                 </div>
                 <div class="card bg-dark-panel border-secondary mb-3">
                     <div class="card-body">
-                        <h6 class="text-cyan mb-3"><i class="bi bi-plus-circle"></i> Agregar Punto</h6>
+                        <h6 class="text-cyan mb-2"><i class="bi bi-plus-circle"></i> Nuevo Circuito</h6>
+                        <small class="text-secondary d-block mb-2">Un circuito es una cadena de puntos del mismo tipo (ej: "Alcoba principal - 4 puntos de luz"). Mide con el láser cada tramo: del tablero al primer punto, y luego de un punto al siguiente.</small>
                         <div class="row g-2">
-                            <div class="col-6 col-md-3">
-                                <label class="form-label small text-secondary">Tipo de punto</label>
-                                <select id="el-tipo-punto" class="form-select form-select-sm bg-dark text-white border-secondary"></select>
+                            <div class="col-12 col-md-4">
+                                <label class="form-label small text-secondary">Nombre del circuito (opcional)</label>
+                                <input type="text" id="el-circuito-nombre" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Ej: Alcoba principal">
                             </div>
                             <div class="col-6 col-md-3">
-                                <label class="form-label small text-secondary">Distancia al tablero (m)</label>
-                                <input type="number" id="el-distancia" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="0.1" value="0">
+                                <label class="form-label small text-secondary">Tipo de punto</label>
+                                <select id="el-circuito-tipo" class="form-select form-select-sm bg-dark text-white border-secondary"></select>
                             </div>
                             <div class="col-6 col-md-3">
                                 <label class="form-label small text-secondary">Canalización</label>
-                                <select id="el-canalizacion" class="form-select form-select-sm bg-dark text-white border-secondary">
+                                <select id="el-circuito-canalizacion" class="form-select form-select-sm bg-dark text-white border-secondary">
                                     <option value="CANALETA">Canaleta</option>
                                     <option value="TUBERIA">Tubería</option>
                                 </select>
                             </div>
-                            <div class="col-6 col-md-3">
+                            <div class="col-6 col-md-2">
                                 <label class="form-label small text-secondary">Caja</label>
-                                <select id="el-caja" class="form-select form-select-sm bg-dark text-white border-secondary">
+                                <select id="el-circuito-caja" class="form-select form-select-sm bg-dark text-white border-secondary">
                                     <option value="EMPOTRADA">Empotrada</option>
                                     <option value="SOBREPUESTA">Sobrepuesta</option>
                                 </select>
                             </div>
                         </div>
                         <div class="text-end mt-2">
-                            <button class="btn btn-sm btn-cyan" onclick="agregarPuntoElectrico()"><i class="bi bi-plus-lg"></i> Agregar Punto</button>
+                            <button class="btn btn-sm btn-cyan" onclick="crearCircuitoElectrico()"><i class="bi bi-plus-lg"></i> Crear Circuito</button>
                         </div>
                     </div>
                 </div>
 
-                <div id="electrico-puntos-list" class="mb-3"></div>
+                <div id="electrico-circuitos-list" class="mb-3"></div>
 
                 <div class="card bg-dark-panel border-secondary mb-3">
                     <div class="card-body">
                         <h6 class="text-cyan mb-2"><i class="bi bi-clipboard-data"></i> Resumen de Materiales</h6>
                         <div id="electrico-summary" class="small text-white">
-                            <p class="text-secondary mb-0">Agrega al menos un punto para ver el resumen.</p>
+                            <p class="text-secondary mb-0">Crea un circuito y agrega tramos para ver el resumen.</p>
                         </div>
                     </div>
                 </div>
 
                 <div class="text-end">
                     <button class="btn btn-success" id="btn-electrico-carrito" onclick="agregarEstimacionElectricaAlCarrito()" disabled>
-                        <i class="bi bi-cart-plus"></i> Agregar al Carrito
+                        <i class="bi bi-cart-plus"></i> Agregar al Carrito (precios reales)
                     </button>
                 </div>
             </div>
@@ -586,6 +587,19 @@
                         <div class="col-6">
                             <label class="small text-muted">Máximo NTC 2050 (%)</label>
                             <input type="number" id="cfg-llenado-max" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" max="100" step="1">
+                        </div>
+                    </div>
+
+                    <h6 class="text-cyan small fw-bold">Cajas de paso en tramos largos de tubería</h6>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="small text-muted">Metros máximos sin caja de paso</label>
+                            <input type="number" id="cfg-metros-max-tuberia" class="form-control form-control-sm bg-dark text-white border-secondary" min="1" step="1">
+                            <small class="text-secondary">Regla práctica de oficio para halar cable; RETIE limita por curvas acumuladas, no por metros.</small>
+                        </div>
+                        <div class="col-6">
+                            <label class="small text-muted">Producto de caja de paso (nombre exacto en catálogo)</label>
+                            <input type="text" id="cfg-caja-paso-producto" class="form-control form-control-sm bg-dark text-white border-secondary">
                         </div>
                     </div>
 

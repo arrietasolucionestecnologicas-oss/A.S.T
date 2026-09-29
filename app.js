@@ -554,11 +554,17 @@ const ESTIMADOR_COMUN_DEFAULTS = {
 const ESTIMADOR_ELECTRICO_DEFAULTS = {
     factorLlenoDisenoPct: 40,
     factorLlenoMaxPct: 60,
+    // Tramos de tubería más largos que esto necesitan una caja de paso extra
+    // para poder halar el cable (regla práctica de oficio -- la NTC 2050
+    // limita por curvas acumuladas, no por metros, pero un umbral en metros
+    // es lo que se usa en campo para no perder el hilo).
+    metrosMaxTuberiaSinCajaPaso: 15,
+    cajaPasoProducto: 'CAJA DE PASO 10X10 ACME',
     tiposPunto: [
-        { id: 'punto_luz',     nombre: 'Punto de luz',       calibreAwg: 14, amperaje: 15 },
-        { id: 'toma_normal',   nombre: 'Toma normal',        calibreAwg: 12, amperaje: 20 },
-        { id: 'toma_especial', nombre: 'Toma especial 220V', calibreAwg: 10, amperaje: 30 },
-        { id: 'interruptor',   nombre: 'Interruptor',        calibreAwg: 14, amperaje: 15 }
+        { id: 'punto_luz',     nombre: 'Punto de luz',       calibreAwg: 14, amperaje: 15, conductores: 3, colores: ['NEGRO','BLANCO','VERDE'], cajaEmpotradaProducto: 'Caja Octogonal No-Halogenado Gris', cajaSobrepuestaProducto: 'Caja de sobreponer baja New Light Special' },
+        { id: 'toma_normal',   nombre: 'Toma normal',        calibreAwg: 12, amperaje: 20, conductores: 3, colores: ['NEGRO','BLANCO','VERDE'], cajaEmpotradaProducto: 'Caja PVC 2x4 No-Halogenado Gris', cajaSobrepuestaProducto: 'Caja de sobreponer baja New Light Special' },
+        { id: 'toma_especial', nombre: 'Toma especial 220V', calibreAwg: 10, amperaje: 30, conductores: 3, colores: ['NEGRO','BLANCO','VERDE'], cajaEmpotradaProducto: 'Caja PVC 2x4 No-Halogenado Gris', cajaSobrepuestaProducto: 'Caja de sobreponer alta New Light Special' },
+        { id: 'interruptor',   nombre: 'Interruptor',        calibreAwg: 14, amperaje: 15, conductores: 2, colores: ['NEGRO','ROJO'], cajaEmpotradaProducto: 'Caja PVC 2x4 No-Halogenado Gris', cajaSobrepuestaProducto: 'Caja de sobreponer baja New Light Special' }
     ]
 };
 
@@ -577,7 +583,12 @@ function getEstimadorComunConfig()    { return getEstimadorConfig('ESTIMADOR_COM
 function getEstimadorElectricoConfig(){ return getEstimadorConfig('ESTIMADOR_ELECTRICO_CONFIG', ESTIMADOR_ELECTRICO_DEFAULTS); }
 
 let estimadorSubTab = 'ELECTRICO';
-let estimadorElectricoPuntos = [];
+// Un circuito es una cadena de puntos del mismo tipo: cada "tramo" es la
+// distancia medida en campo (láser/metro) del tablero al primer punto, o de
+// un punto al siguiente -- así se cablea de verdad (no cada punto corriendo
+// independiente al tablero). El resumen suma los tramos de todos los
+// circuitos para sacar materiales reales.
+let estimadorElectricoCircuitos = [];
 let estimadorElectricoResumen = null;
 
 function renderEstimador() {
@@ -592,118 +603,195 @@ function switchEstimadorSubTab(sub) {
     document.getElementById('estimador-cctv').classList.toggle('hidden-section', sub !== 'CCTV');
 
     if (sub === 'ELECTRICO') {
-        poblarSelectTiposPunto();
-        renderElectricoPuntos();
+        poblarSelectTiposPuntoCircuito();
+        renderElectricoCircuitos();
     } else if (sub === 'CCTV') {
         initCctvView();
     }
 }
 
-function poblarSelectTiposPunto() {
+function poblarSelectTiposPuntoCircuito() {
     const cfg = getEstimadorElectricoConfig();
-    const sel = document.getElementById('el-tipo-punto');
+    const sel = document.getElementById('el-circuito-tipo');
     const valorActual = sel.value;
     sel.innerHTML = cfg.tiposPunto.map(t => `<option value="${t.id}">${t.nombre}</option>`).join('');
     if (valorActual && cfg.tiposPunto.some(t => t.id === valorActual)) sel.value = valorActual;
 }
 
-function agregarPuntoElectrico() {
-    const tipoId = document.getElementById('el-tipo-punto').value;
-    const distancia = Number(document.getElementById('el-distancia').value) || 0;
-    const canalizacion = document.getElementById('el-canalizacion').value;
-    const caja = document.getElementById('el-caja').value;
-
+function crearCircuitoElectrico() {
+    const tipoId = document.getElementById('el-circuito-tipo').value;
     if (!tipoId) return alert('Configura al menos un tipo de punto primero (⚙️ Configurar).');
-    if (distancia <= 0) return alert('Ingresa una distancia al tablero mayor a 0.');
+    const nombre = document.getElementById('el-circuito-nombre').value.trim();
+    const canalizacion = document.getElementById('el-circuito-canalizacion').value;
+    const caja = document.getElementById('el-circuito-caja').value;
 
-    estimadorElectricoPuntos.push({ id: generateUUID(), tipoId, distancia, canalizacion, caja });
-
-    document.getElementById('el-distancia').value = 0;
-    renderElectricoPuntos();
+    estimadorElectricoCircuitos.push({ id: generateUUID(), nombre, tipoId, canalizacion, caja, tramos: [] });
+    document.getElementById('el-circuito-nombre').value = '';
+    renderElectricoCircuitos();
 }
 
-function eliminarPuntoElectrico(id) {
-    estimadorElectricoPuntos = estimadorElectricoPuntos.filter(p => p.id !== id);
-    renderElectricoPuntos();
+function eliminarCircuito(id) {
+    estimadorElectricoCircuitos = estimadorElectricoCircuitos.filter(c => c.id !== id);
+    renderElectricoCircuitos();
+}
+
+function agregarTramoCircuito(circuitoId) {
+    const input = document.getElementById('tramo-input-' + circuitoId);
+    const distancia = Number(input.value) || 0;
+    if (distancia <= 0) return alert('Ingresa una distancia mayor a 0.');
+    const circuito = estimadorElectricoCircuitos.find(c => c.id === circuitoId);
+    circuito.tramos.push(distancia);
+    renderElectricoCircuitos();
+}
+
+function agregarTramosLoteCircuito(circuitoId) {
+    const inputCant = document.getElementById('tramo-lote-cant-' + circuitoId);
+    const inputDist = document.getElementById('tramo-lote-dist-' + circuitoId);
+    const cantidad = Number(inputCant.value) || 0;
+    const distancia = Number(inputDist.value) || 0;
+    if (cantidad <= 0 || distancia <= 0) return alert('Ingresa cantidad y distancia mayores a 0.');
+    const circuito = estimadorElectricoCircuitos.find(c => c.id === circuitoId);
+    for (let i = 0; i < cantidad; i++) circuito.tramos.push(distancia);
+    renderElectricoCircuitos();
+}
+
+function eliminarTramoCircuito(circuitoId, index) {
+    const circuito = estimadorElectricoCircuitos.find(c => c.id === circuitoId);
+    circuito.tramos.splice(index, 1);
+    renderElectricoCircuitos();
 }
 
 function calcularEstimacionElectrica() {
     const comun = getEstimadorComunConfig();
     const elec = getEstimadorElectricoConfig();
     const holguraFactor = 1 + ((Number(comun.holguraCablePct) || 0) / 100);
-    const sobranteM = ((Number(comun.sobranteExtremoCm) || 0) * 2) / 100; // 2 extremos: caja + tablero
+    const sobranteM = (Number(comun.sobranteExtremoCm) || 0) / 100;
+    const umbralTuberia = Number(elec.metrosMaxTuberiaSinCajaPaso) || 15;
 
     const porTipo = {};
     let metrosCanaleta = 0;
     let metrosTuberia = 0;
-    let cajasEmpotradas = 0;
-    let cajasSobrepuestas = 0;
+    const cajasEmpotradas = {};
+    const cajasSobrepuestas = {};
+    let cajasPasoExtra = 0;
+    let totalPuntos = 0;
 
-    estimadorElectricoPuntos.forEach(p => {
-        const tipo = elec.tiposPunto.find(t => t.id === p.tipoId) || { id: p.tipoId, nombre: p.tipoId, calibreAwg: '-', amperaje: '-' };
-        const metrosCableUnitario = (p.distancia * holguraFactor) + sobranteM;
+    estimadorElectricoCircuitos.forEach(c => {
+        const tipo = elec.tiposPunto.find(t => t.id === c.tipoId) ||
+            { id: c.tipoId, nombre: c.tipoId, calibreAwg: '-', amperaje: '-', conductores: 1, colores: [] };
 
         if (!porTipo[tipo.id]) {
-            porTipo[tipo.id] = { nombre: tipo.nombre, calibreAwg: tipo.calibreAwg, amperaje: tipo.amperaje, cantidadPuntos: 0, metrosCable: 0 };
+            porTipo[tipo.id] = {
+                nombre: tipo.nombre, calibreAwg: tipo.calibreAwg, amperaje: tipo.amperaje,
+                conductores: tipo.conductores || 1, colores: tipo.colores || [],
+                cantidadPuntos: 0, metrosRecorrido: 0
+            };
         }
-        porTipo[tipo.id].cantidadPuntos++;
-        porTipo[tipo.id].metrosCable += metrosCableUnitario;
 
-        if (p.canalizacion === 'CANALETA') metrosCanaleta += p.distancia;
-        else metrosTuberia += p.distancia;
+        c.tramos.forEach(tramoM => {
+            const t = Number(tramoM) || 0;
+            porTipo[tipo.id].cantidadPuntos++;
+            porTipo[tipo.id].metrosRecorrido += t;
+            totalPuntos++;
 
-        if (p.caja === 'EMPOTRADA') cajasEmpotradas++;
-        else cajasSobrepuestas++;
+            if (c.canalizacion === 'CANALETA') {
+                metrosCanaleta += t;
+            } else {
+                metrosTuberia += t;
+                // Tramo de tubería más largo que el umbral: se necesita una
+                // caja de paso extra para poder halar el cable (ver nota en
+                // ESTIMADOR_ELECTRICO_DEFAULTS).
+                if (t > umbralTuberia) cajasPasoExtra += Math.floor(t / umbralTuberia);
+            }
+
+            const cajaProducto = c.caja === 'EMPOTRADA' ? tipo.cajaEmpotradaProducto : tipo.cajaSobrepuestaProducto;
+            if (cajaProducto) {
+                const bucket = c.caja === 'EMPOTRADA' ? cajasEmpotradas : cajasSobrepuestas;
+                bucket[cajaProducto] = (bucket[cajaProducto] || 0) + 1;
+            }
+        });
     });
 
-    const totalMetrosCable = Object.values(porTipo).reduce((s, t) => s + t.metrosCable, 0);
+    // Cable con holgura + sobrante (una vez por cada caja del circuito, más
+    // una vez al llegar al tablero), separado por color de conductor.
+    const cablePorColor = {};
+    let totalMetrosCable = 0;
+    Object.values(porTipo).forEach(t => {
+        const metrosConHolgura = (t.metrosRecorrido * holguraFactor) + (sobranteM * (t.cantidadPuntos + 1));
+        t.metrosCable = metrosConHolgura;
+        const conductores = t.conductores || 1;
+        const colores = (t.colores && t.colores.length === conductores) ? t.colores : Array(conductores).fill('NEGRO');
+        colores.forEach(color => {
+            const key = t.calibreAwg + '|' + color;
+            cablePorColor[key] = (cablePorColor[key] || 0) + metrosConHolgura;
+            totalMetrosCable += metrosConHolgura;
+        });
+    });
 
     return {
-        totalPuntos: estimadorElectricoPuntos.length,
-        porTipo,
-        totalMetrosCable,
-        metrosCanaleta,
-        metrosTuberia,
-        cajasEmpotradas,
-        cajasSobrepuestas,
+        totalPuntos, porTipo, cablePorColor, totalMetrosCable,
+        metrosCanaleta, metrosTuberia,
+        cajasEmpotradas, cajasSobrepuestas, cajasPasoExtra,
+        cajaPasoProducto: elec.cajaPasoProducto,
         factorLlenoDisenoPct: elec.factorLlenoDisenoPct,
-        factorLlenoMaxPct: elec.factorLlenoMaxPct
+        factorLlenoMaxPct: elec.factorLlenoMaxPct,
+        umbralTuberia
     };
 }
 
-function renderElectricoPuntos() {
-    const listEl = document.getElementById('electrico-puntos-list');
+function renderElectricoCircuitos() {
+    const listEl = document.getElementById('electrico-circuitos-list');
     const elec = getEstimadorElectricoConfig();
 
-    if (estimadorElectricoPuntos.length === 0) {
+    if (estimadorElectricoCircuitos.length === 0) {
         listEl.innerHTML = '';
     } else {
-        listEl.innerHTML = `
-        <div class="card bg-dark-panel border-secondary">
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-dark table-sm mb-0 align-middle">
-                        <thead>
-                            <tr class="text-secondary small">
-                                <th>Tipo</th><th>Dist. (m)</th><th>Canalización</th><th>Caja</th><th></th>
-                            </tr>
-                        </thead>
+        listEl.innerHTML = estimadorElectricoCircuitos.map(c => {
+            const tipo = elec.tiposPunto.find(t => t.id === c.tipoId);
+            const totalMetros = c.tramos.reduce((s, t) => s + t, 0);
+            return `
+            <div class="card bg-dark-panel border-secondary mb-2">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <strong class="text-white">${c.nombre || (tipo ? tipo.nombre : c.tipoId)}</strong>
+                            <div class="small text-secondary">${tipo ? tipo.nombre : c.tipoId} · ${c.canalizacion === 'CANALETA' ? 'Canaleta' : 'Tubería'} · Caja ${c.caja === 'EMPOTRADA' ? 'empotrada' : 'sobrepuesta'} · ${c.tramos.length} punto(s) · ${totalMetros.toFixed(2)}m</div>
+                        </div>
+                        <button class="btn btn-sm text-danger p-0" onclick="eliminarCircuito('${c.id}')"><i class="bi bi-trash"></i></button>
+                    </div>
+
+                    <div class="row g-2 mb-2">
+                        <div class="col-8">
+                            <label class="small text-muted">Tramo (m) — del tablero o del punto anterior</label>
+                            <input type="number" id="tramo-input-${c.id}" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="0.1">
+                        </div>
+                        <div class="col-4 d-flex align-items-end">
+                            <button class="btn btn-sm btn-cyan w-100" onclick="agregarTramoCircuito('${c.id}')">+ Agregar</button>
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-4">
+                            <label class="small text-muted">Lote: cantidad</label>
+                            <input type="number" id="tramo-lote-cant-${c.id}" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="1" placeholder="Ej: 4">
+                        </div>
+                        <div class="col-4">
+                            <label class="small text-muted">Distancia c/u (m)</label>
+                            <input type="number" id="tramo-lote-dist-${c.id}" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="0.1" placeholder="Ej: 3">
+                        </div>
+                        <div class="col-4 d-flex align-items-end">
+                            <button class="btn btn-sm btn-outline-cyan w-100" onclick="agregarTramosLoteCircuito('${c.id}')">+ Lote</button>
+                        </div>
+                    </div>
+
+                    ${c.tramos.length > 0 ? `
+                    <table class="table table-dark table-sm mb-0">
                         <tbody>
-                        ${estimadorElectricoPuntos.map(p => {
-                            const tipo = elec.tiposPunto.find(t => t.id === p.tipoId);
-                            return `<tr>
-                                <td class="small">${tipo ? tipo.nombre : p.tipoId}</td>
-                                <td class="small">${p.distancia}</td>
-                                <td class="small">${p.canalizacion === 'CANALETA' ? 'Canaleta' : 'Tubería'}</td>
-                                <td class="small">${p.caja === 'EMPOTRADA' ? 'Empotrada' : 'Sobrepuesta'}</td>
-                                <td class="text-end"><button class="btn btn-sm text-danger p-0" onclick="eliminarPuntoElectrico('${p.id}')"><i class="bi bi-trash"></i></button></td>
-                            </tr>`;
-                        }).join('')}
+                        ${c.tramos.map((t, i) => `<tr><td class="small">Punto ${i + 1}</td><td class="small">${t} m</td><td class="text-end"><button class="btn btn-sm text-danger p-0" onclick="eliminarTramoCircuito('${c.id}',${i})"><i class="bi bi-x"></i></button></td></tr>`).join('')}
                         </tbody>
-                    </table>
+                    </table>` : '<div class="small text-secondary">Sin tramos aún.</div>'}
                 </div>
-            </div>
-        </div>`;
+            </div>`;
+        }).join('');
     }
 
     renderElectricoSummary();
@@ -713,8 +801,9 @@ function renderElectricoSummary() {
     const summaryEl = document.getElementById('electrico-summary');
     const btnCarrito = document.getElementById('btn-electrico-carrito');
 
-    if (estimadorElectricoPuntos.length === 0) {
-        summaryEl.innerHTML = '<p class="text-secondary mb-0">Agrega al menos un punto para ver el resumen.</p>';
+    const totalTramos = estimadorElectricoCircuitos.reduce((s, c) => s + c.tramos.length, 0);
+    if (totalTramos === 0) {
+        summaryEl.innerHTML = '<p class="text-secondary mb-0">Crea un circuito y agrega tramos para ver el resumen.</p>';
         btnCarrito.disabled = true;
         estimadorElectricoResumen = null;
         return;
@@ -725,54 +814,74 @@ function renderElectricoSummary() {
     btnCarrito.disabled = false;
 
     let html = `<div class="mb-2"><span class="text-secondary">Total de puntos:</span> <strong>${r.totalPuntos}</strong></div>`;
-    html += '<table class="table table-dark table-sm mb-2"><thead><tr class="text-secondary small"><th>Tipo</th><th>Cant.</th><th>Calibre</th><th>Cable (m)</th></tr></thead><tbody>';
+    html += '<table class="table table-dark table-sm mb-2"><thead><tr class="text-secondary small"><th>Tipo</th><th>Cant.</th><th>Calibre</th><th>Recorrido (m)</th></tr></thead><tbody>';
     Object.values(r.porTipo).forEach(t => {
-        html += `<tr><td class="small">${t.nombre}</td><td class="small">${t.cantidadPuntos}</td><td class="small">${t.calibreAwg} AWG (${t.amperaje}A)</td><td class="small">${t.metrosCable.toFixed(2)}</td></tr>`;
+        html += `<tr><td class="small">${t.nombre}</td><td class="small">${t.cantidadPuntos}</td><td class="small">${t.calibreAwg} AWG (${t.amperaje}A)</td><td class="small">${t.metrosRecorrido.toFixed(2)}</td></tr>`;
     });
-    html += `<tr class="fw-bold"><td colspan="3" class="small">Total cable</td><td class="small">${r.totalMetrosCable.toFixed(2)} m</td></tr>`;
     html += '</tbody></table>';
 
-    html += `<div class="row g-2 small">
+    html += '<h6 class="text-cyan small fw-bold mt-3">Cable por color/calibre (con holgura y sobrante)</h6>';
+    html += '<table class="table table-dark table-sm mb-2"><thead><tr class="text-secondary small"><th>Calibre</th><th>Color</th><th>Metros</th></tr></thead><tbody>';
+    Object.entries(r.cablePorColor).forEach(([key, metros]) => {
+        const [calibre, color] = key.split('|');
+        html += `<tr><td class="small">${calibre} AWG</td><td class="small">${color}</td><td class="small">${metros.toFixed(2)}</td></tr>`;
+    });
+    html += `<tr class="fw-bold"><td colspan="2" class="small">Total cable</td><td class="small">${r.totalMetrosCable.toFixed(2)} m</td></tr>`;
+    html += '</tbody></table>';
+
+    html += `<div class="row g-2 small mb-2">
         <div class="col-6"><i class="bi bi-arrow-bar-right"></i> Canaleta: <strong>${r.metrosCanaleta.toFixed(2)} m</strong></div>
         <div class="col-6"><i class="bi bi-arrow-bar-right"></i> Tubería: <strong>${r.metrosTuberia.toFixed(2)} m</strong></div>
-        <div class="col-6"><i class="bi bi-box"></i> Cajas empotradas: <strong>${r.cajasEmpotradas}</strong></div>
-        <div class="col-6"><i class="bi bi-box"></i> Cajas sobrepuestas: <strong>${r.cajasSobrepuestas}</strong></div>
-    </div>
-    <div class="text-secondary small mt-2">Factor de llenado: diseño ${r.factorLlenoDisenoPct}% / máximo ${r.factorLlenoMaxPct}% (informativo, según primeros capítulos NTC 2050).</div>`;
+    </div>`;
+
+    html += '<h6 class="text-cyan small fw-bold">Cajas</h6><ul class="small mb-2">';
+    Object.entries(r.cajasEmpotradas).forEach(([nombre, cant]) => html += `<li>${nombre} (empotrada): <strong>${cant}</strong></li>`);
+    Object.entries(r.cajasSobrepuestas).forEach(([nombre, cant]) => html += `<li>${nombre} (sobrepuesta): <strong>${cant}</strong></li>`);
+    if (r.cajasPasoExtra > 0) html += `<li class="text-warning">${r.cajaPasoProducto} — cajas de paso extra (tramos de tubería &gt; ${r.umbralTuberia}m): <strong>${r.cajasPasoExtra}</strong></li>`;
+    html += '</ul>';
+
+    html += `<div class="text-secondary small mt-2">Factor de llenado: diseño ${r.factorLlenoDisenoPct}% / máximo ${r.factorLlenoMaxPct}% (informativo, según primeros capítulos NTC 2050).</div>`;
 
     summaryEl.innerHTML = html;
 }
 
+function buscarPrecioCatalogo(nombre) {
+    // Comparación sin espacios sobrantes: algunos nombres en el catálogo
+    // traen espacios al final (ej. "CAJA DE PASO 10X10 ACME ") por como se
+    // digitaron originalmente, y una comparación exacta los pierde.
+    const buscado = (nombre || '').trim();
+    const item = catalog.find(p => (p.nombre || '').trim() === buscado);
+    return item ? { costo: item.costo || 0, precio: item.precio || 0, encontrado: true } : { costo: 0, precio: 0, encontrado: false };
+}
+
 function agregarEstimacionElectricaAlCarrito() {
-    if (!estimadorElectricoResumen || estimadorElectricoPuntos.length === 0) return;
+    if (!estimadorElectricoResumen) return;
     const r = estimadorElectricoResumen;
+    const faltantes = [];
 
-    Object.values(r.porTipo).forEach(t => {
-        cart.push({
-            uuid: generateUUID(),
-            nombre: `Cable ${t.calibreAwg} AWG — ${t.nombre}`,
-            precio: 0,
-            costo: 0,
-            cantidad: Math.ceil(t.metrosCable),
-            specs: `Estimador Eléctrico — ${t.cantidadPuntos} punto(s) de ${t.nombre}`
-        });
+    function push(nombre, cantidad, specs) {
+        if (cantidad <= 0) return;
+        const { costo, precio, encontrado } = buscarPrecioCatalogo(nombre);
+        if (!encontrado) faltantes.push(nombre);
+        cart.push({ uuid: generateUUID(), nombre, precio, costo, cantidad: Math.ceil(cantidad), specs });
+    }
+
+    Object.entries(r.cablePorColor).forEach(([key, metros]) => {
+        const [calibre, color] = key.split('|');
+        push(`Cable THHN-THWN-2 ${calibre} ${color}`, metros, 'Estimador Eléctrico');
     });
-
-    if (r.metrosCanaleta > 0) {
-        cart.push({ uuid: generateUUID(), nombre: 'Canaleta', precio: 0, costo: 0, cantidad: Math.ceil(r.metrosCanaleta), specs: 'Estimador Eléctrico' });
-    }
-    if (r.metrosTuberia > 0) {
-        cart.push({ uuid: generateUUID(), nombre: 'Tubería EMT/PVC', precio: 0, costo: 0, cantidad: Math.ceil(r.metrosTuberia), specs: 'Estimador Eléctrico' });
-    }
-    if (r.cajasEmpotradas > 0) {
-        cart.push({ uuid: generateUUID(), nombre: 'Caja empotrada', precio: 0, costo: 0, cantidad: r.cajasEmpotradas, specs: 'Estimador Eléctrico' });
-    }
-    if (r.cajasSobrepuestas > 0) {
-        cart.push({ uuid: generateUUID(), nombre: 'Caja sobrepuesta', precio: 0, costo: 0, cantidad: r.cajasSobrepuestas, specs: 'Estimador Eléctrico' });
-    }
+    if (r.metrosCanaleta > 0) push('Canaleta Blanca 20x12mm con Adhesivo', r.metrosCanaleta, 'Estimador Eléctrico');
+    if (r.metrosTuberia > 0) push('Tubo Conduit PVC 1/2 pulgada x 3MT', Math.ceil(r.metrosTuberia / 3), 'Estimador Eléctrico — tubos de 3m (ajusta el diámetro si aplica)');
+    Object.entries(r.cajasEmpotradas).forEach(([nombre, cant]) => push(nombre, cant, 'Estimador Eléctrico'));
+    Object.entries(r.cajasSobrepuestas).forEach(([nombre, cant]) => push(nombre, cant, 'Estimador Eléctrico'));
+    if (r.cajasPasoExtra > 0) push(r.cajaPasoProducto, r.cajasPasoExtra, `Estimador Eléctrico — tramo de tubería > ${r.umbralTuberia}m`);
 
     updateCartUI();
-    showToast('Materiales agregados al carrito. Revisa precios antes de cotizar.', 'success');
+    if (faltantes.length > 0) {
+        showToast('Agregado. Sin precio en catálogo para: ' + faltantes.join(', ') + ' — revísalos a mano.', 'warning');
+    } else {
+        showToast('Materiales agregados al carrito con precios reales del catálogo.', 'success');
+    }
     openCart();
 }
 
@@ -785,6 +894,8 @@ function openEstimadorConfigModal(modulo) {
     document.getElementById('cfg-sobrante-cm').value = comun.sobranteExtremoCm;
     document.getElementById('cfg-llenado-diseno').value = elec.factorLlenoDisenoPct;
     document.getElementById('cfg-llenado-max').value = elec.factorLlenoMaxPct;
+    document.getElementById('cfg-metros-max-tuberia').value = elec.metrosMaxTuberiaSinCajaPaso;
+    document.getElementById('cfg-caja-paso-producto').value = elec.cajaPasoProducto;
 
     renderTiposPuntoConfigList(elec.tiposPunto);
 
@@ -803,12 +914,28 @@ function renderTiposPuntoConfigList(tipos) {
                 <label class="small text-muted">Calibre (AWG)</label>
                 <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary cfg-tipo-calibre" value="${t.calibreAwg}">
             </div>
-            <div class="col-3">
+            <div class="col-2">
                 <label class="small text-muted">Amperaje (A)</label>
                 <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary cfg-tipo-amperaje" value="${t.amperaje}">
             </div>
-            <div class="col-2 text-end">
+            <div class="col-2">
+                <label class="small text-muted">Conductores</label>
+                <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary cfg-tipo-conductores" value="${t.conductores || 1}" min="1" step="1">
+            </div>
+            <div class="col-1 text-end">
                 <button class="btn btn-sm text-danger" onclick="eliminarTipoPuntoConfig(${i})"><i class="bi bi-trash"></i></button>
+            </div>
+            <div class="col-4">
+                <label class="small text-muted">Colores (fase,neutro,tierra...)</label>
+                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary cfg-tipo-colores" value="${(t.colores || []).join(',')}" placeholder="NEGRO,BLANCO,VERDE">
+            </div>
+            <div class="col-4">
+                <label class="small text-muted">Caja empotrada (nombre exacto en catálogo)</label>
+                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary cfg-tipo-caja-empotrada" value="${t.cajaEmpotradaProducto || ''}">
+            </div>
+            <div class="col-4">
+                <label class="small text-muted">Caja sobrepuesta (nombre exacto en catálogo)</label>
+                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary cfg-tipo-caja-sobrepuesta" value="${t.cajaSobrepuestaProducto || ''}">
             </div>
         </div>
     `).join('');
@@ -817,7 +944,7 @@ function renderTiposPuntoConfigList(tipos) {
 function agregarTipoPuntoConfig() {
     const elec = getEstimadorElectricoConfig();
     const tipos = leerTiposPuntoDelForm(elec.tiposPunto);
-    tipos.push({ id: generateUUID(), nombre: 'Nuevo tipo', calibreAwg: 14, amperaje: 15 });
+    tipos.push({ id: generateUUID(), nombre: 'Nuevo tipo', calibreAwg: 14, amperaje: 15, conductores: 3, colores: ['NEGRO', 'BLANCO', 'VERDE'], cajaEmpotradaProducto: '', cajaSobrepuestaProducto: '' });
     renderTiposPuntoConfigList(tipos);
 }
 
@@ -834,7 +961,11 @@ function leerTiposPuntoDelForm(tiposOriginales) {
         id: (tiposOriginales[i] && tiposOriginales[i].id) || generateUUID(),
         nombre: row.querySelector('.cfg-tipo-nombre').value || 'Sin nombre',
         calibreAwg: row.querySelector('.cfg-tipo-calibre').value,
-        amperaje: Number(row.querySelector('.cfg-tipo-amperaje').value) || 0
+        amperaje: Number(row.querySelector('.cfg-tipo-amperaje').value) || 0,
+        conductores: Number(row.querySelector('.cfg-tipo-conductores').value) || 1,
+        colores: row.querySelector('.cfg-tipo-colores').value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean),
+        cajaEmpotradaProducto: row.querySelector('.cfg-tipo-caja-empotrada').value.trim(),
+        cajaSobrepuestaProducto: row.querySelector('.cfg-tipo-caja-sobrepuesta').value.trim()
     }));
 }
 
@@ -850,6 +981,8 @@ async function guardarEstimadorConfig() {
     const electricoConfig = {
         factorLlenoDisenoPct: Number(document.getElementById('cfg-llenado-diseno').value) || 0,
         factorLlenoMaxPct: Number(document.getElementById('cfg-llenado-max').value) || 0,
+        metrosMaxTuberiaSinCajaPaso: Number(document.getElementById('cfg-metros-max-tuberia').value) || 15,
+        cajaPasoProducto: document.getElementById('cfg-caja-paso-producto').value.trim(),
         tiposPunto: tipos
     };
 
@@ -866,8 +999,8 @@ async function guardarEstimadorConfig() {
         setCacheWithTimestamp('ast_config', configuracion);
 
         bootstrap.Modal.getInstance(document.getElementById('estimadorConfigModal')).hide();
-        poblarSelectTiposPunto();
-        renderElectricoPuntos();
+        poblarSelectTiposPuntoCircuito();
+        renderElectricoCircuitos();
         showToast('Configuración del estimador guardada.', 'success');
     } catch (e) {
         console.error(e);
