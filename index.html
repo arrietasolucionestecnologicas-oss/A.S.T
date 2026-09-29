@@ -1630,7 +1630,7 @@
                     <button class="btn btn-cyan w-100 mb-2 py-3" style="font-size:1.2rem;" onclick="irANuevaMedicion()">
                         <i class="bi bi-plus-circle-fill"></i> NUEVA MEDICIÓN
                     </button>
-                    <div class="row g-2 mb-4">
+                    <div class="row g-2 mb-2">
                         <div class="col-6">
                             <button class="btn btn-outline-cyan w-100 py-2" onclick="irACadenaRapida()"><i class="bi bi-lightning-charge"></i> Cadena Rápida</button>
                         </div>
@@ -1638,6 +1638,7 @@
                             <button class="btn btn-outline-secondary w-100 py-2" onclick="irAVerLevantamiento()"><i class="bi bi-diagram-3"></i> Ver Levantamiento</button>
                         </div>
                     </div>
+                    <button class="btn btn-outline-success w-100 py-2 mb-4" onclick="irACalcularMateriales()"><i class="bi bi-box-seam"></i> Calcular Materiales</button>
                     <div class="text-center text-secondary small" id="lv-resumen">0 puntos · 0 tramos</div>
                 </div>
 
@@ -1791,6 +1792,12 @@
                     </div>
                     <div id="lv-lista-contenido"></div>
                     <div id="lv-arbol-contenido" class="hidden-section"></div>
+                </div>
+
+                <!-- Materiales calculados -->
+                <div id="lv-screen-MATERIALES" class="hidden-section">
+                    <button class="btn btn-sm btn-outline-secondary mb-3" onclick="mostrarPantallaLevantamiento('HOME')"><i class="bi bi-arrow-left"></i> Atrás</button>
+                    <div id="lv-materiales-contenido"></div>
                 </div>
 
             </div>

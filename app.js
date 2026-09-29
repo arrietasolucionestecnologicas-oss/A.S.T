@@ -1356,7 +1356,7 @@ function renderLevantamientoHome() {
 
 function mostrarPantallaLevantamiento(pantalla) {
     levantamientoScreen = pantalla;
-    ['HOME', 'MEDICION', 'CADENA', 'LISTA'].forEach(s => {
+    ['HOME', 'MEDICION', 'CADENA', 'LISTA', 'MATERIALES'].forEach(s => {
         document.getElementById('lv-screen-' + s).classList.toggle('hidden-section', s !== pantalla);
     });
     if (pantalla === 'HOME') renderLevantamientoHome();
@@ -1722,6 +1722,120 @@ async function confirmarEliminarPuntoLevantamiento(id) {
     } else {
         alert('Sin conexión — no se pudo eliminar, intenta de nuevo.');
     }
+}
+
+// --- Motor de Materiales (Fase D) ---
+// TRAMOS -> TOPOLOGÍA -> REGLAS -> CONDUCTORES -> METROS -> RESERVA ->
+// MATERIALES corre en el backend (una sola fuente de verdad, con
+// trazabilidad persistida). Aquí solo se pide el cálculo, se muestra, y se
+// enlaza con el catálogo real para precios -- el motor nunca toca precios.
+let levantamientoMaterialesResultado = null;
+
+async function irACalcularMateriales() {
+    mostrarPantallaLevantamiento('MATERIALES');
+    document.getElementById('lv-materiales-contenido').innerHTML = '<div class="text-center mt-4"><div class="spinner-border text-cyan"></div></div>';
+    const res = await callApi('calcularMaterialesLevantamiento', { proyectoId: currentProject });
+    if (!resultadoOk(res)) {
+        document.getElementById('lv-materiales-contenido').innerHTML = '<div class="alert alert-warning small">Sin conexión — no se pudo calcular. Intenta de nuevo.</div>';
+        return;
+    }
+    levantamientoMaterialesResultado = res.data;
+    renderMaterialesLevantamiento();
+}
+
+function renderMaterialesLevantamiento() {
+    const r = levantamientoMaterialesResultado;
+    const cont = document.getElementById('lv-materiales-contenido');
+    if (!r) { cont.innerHTML = ''; return; }
+
+    let html = '';
+
+    if (r.advertenciasTramoLargo && r.advertenciasTramoLargo.length > 0) {
+        html += '<div class="alert alert-warning small mb-3"><i class="bi bi-exclamation-triangle"></i> <strong>Tramos largos en tubería</strong> — revisa si necesitan caja de paso (no se crea sola):<ul class="mb-0 mt-1">';
+        r.advertenciasTramoLargo.forEach(a => {
+            html += `<li>${a.origen} → ${a.destino}: ${a.distancia}m (máx. recomendado ${a.umbral}m) <button class="btn btn-sm btn-outline-warning py-0 px-1 ms-1" onclick="agregarCajaDePasoEnTramo('${a.tramoId}')">+ Caja de paso</button></li>`;
+        });
+        html += '</ul></div>';
+    }
+
+    if (r.materialesSinRegla && r.materialesSinRegla.length > 0) {
+        html += '<div class="alert alert-danger small mb-3"><i class="bi bi-question-circle"></i> <strong>Sin regla de conductores para estas combinaciones</strong> (no se calculó cable ahí, configúralas en el motor):<ul class="mb-0 mt-1">';
+        r.materialesSinRegla.forEach(m => { html += `<li>${m.origenTipo} → ${m.destinoTipo}</li>`; });
+        html += '</ul></div>';
+    }
+
+    html += '<h6 class="text-cyan small fw-bold mb-2">Materiales calculados</h6>';
+    if (!r.materiales || r.materiales.length === 0) {
+        html += '<p class="text-secondary small">Sin materiales — agrega tramos primero.</p>';
+    } else {
+        html += '<div class="mb-3">';
+        r.materiales.forEach(m => {
+            html += `<div class="py-2" style="border-bottom:1px solid var(--ast-border);">
+                <div class="d-flex justify-content-between">
+                    <strong class="text-white small">${m.material}</strong>
+                    <span class="text-cyan small">${typeof m.cantidadReal === 'number' ? m.cantidadReal.toFixed(2) : m.cantidadReal} ${m.unidad}</span>
+                </div>
+                <div class="text-secondary" style="font-size:0.7rem;">${m.reglaAplicada}</div>
+            </div>`;
+        });
+        html += '</div>';
+        html += '<button class="btn btn-success w-100 py-2" onclick="agregarMaterialesLevantamientoAlCarrito()"><i class="bi bi-cart-plus"></i> Agregar al Carrito</button>';
+    }
+
+    cont.innerHTML = html;
+}
+
+function agregarMaterialesLevantamientoAlCarrito() {
+    if (!levantamientoMaterialesResultado || !levantamientoMaterialesResultado.materiales) return;
+    const faltantes = [];
+    levantamientoMaterialesResultado.materiales.forEach(m => {
+        const { costo, precio, encontrado } = buscarPrecioCatalogo(m.material);
+        if (!encontrado) faltantes.push(m.material);
+        cart.push({ uuid: generateUUID(), nombre: m.material, precio, costo, cantidad: Math.ceil(m.cantidadReal), specs: `Levantamiento — ${m.reglaAplicada}` });
+    });
+    updateCartUI();
+    if (faltantes.length > 0) {
+        showToast('Agregado. Sin precio en catálogo para: ' + faltantes.join(', ') + ' — revísalos a mano.', 'warning');
+    } else {
+        showToast('Materiales agregados al carrito con precios reales del catálogo.', 'success');
+    }
+    bootstrap.Modal.getInstance(document.getElementById('levantamientoModal')).hide();
+    openCart();
+}
+
+// La app NUNCA crea la caja de paso sola -- solo advierte. Esto es la
+// acción explícita que el usuario dispara: divide el tramo largo en dos,
+// insertando la caja de paso en el punto que el usuario indique.
+async function agregarCajaDePasoEnTramo(tramoId) {
+    const t = levantamientoTramos.find(x => x.id === tramoId);
+    if (!t) { alert('Abre "Ver Levantamiento" primero para cargar ese tramo.'); return; }
+
+    const mitad = (t.distancia / 2).toFixed(2);
+    const d1raw = prompt(`Distancia desde ${etiquetaPuntoLevantamiento(t.origenId)} hasta la nueva caja de paso (tramo total: ${t.distancia}m):`, mitad);
+    if (d1raw === null) return;
+    const dist1 = parseFloat(String(d1raw).replace(',', '.'));
+    if (isNaN(dist1) || dist1 <= 0 || dist1 >= t.distancia) { alert('Distancia inválida.'); return; }
+    const dist2 = +(t.distancia - dist1).toFixed(2);
+
+    const nombreSugerido = sugerirNombrePuntoLevantamiento('CAJA_PASO');
+    const nombreCaja = prompt('Nombre de la nueva caja de paso:', nombreSugerido) || nombreSugerido;
+
+    const resPunto = await callApi('crearPuntoLevantamiento', { proyectoId: currentProject, tipo: 'CAJA_PASO', nombre: nombreCaja });
+    if (!resultadoOk(resPunto)) { alert('Sin conexión — no se pudo crear la caja de paso.'); return; }
+    const cajaId = resPunto.data.id;
+    levantamientoPuntos.push({ id: cajaId, proyectoId: currentProject, nombre: nombreCaja, tipo: 'CAJA_PASO', fechaCreacion: new Date().toISOString() });
+
+    const resT1 = await callApi('crearTramoLevantamiento', { proyectoId: currentProject, origenId: t.origenId, destinoId: cajaId, distancia: dist1, tipoInstalacion: 'ELECTRICO', canalizacion: t.canalizacion, diametro: t.diametro });
+    const resT2 = await callApi('crearTramoLevantamiento', { proyectoId: currentProject, origenId: cajaId, destinoId: t.destinoId, distancia: dist2, tipoInstalacion: 'ELECTRICO', canalizacion: t.canalizacion, diametro: t.diametro });
+    if (!resultadoOk(resT1) || !resultadoOk(resT2)) { alert('La caja de paso quedó creada pero no se pudo dividir el tramo — revisa "Ver Levantamiento" y termina a mano.'); return; }
+
+    await callApi('eliminarTramoLevantamiento', { id: t.id });
+    levantamientoTramos = levantamientoTramos.filter(x => x.id !== t.id);
+    levantamientoTramos.push({ id: resT1.data.id, proyectoId: currentProject, origenId: t.origenId, destinoId: cajaId, distancia: dist1, canalizacion: t.canalizacion, diametro: t.diametro });
+    levantamientoTramos.push({ id: resT2.data.id, proyectoId: currentProject, origenId: cajaId, destinoId: t.destinoId, distancia: dist2, canalizacion: t.canalizacion, diametro: t.diametro });
+
+    showToast('Caja de paso agregada. Recalculando materiales...', 'success');
+    irACalcularMateriales();
 }
 
 // --- Configuración de CCTV (modal propio) ---
