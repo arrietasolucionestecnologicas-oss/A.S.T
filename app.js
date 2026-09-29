@@ -1519,6 +1519,60 @@ async function renderDashboard() {
     }
     dibujarGraficaDashboard();
     renderCierreMensual();
+    renderMantenimientosCamaras();
+}
+
+// Mantenimiento de camaras: estandar trimestral (cada 3 meses) para CCTV en
+// Colombia, ver MESES_CICLO_MANTENIMIENTO_CAMARAS en el backend. Se recarga
+// siempre (no se cachea como dashboardData) porque "Marcar realizado" cambia
+// el resultado de inmediato.
+async function renderMantenimientosCamaras() {
+    const cont = document.getElementById('mant-camaras-lista');
+    const vacio = document.getElementById('mant-camaras-vacio');
+    const res = await callApi('getMantenimientosCamaras', {});
+    if (!res.success) { cont.innerHTML = ''; return; }
+
+    const pendientes = res.data.filter(m => m.status !== 'OK');
+    if (pendientes.length === 0) {
+        cont.innerHTML = '';
+        vacio.classList.remove('hidden-section');
+        return;
+    }
+    vacio.classList.add('hidden-section');
+
+    cont.innerHTML = pendientes.map(m => {
+        const vencido = m.status === 'VENCIDO';
+        const dias = Math.abs(m.diasParaVencer);
+        const etiqueta = vencido
+            ? `<span class="badge bg-danger">Vencido hace ${dias} día${dias === 1 ? '' : 's'}</span>`
+            : `<span class="badge" style="background:#FF8A00;">Vence en ${dias} día${dias === 1 ? '' : 's'}</span>`;
+        const fechaTxt = new Date(m.proximaFecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+        return `
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 py-2" style="border-bottom:1px solid var(--ast-border);">
+            <div>
+                <div class="text-white small fw-bold">${m.cliente}</div>
+                <div class="text-secondary" style="font-size:0.72rem;">${m.nombreProyecto}</div>
+                <div class="mt-1">${etiqueta} <span class="text-secondary" style="font-size:0.68rem;">próxima: ${fechaTxt}</span></div>
+            </div>
+            <div class="d-flex gap-1">
+                <button class="btn btn-sm btn-success" onclick="enviarRecordatorioMantenimientoCamaras('${m.id}', '${(m.cliente||'').replace(/'/g,"\\'")}', '${m.contacto||''}', '${(m.nombreProyecto||'').replace(/'/g,"\\'")}')" title="Enviar recordatorio por WhatsApp"><i class="bi bi-whatsapp"></i></button>
+                <button class="btn btn-sm btn-outline-secondary" onclick="marcarMantenimientoCamarasRealizado('${m.id}')" title="Marcar mantenimiento como realizado hoy"><i class="bi bi-check-lg"></i></button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function enviarRecordatorioMantenimientoCamaras(id, cliente, contacto, nombreProyecto) {
+    const mensaje = `Hola${cliente ? ' *' + cliente + '*' : ''},\n\nTe escribimos de *A.S.T. Soluciones Técnicas* para recordarte que corresponde el mantenimiento preventivo trimestral de tu sistema de cámaras de seguridad (*${nombreProyecto}*).\n\nEste mantenimiento incluye revisión, limpieza y ajuste de los equipos para garantizar que sigan funcionando correctamente.\n\n¿Cuándo te queda bien para coordinar la visita?`;
+    abrirWhatsAppConTelefono(contacto, mensaje);
+}
+
+async function marcarMantenimientoCamarasRealizado(id) {
+    if (!confirm('¿Marcar el mantenimiento como realizado hoy? Esto reinicia el ciclo de 3 meses para este cliente.')) return;
+    const res = await callApi('marcarMantenimientoCamarasRealizado', { id: id });
+    if (!res.success) { showToast('Error al actualizar', 'danger'); return; }
+    showToast('Mantenimiento marcado como realizado.', 'success');
+    renderMantenimientosCamaras();
 }
 
 function dibujarGraficaDashboard() {
