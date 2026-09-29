@@ -560,11 +560,21 @@ const ESTIMADOR_ELECTRICO_DEFAULTS = {
     // es lo que se usa en campo para no perder el hilo).
     metrosMaxTuberiaSinCajaPaso: 15,
     cajaPasoProducto: 'CAJA DE PASO 10X10 ACME',
+    // OJO conductores/colores: "Punto de luz" e "Interruptor" NO se cablean
+    // igual que una toma. El interruptor solo interrumpe la FASE -- el
+    // NEUTRO no pasa por él en el esquema clásico -- y la LUZ recibe el
+    // RETORNO (la fase ya conmutada) más el NEUTRO. Por eso son DOS tramos
+    // distintos del mismo punto físico:
+    //   Tablero -> Interruptor: FASE + TIERRA
+    //   Interruptor -> Luminaria: RETORNO + NEUTRO + TIERRA
+    // En campo, esto significa crear DOS circuitos (uno "Interruptor", otro
+    // "Punto de luz") en vez de uno solo. Las tomas sí llevan FASE+NEUTRO+
+    // TIERRA de corrido porque no hay conmutación de por medio.
     tiposPunto: [
-        { id: 'punto_luz',     nombre: 'Punto de luz',       calibreAwg: 14, amperaje: 15, conductores: 3, colores: ['NEGRO','BLANCO','VERDE'], cajaEmpotradaProducto: 'Caja Octogonal No-Halogenado Gris', cajaSobrepuestaProducto: 'Caja de sobreponer baja New Light Special' },
+        { id: 'punto_luz',     nombre: 'Punto de luz (interruptor→luminaria)', calibreAwg: 14, amperaje: 15, conductores: 3, colores: ['ROJO','BLANCO','VERDE'], cajaEmpotradaProducto: 'Caja Octogonal No-Halogenado Gris', cajaSobrepuestaProducto: 'Caja de sobreponer baja New Light Special' },
         { id: 'toma_normal',   nombre: 'Toma normal',        calibreAwg: 12, amperaje: 20, conductores: 3, colores: ['NEGRO','BLANCO','VERDE'], cajaEmpotradaProducto: 'Caja PVC 2x4 No-Halogenado Gris', cajaSobrepuestaProducto: 'Caja de sobreponer baja New Light Special' },
         { id: 'toma_especial', nombre: 'Toma especial 220V', calibreAwg: 10, amperaje: 30, conductores: 3, colores: ['NEGRO','BLANCO','VERDE'], cajaEmpotradaProducto: 'Caja PVC 2x4 No-Halogenado Gris', cajaSobrepuestaProducto: 'Caja de sobreponer alta New Light Special' },
-        { id: 'interruptor',   nombre: 'Interruptor',        calibreAwg: 14, amperaje: 15, conductores: 2, colores: ['NEGRO','ROJO'], cajaEmpotradaProducto: 'Caja PVC 2x4 No-Halogenado Gris', cajaSobrepuestaProducto: 'Caja de sobreponer baja New Light Special' }
+        { id: 'interruptor',   nombre: 'Interruptor (tablero→interruptor)', calibreAwg: 14, amperaje: 15, conductores: 2, colores: ['NEGRO','VERDE'], cajaEmpotradaProducto: 'Caja PVC 2x4 No-Halogenado Gris', cajaSobrepuestaProducto: 'Caja de sobreponer baja New Light Special' }
     ]
 };
 
@@ -652,6 +662,18 @@ function agregarTramosLoteCircuito(circuitoId) {
     if (cantidad <= 0 || distancia <= 0) return alert('Ingresa cantidad y distancia mayores a 0.');
     const circuito = estimadorElectricoCircuitos.find(c => c.id === circuitoId);
     for (let i = 0; i < cantidad; i++) circuito.tramos.push(distancia);
+    renderElectricoCircuitos();
+}
+
+// Para cuando cada punto queda a una distancia distinta del anterior (lo más
+// común en campo): escribe los tramos medidos separados por coma o espacio,
+// en el orden en que se miden, y se agregan todos de una vez.
+function agregarTramosListaCircuito(circuitoId) {
+    const input = document.getElementById('tramo-lista-' + circuitoId);
+    const valores = input.value.split(/[,\s]+/).map(v => Number(v.trim())).filter(v => !isNaN(v) && v > 0);
+    if (valores.length === 0) return alert('Escribe al menos un valor válido (ej: 3, 4, 2, 5).');
+    const circuito = estimadorElectricoCircuitos.find(c => c.id === circuitoId);
+    valores.forEach(v => circuito.tramos.push(v));
     renderElectricoCircuitos();
 }
 
@@ -770,8 +792,17 @@ function renderElectricoCircuitos() {
                         </div>
                     </div>
                     <div class="row g-2 mb-2">
+                        <div class="col-8">
+                            <label class="small text-muted">Lista de tramos con distancias distintas (separados por coma)</label>
+                            <input type="text" id="tramo-lista-${c.id}" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Ej: 3, 4, 2, 5, 3">
+                        </div>
+                        <div class="col-4 d-flex align-items-end">
+                            <button class="btn btn-sm btn-outline-cyan w-100" onclick="agregarTramosListaCircuito('${c.id}')">+ Agregar Lista</button>
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
                         <div class="col-4">
-                            <label class="small text-muted">Lote: cantidad</label>
+                            <label class="small text-muted">Lote: cantidad iguales</label>
                             <input type="number" id="tramo-lote-cant-${c.id}" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="1" placeholder="Ej: 4">
                         </div>
                         <div class="col-4">
@@ -779,7 +810,7 @@ function renderElectricoCircuitos() {
                             <input type="number" id="tramo-lote-dist-${c.id}" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" step="0.1" placeholder="Ej: 3">
                         </div>
                         <div class="col-4 d-flex align-items-end">
-                            <button class="btn btn-sm btn-outline-cyan w-100" onclick="agregarTramosLoteCircuito('${c.id}')">+ Lote</button>
+                            <button class="btn btn-sm btn-outline-cyan w-100" onclick="agregarTramosLoteCircuito('${c.id}')">+ Lote igual</button>
                         </div>
                     </div>
 
