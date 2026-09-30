@@ -1638,6 +1638,7 @@
                             <button class="btn btn-outline-secondary w-100 py-2" onclick="irAVerLevantamiento()"><i class="bi bi-diagram-3"></i> Ver Levantamiento</button>
                         </div>
                     </div>
+                    <button class="btn btn-outline-secondary w-100 py-2 mb-2" onclick="irACanalizacionesFisicas()"><i class="bi bi-diagram-2"></i> Canalizaciones Físicas</button>
                     <button class="btn btn-outline-success w-100 py-2 mb-4" onclick="irACalcularMateriales()"><i class="bi bi-box-seam"></i> Calcular Materiales</button>
                     <div class="text-center text-secondary small" id="lv-resumen">0 puntos · 0 tramos</div>
                 </div>
@@ -1808,6 +1809,45 @@
                 <div id="lv-screen-MATERIALES" class="hidden-section">
                     <button class="btn btn-sm btn-outline-secondary mb-3" onclick="mostrarPantallaLevantamiento('HOME')"><i class="bi bi-arrow-left"></i> Atrás</button>
                     <div id="lv-materiales-contenido"></div>
+                </div>
+
+                <!-- Canalizaciones Físicas (Fase D.2-C) -->
+                <div id="lv-screen-CANALIZACIONES" class="hidden-section">
+                    <button class="btn btn-sm btn-outline-secondary mb-3" onclick="mostrarPantallaLevantamiento('HOME')"><i class="bi bi-arrow-left"></i> Atrás</button>
+
+                    <div class="alert alert-secondary small py-2 mb-3">
+                        <i class="bi bi-info-circle"></i> Una canalización física es un tubo o canaleta real. Varios tramos pueden compartir una misma canalización (se cuenta una sola vez), y un tramo puede repartirse entre varias.
+                    </div>
+
+                    <h6 class="text-cyan small fw-bold mb-2">Nueva canalización física</h6>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="small text-secondary d-block">Tipo</label>
+                            <select id="lv-canal-tipo" class="form-select form-select-sm bg-dark text-white border-secondary">
+                                <option value="TUBERIA">Tubería</option>
+                                <option value="CANALETA">Canaleta</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="small text-secondary d-block">Diámetro</label>
+                            <select id="lv-canal-diametro-select" class="form-select form-select-sm bg-dark text-white border-secondary" onchange="onChangeDiametroCanalFisica()">
+                                <option value="">Sin especificar</option>
+                                <option value="__OTRO__">Otro (especificar)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="lv-canal-diametro-otro-wrap" class="mb-2 hidden-section">
+                        <input type="text" id="lv-canal-diametro-otro" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder='Ej: 1/2 pulgada' autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="text">
+                    </div>
+                    <div class="mb-2">
+                        <label class="small text-secondary d-block">Longitud física real (m)</label>
+                        <input type="text" inputmode="decimal" id="lv-canal-longitud" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Ej: 10">
+                    </div>
+                    <div class="text-danger small hidden-section mb-2" id="lv-canal-error"></div>
+                    <button class="btn btn-cyan w-100 py-2 mb-4" onclick="crearCanalizacionFisica()"><i class="bi bi-plus-circle-fill"></i> Crear canalización</button>
+
+                    <h6 class="text-cyan small fw-bold mb-2">Canalizaciones existentes</h6>
+                    <div id="lv-canal-lista"></div>
                 </div>
 
             </div>

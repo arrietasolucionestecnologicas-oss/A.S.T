@@ -1271,6 +1271,12 @@ let levantamientoDiametro = '';
 let levantamientoVistaModo = 'LISTA';
 let levantamientoTramoEditando = null;
 
+// --- Canalización Física (Fase D.2-C) ---
+let levantamientoCanalizaciones = [];
+let levantamientoTramoCanalizaciones = [];
+let levantamientoCanalEditandoId = null;
+let levantamientoCanalAsociarAbiertaId = null;
+
 function resultadoOk(res) {
     return !!(res && res.success && res.data && res.data.success !== false);
 }
@@ -1356,7 +1362,7 @@ function renderLevantamientoHome() {
 
 function mostrarPantallaLevantamiento(pantalla) {
     levantamientoScreen = pantalla;
-    ['HOME', 'MEDICION', 'CADENA', 'LISTA', 'MATERIALES'].forEach(s => {
+    ['HOME', 'MEDICION', 'CADENA', 'LISTA', 'MATERIALES', 'CANALIZACIONES'].forEach(s => {
         document.getElementById('lv-screen-' + s).classList.toggle('hidden-section', s !== pantalla);
     });
     if (pantalla === 'HOME') renderLevantamientoHome();
@@ -1627,6 +1633,24 @@ async function guardarCadenaRapida() {
 function irAVerLevantamiento() {
     mostrarPantallaLevantamiento('LISTA');
     cambiarVistaLevantamiento('LISTA');
+    // Mejora progresiva (Fase D.2-C): la lista ya se ve arriba con los datos
+    // que siempre tuvo (sin esperar red). Si la canalización física carga
+    // bien, se re-renderiza para añadir la línea secundaria; si falla, la
+    // vista ya mostrada sigue funcionando igual que antes, sin aviso ni
+    // bloqueo -- es solo un dato adicional, no una operación de escritura.
+    cargarCanalizacionesFisicas().then(ok => {
+        if (ok && levantamientoScreen === 'LISTA') {
+            if (levantamientoVistaModo === 'LISTA') renderListaLevantamiento(); else renderArbolLevantamiento();
+        }
+    });
+}
+
+// Etiqueta secundaria de canalización física para un tramo (vacía si no
+// tiene ninguna relación declarada -- caso histórico, no se inventa nada).
+function etiquetaCanalizacionFisicaDeTramo(tramoId) {
+    const rels = relacionesDeTramo(tramoId);
+    if (rels.length === 0) return '';
+    return rels.map(r => `Canalización #${numeroCanalizacionFisica(r.canalizacionFisicaId)} (${r.longitudEnEstaCanalizacion}m)`).join(' + ');
 }
 
 function cambiarVistaLevantamiento(modo) {
@@ -1651,19 +1675,23 @@ function renderListaLevantamiento() {
         return;
     }
     const ordenados = [...levantamientoTramos].sort((a, b) => new Date(a.fechaCreacion) - new Date(b.fechaCreacion));
-    cont.innerHTML = ordenados.map((t, i) => `
+    cont.innerHTML = ordenados.map((t, i) => {
+        const canalFisica = etiquetaCanalizacionFisicaDeTramo(t.id);
+        return `
         <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--ast-border);">
             <div class="small">
                 <span class="text-secondary">${i + 1}.</span>
                 <strong class="text-white">${etiquetaPuntoLevantamiento(t.origenId)} → ${etiquetaPuntoLevantamiento(t.destinoId)}</strong>
                 — <span class="text-cyan">${t.distancia} m</span>
                 <div class="text-secondary" style="font-size:0.7rem;">${etiquetaCanalizacion(t)}</div>
+                ${canalFisica ? `<div class="text-secondary" style="font-size:0.7rem;"><i class="bi bi-diagram-2"></i> ${canalFisica}</div>` : ''}
             </div>
             <div class="d-flex gap-1">
                 <button class="btn btn-sm btn-outline-secondary p-1" onclick="editarTramoLevantamiento('${t.id}')"><i class="bi bi-pencil"></i></button>
                 <button class="btn btn-sm btn-outline-danger p-1" onclick="confirmarEliminarTramoLevantamiento('${t.id}')"><i class="bi bi-trash"></i></button>
             </div>
-        </div>`).join('');
+        </div>`;
+    }).join('');
 }
 
 function renderArbolLevantamiento(containerId) {
@@ -1884,6 +1912,294 @@ async function agregarCajaDePasoEnTramo(tramoId) {
 
     showToast('Caja de paso agregada. Recalculando materiales...', 'success');
     irACalcularMateriales();
+}
+
+// --- Canalización Física (Fase D.2-C) ---
+// Capa secundaria de organización del levantamiento: NO reemplaza
+// TRAMO.canalizacion (que sigue existiendo tal cual, caso histórico). Solo
+// permite declarar, cuando el técnico lo necesite, que uno o varios tramos
+// comparten un mismo tubo/canaleta físico real. Se carga solo al entrar a
+// esta pantalla (o a "Ver Levantamiento"), nunca en el flujo rápido de
+// Nueva Medición / Cadena Rápida, para no agregarles llamadas de red.
+async function cargarCanalizacionesFisicas() {
+    const [resC, resR] = await Promise.all([
+        callApi('getCanalizacionesLevantamiento', { proyectoId: currentProject }),
+        callApi('getTramoCanalizacion', { proyectoId: currentProject })
+    ]);
+    if (!resultadoOk(resC) || !resultadoOk(resR)) return false;
+    levantamientoCanalizaciones = resC.data.canalizaciones || [];
+    levantamientoTramoCanalizaciones = resR.data.relaciones || [];
+    return true;
+}
+
+async function irACanalizacionesFisicas() {
+    mostrarPantallaLevantamiento('CANALIZACIONES');
+    levantamientoCanalEditandoId = null;
+    levantamientoCanalAsociarAbiertaId = null;
+    document.getElementById('lv-canal-tipo').value = 'TUBERIA';
+    document.getElementById('lv-canal-diametro-select').value = '';
+    document.getElementById('lv-canal-diametro-otro').value = '';
+    document.getElementById('lv-canal-longitud').value = '';
+    onChangeDiametroCanalFisica();
+    limpiarErrorCanalFisica();
+    document.getElementById('lv-canal-lista').innerHTML = '<div class="text-center mt-3"><div class="spinner-border text-cyan spinner-border-sm"></div></div>';
+    const ok = await cargarCanalizacionesFisicas();
+    if (!ok) {
+        document.getElementById('lv-canal-lista').innerHTML = '<div class="alert alert-warning small">Sin conexión — no se pudieron cargar las canalizaciones. Intenta de nuevo.</div>';
+        return;
+    }
+    renderCanalizacionesFisicas();
+}
+
+function onChangeDiametroCanalFisica() {
+    const esOtro = document.getElementById('lv-canal-diametro-select').value === '__OTRO__';
+    document.getElementById('lv-canal-diametro-otro-wrap').classList.toggle('hidden-section', !esOtro);
+}
+
+function mostrarErrorCanalFisica(msg) {
+    const el = document.getElementById('lv-canal-error');
+    el.innerText = msg;
+    el.classList.remove('hidden-section');
+}
+
+function limpiarErrorCanalFisica() {
+    const el = document.getElementById('lv-canal-error');
+    el.innerText = '';
+    el.classList.add('hidden-section');
+}
+
+// Etiqueta ordenada por fecha de creación (índice generado en la UI, nunca
+// almacenado) -- ver sección 20/16 de la autorización D.2-C: no se inventa
+// un campo NOMBRE que no existe en LEVANTAMIENTO_CANALIZACIONES.
+function numeroCanalizacionFisica(id) {
+    const ordenadas = [...levantamientoCanalizaciones].sort((a, b) => new Date(a.fechaCreacion) - new Date(b.fechaCreacion));
+    const idx = ordenadas.findIndex(c => c.id === id);
+    return idx === -1 ? '?' : idx + 1;
+}
+
+function etiquetaCanalizacionFisica(c) {
+    const tipoLabel = c.tipo === 'TUBERIA' ? 'Tubería' : 'Canaleta';
+    const diam = c.diametro ? ' ' + c.diametro : '';
+    return `Canalización #${numeroCanalizacionFisica(c.id)} — ${tipoLabel}${diam} (${c.longitud}m)`;
+}
+
+function relacionesDeCanalizacion(canalId) {
+    return levantamientoTramoCanalizaciones.filter(r => r.canalizacionFisicaId === canalId);
+}
+
+function relacionesDeTramo(tramoId, excluirRelId) {
+    return levantamientoTramoCanalizaciones.filter(r => r.tramoId === tramoId && r.id !== excluirRelId);
+}
+
+function sumaLongitudAsignadaTramo(tramoId, excluirRelId) {
+    return relacionesDeTramo(tramoId, excluirRelId).reduce((s, r) => s + (Number(r.longitudEnEstaCanalizacion) || 0), 0);
+}
+
+function etiquetaTramoCorto(tramoId) {
+    const t = levantamientoTramos.find(x => x.id === tramoId);
+    if (!t) return '(tramo eliminado)';
+    return `${etiquetaPuntoLevantamiento(t.origenId)} → ${etiquetaPuntoLevantamiento(t.destinoId)} (${t.distancia}m)`;
+}
+
+function renderCanalizacionesFisicas() {
+    const cont = document.getElementById('lv-canal-lista');
+    if (levantamientoCanalizaciones.length === 0) {
+        cont.innerHTML = '<p class="text-secondary small text-center mt-2">Aún no hay canalizaciones físicas registradas.</p>';
+        return;
+    }
+    const ordenadas = [...levantamientoCanalizaciones].sort((a, b) => new Date(a.fechaCreacion) - new Date(b.fechaCreacion));
+    cont.innerHTML = ordenadas.map(c => {
+        const rels = relacionesDeCanalizacion(c.id);
+        const enEdicion = levantamientoCanalEditandoId === c.id;
+        const asociarAbierto = levantamientoCanalAsociarAbiertaId === c.id;
+
+        if (enEdicion) {
+            return `
+            <div class="py-2 mb-2" style="border-bottom:1px solid var(--ast-border);">
+                ${rels.length > 0 ? `<div class="alert alert-warning small py-2 mb-2"><i class="bi bi-exclamation-triangle"></i> Usada por ${rels.length} tramo(s). Cambiar tipo/longitud puede dejar de coincidir con lo ya asociado — revisa el cálculo de materiales después de guardar.</div>` : ''}
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <select id="lv-canal-edit-tipo-${c.id}" class="form-select form-select-sm bg-dark text-white border-secondary">
+                            <option value="TUBERIA" ${c.tipo === 'TUBERIA' ? 'selected' : ''}>Tubería</option>
+                            <option value="CANALETA" ${c.tipo === 'CANALETA' ? 'selected' : ''}>Canaleta</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <input type="text" id="lv-canal-edit-diametro-${c.id}" class="form-control form-control-sm bg-dark text-white border-secondary" value="${c.diametro || ''}" placeholder="Diámetro (opcional)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <input type="text" inputmode="decimal" id="lv-canal-edit-longitud-${c.id}" class="form-control form-control-sm bg-dark text-white border-secondary" value="${c.longitud}" placeholder="Longitud (m)">
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-cyan btn-sm flex-fill" onclick="guardarEdicionCanalizacionFisica('${c.id}')">Guardar</button>
+                    <button class="btn btn-outline-secondary btn-sm flex-fill" onclick="cancelarEdicionCanalizacionFisica()">Cancelar</button>
+                </div>
+            </div>`;
+        }
+
+        return `
+        <div class="py-2 mb-2" style="border-bottom:1px solid var(--ast-border);">
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="small">
+                    <strong class="text-white">${etiquetaCanalizacionFisica(c)}</strong>
+                    <div class="text-secondary" style="font-size:0.75rem;">Usada por ${rels.length} tramo${rels.length === 1 ? '' : 's'}</div>
+                </div>
+                <div class="d-flex gap-1">
+                    <button class="btn btn-sm btn-outline-secondary p-1" onclick="iniciarEdicionCanalizacionFisica('${c.id}')"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-sm btn-outline-danger p-1" onclick="confirmarEliminarCanalizacionFisica('${c.id}')"><i class="bi bi-trash"></i></button>
+                </div>
+            </div>
+            ${rels.length > 0 ? `<div class="mt-2">` + rels.map(r => `
+                <div class="d-flex justify-content-between align-items-center small py-1">
+                    <span class="text-secondary">${etiquetaTramoCorto(r.tramoId)} — <span class="text-cyan">${r.longitudEnEstaCanalizacion}m</span></span>
+                    <button class="btn btn-sm text-danger p-0" onclick="eliminarRelacionTramoCanalizacion('${r.id}')"><i class="bi bi-x-circle"></i></button>
+                </div>`).join('') + `</div>` : ''}
+            <button class="btn btn-sm btn-outline-cyan w-100 mt-2" onclick="toggleAsociarTramoCanalizacion('${c.id}')">
+                <i class="bi bi-link-45deg"></i> ${asociarAbierto ? 'Cerrar' : 'Asociar tramo'}
+            </button>
+            ${asociarAbierto ? renderPanelAsociarTramo(c) : ''}
+        </div>`;
+    }).join('');
+}
+
+function renderPanelAsociarTramo(c) {
+    if (levantamientoTramos.length === 0) {
+        return '<div class="text-secondary small mt-2">No hay tramos en este levantamiento todavía.</div>';
+    }
+    const opciones = levantamientoTramos.map(t => {
+        const usado = sumaLongitudAsignadaTramo(t.id);
+        const libre = Math.max(0, t.distancia - usado);
+        return `<option value="${t.id}">${etiquetaPuntoLevantamiento(t.origenId)} → ${etiquetaPuntoLevantamiento(t.destinoId)} (${t.distancia}m, libre: ${libre.toFixed(2)}m)</option>`;
+    }).join('');
+    return `
+    <div class="mt-2 p-2" style="background:rgba(255,255,255,0.03); border-radius:6px;">
+        <label class="small text-secondary d-block">Tramo</label>
+        <select id="lv-canal-assoc-tramo-${c.id}" class="form-select form-select-sm bg-dark text-white border-secondary mb-2">${opciones}</select>
+        <label class="small text-secondary d-block">Longitud del tramo en esta canalización (m)</label>
+        <input type="text" inputmode="decimal" id="lv-canal-assoc-longitud-${c.id}" class="form-control form-control-sm bg-dark text-white border-secondary mb-2" placeholder="Ej: 6">
+        <div class="text-danger small hidden-section mb-2" id="lv-canal-assoc-error-${c.id}"></div>
+        <button class="btn btn-cyan btn-sm w-100" onclick="asociarTramoACanalizacion('${c.id}')">Asociar</button>
+    </div>`;
+}
+
+function toggleAsociarTramoCanalizacion(canalId) {
+    levantamientoCanalAsociarAbiertaId = levantamientoCanalAsociarAbiertaId === canalId ? null : canalId;
+    renderCanalizacionesFisicas();
+}
+
+async function crearCanalizacionFisica() {
+    limpiarErrorCanalFisica();
+    const tipo = document.getElementById('lv-canal-tipo').value;
+    const diametroSel = document.getElementById('lv-canal-diametro-select').value;
+    const diametro = diametroSel === '__OTRO__' ? document.getElementById('lv-canal-diametro-otro').value.trim() : '';
+    const longitud = parseFloat(String(document.getElementById('lv-canal-longitud').value).replace(',', '.'));
+    if (isNaN(longitud) || longitud <= 0) { mostrarErrorCanalFisica('Ingresa una longitud mayor a 0.'); return; }
+
+    const btn = document.querySelector('#lv-screen-CANALIZACIONES .btn-cyan.w-100.py-2');
+    btn.disabled = true;
+    const res = await callApi('crearCanalizacionLevantamiento', { proyectoId: currentProject, tipo, diametro, longitud });
+    btn.disabled = false;
+    if (!resultadoOk(res)) {
+        mostrarErrorCanalFisica((res.data && res.data.error) || 'Sin conexión — no se pudo crear. Intenta de nuevo.');
+        return;
+    }
+
+    levantamientoCanalizaciones.push({ id: res.data.id, proyectoId: currentProject, tipo, diametro, longitud, fechaCreacion: new Date().toISOString() });
+    document.getElementById('lv-canal-diametro-select').value = '';
+    document.getElementById('lv-canal-diametro-otro').value = '';
+    document.getElementById('lv-canal-longitud').value = '';
+    onChangeDiametroCanalFisica();
+    renderCanalizacionesFisicas();
+    showToast('Canalización física creada.', 'success');
+}
+
+function iniciarEdicionCanalizacionFisica(id) {
+    levantamientoCanalEditandoId = id;
+    levantamientoCanalAsociarAbiertaId = null;
+    renderCanalizacionesFisicas();
+}
+
+function cancelarEdicionCanalizacionFisica() {
+    levantamientoCanalEditandoId = null;
+    renderCanalizacionesFisicas();
+}
+
+async function guardarEdicionCanalizacionFisica(id) {
+    const tipo = document.getElementById(`lv-canal-edit-tipo-${id}`).value;
+    const diametro = document.getElementById(`lv-canal-edit-diametro-${id}`).value.trim();
+    const longitud = parseFloat(String(document.getElementById(`lv-canal-edit-longitud-${id}`).value).replace(',', '.'));
+    if (isNaN(longitud) || longitud <= 0) { alert('Longitud inválida.'); return; }
+
+    const res = await callApi('actualizarCanalizacionLevantamiento', { id, tipo, diametro, longitud });
+    if (!resultadoOk(res)) { alert('Sin conexión — no se pudo guardar el cambio, intenta de nuevo.'); return; }
+
+    const c = levantamientoCanalizaciones.find(x => x.id === id);
+    Object.assign(c, { tipo, diametro, longitud });
+    levantamientoCanalEditandoId = null;
+    renderCanalizacionesFisicas();
+    showToast('Canalización actualizada.', 'success');
+}
+
+async function confirmarEliminarCanalizacionFisica(id) {
+    const c = levantamientoCanalizaciones.find(x => x.id === id);
+    if (!c) return;
+    if (!confirm(`¿Eliminar ${etiquetaCanalizacionFisica(c)}?`)) return;
+
+    const res = await callApi('eliminarCanalizacionLevantamiento', { id });
+    if (resultadoOk(res)) {
+        levantamientoCanalizaciones = levantamientoCanalizaciones.filter(x => x.id !== id);
+        renderCanalizacionesFisicas();
+        showToast('Canalización eliminada.', 'success');
+        return;
+    }
+
+    const data = res.data || {};
+    if (data.tramosDependientes && data.tramosDependientes.length > 0) {
+        const nombres = data.tramosDependientes.map(tid => etiquetaTramoCorto(tid));
+        alert(`No se puede eliminar esta canalización porque tiene ${nombres.length} tramo(s) asociado(s):\n\n` + nombres.join('\n'));
+    } else {
+        alert((data.error) || 'Sin conexión — no se pudo eliminar, intenta de nuevo.');
+    }
+}
+
+async function asociarTramoACanalizacion(canalId) {
+    const errId = `lv-canal-assoc-error-${canalId}`;
+    const errEl = document.getElementById(errId);
+    errEl.classList.add('hidden-section');
+
+    const tramoId = document.getElementById(`lv-canal-assoc-tramo-${canalId}`).value;
+    const longitud = parseFloat(String(document.getElementById(`lv-canal-assoc-longitud-${canalId}`).value).replace(',', '.'));
+    if (!tramoId) { errEl.innerText = 'Selecciona un tramo.'; errEl.classList.remove('hidden-section'); return; }
+    if (isNaN(longitud) || longitud <= 0) { errEl.innerText = 'Ingresa una longitud mayor a 0.'; errEl.classList.remove('hidden-section'); return; }
+
+    const t = levantamientoTramos.find(x => x.id === tramoId);
+    const usado = sumaLongitudAsignadaTramo(tramoId);
+    if (t && (usado + longitud) > t.distancia + 0.0001) {
+        errEl.innerText = `La suma (${(usado + longitud).toFixed(2)}m) supera la distancia total del tramo (${t.distancia}m).`;
+        errEl.classList.remove('hidden-section');
+        return;
+    }
+
+    const res = await callApi('crearTramoCanalizacion', { tramoId, canalizacionFisicaId: canalId, longitudEnEstaCanalizacion: longitud });
+    if (!resultadoOk(res)) {
+        errEl.innerText = (res.data && res.data.error) || 'Sin conexión — no se pudo asociar, intenta de nuevo.';
+        errEl.classList.remove('hidden-section');
+        return;
+    }
+
+    levantamientoTramoCanalizaciones.push({ id: res.data.id, tramoId, canalizacionFisicaId: canalId, longitudEnEstaCanalizacion: longitud, fechaCreacion: new Date().toISOString() });
+    renderCanalizacionesFisicas();
+    showToast('Tramo asociado a la canalización.', 'success');
+}
+
+async function eliminarRelacionTramoCanalizacion(relId) {
+    if (!confirm('¿Quitar esta asociación tramo-canalización?')) return;
+    const res = await callApi('eliminarTramoCanalizacion', { id: relId });
+    if (!resultadoOk(res)) { alert('Sin conexión — no se pudo quitar, intenta de nuevo.'); return; }
+    levantamientoTramoCanalizaciones = levantamientoTramoCanalizaciones.filter(r => r.id !== relId);
+    renderCanalizacionesFisicas();
+    showToast('Asociación eliminada.', 'success');
 }
 
 // --- Configuración de CCTV (modal propio) ---
