@@ -619,8 +619,11 @@ function switchEstimadorSubTab(sub) {
     estimadorSubTab = sub;
     document.getElementById('subtab-electrico').className = sub === 'ELECTRICO' ? 'nav-link active' : 'nav-link';
     document.getElementById('subtab-cctv').className = sub === 'CCTV' ? 'nav-link active' : 'nav-link';
+    document.getElementById('subtab-mo').className = sub === 'MO' ? 'nav-link active' : 'nav-link';
     document.getElementById('estimador-electrico').classList.toggle('hidden-section', sub !== 'ELECTRICO');
     document.getElementById('estimador-cctv').classList.toggle('hidden-section', sub !== 'CCTV');
+    document.getElementById('estimador-mo').classList.toggle('hidden-section', sub !== 'MO');
+    if (sub === 'MO') renderManoDeObra();
 
     if (sub === 'ELECTRICO') {
         poblarSelectTiposPuntoElectrico();
@@ -628,6 +631,220 @@ function switchEstimadorSubTab(sub) {
         renderElectricoPuntos();
     } else if (sub === 'CCTV') {
         initCctvView();
+    }
+}
+
+// --- Mano de obra eléctrica (tarifario estándar de A.S.T.) ---
+// Las tarifas NO viven en el catálogo de servicios: se guardan en CONFIGURACION
+// (clave ESTIMADOR_MANO_OBRA_CONFIG) y se editan desde el ⚙️ de esta pestaña.
+// Esta pestaña arma las líneas de mano de obra de un trabajo (puntos nuevos,
+// metros, circuitos, aires, traslado de tablero) y las manda al carrito igual
+// que los otros estimadores. Los materiales siguen saliendo del catálogo.
+const ESTIMADOR_MO_DEFAULTS = {
+    tarifas: {
+        tomaEmpotradoMO: 47500, tomaSobrepuestoMO: 37500,
+        interruptorEmpotradoMO: 47500, interruptorSobrepuestoMO: 37500,
+        tomaEmpotradoTI: 100000, tomaSobrepuestoTI: 82000,
+        interruptorEmpotradoTI: 105000, interruptorSobrepuestoTI: 87000,
+        metroMO: 10000, metroTI: 23000, cableExistenteMetro: 4000,
+        circuitoNuevo: 40000, circuitoReutilizado: 30000, aireDedicado: 80000,
+        trasladoTablero: 120000, visitaMinima: 40000
+    },
+    jornalMaestroMin: 115000,
+    jornalMaestroMax: 140000
+};
+
+// estimado = valor propuesto con base en jornales (no hay dato de mercado publicado)
+const MO_TARIFAS_META = [
+    { key: 'tomaEmpotradoMO',         grupo: 'Puntos nuevos, solo mano de obra', label: 'Tomacorriente empotrado' },
+    { key: 'tomaSobrepuestoMO',       grupo: 'Puntos nuevos, solo mano de obra', label: 'Tomacorriente sobrepuesto con canaleta' },
+    { key: 'interruptorEmpotradoMO',  grupo: 'Puntos nuevos, solo mano de obra', label: 'Interruptor empotrado' },
+    { key: 'interruptorSobrepuestoMO',grupo: 'Puntos nuevos, solo mano de obra', label: 'Interruptor sobrepuesto con canaleta' },
+    { key: 'tomaEmpotradoTI',         grupo: 'Puntos nuevos, todo incluido (con materiales)', label: 'Tomacorriente empotrado' },
+    { key: 'tomaSobrepuestoTI',       grupo: 'Puntos nuevos, todo incluido (con materiales)', label: 'Tomacorriente sobrepuesto con canaleta' },
+    { key: 'interruptorEmpotradoTI',  grupo: 'Puntos nuevos, todo incluido (con materiales)', label: 'Interruptor empotrado' },
+    { key: 'interruptorSobrepuestoTI',grupo: 'Puntos nuevos, todo incluido (con materiales)', label: 'Interruptor sobrepuesto con canaleta' },
+    { key: 'metroMO',                 grupo: 'Metros', label: 'Metro de canaleta o tubería, solo mano de obra' },
+    { key: 'metroTI',                 grupo: 'Metros', label: 'Metro de canaleta o tubería, con materiales' },
+    { key: 'cableExistenteMetro',     grupo: 'Metros', label: 'Cable tendido en tubería existente, por metro', estimado: true },
+    { key: 'circuitoNuevo',           grupo: 'Circuitos y tablero (solo mano de obra)', label: 'Circuito independiente nuevo', estimado: true },
+    { key: 'circuitoReutilizado',     grupo: 'Circuitos y tablero (solo mano de obra)', label: 'Circuito reutilizado (sin recablear)', estimado: true },
+    { key: 'aireDedicado',            grupo: 'Circuitos y tablero (solo mano de obra)', label: 'Aire acondicionado, línea dedicada 220 V' },
+    { key: 'trasladoTablero',         grupo: 'Circuitos y tablero (solo mano de obra)', label: 'Traslado de tablero eléctrico', estimado: true },
+    { key: 'visitaMinima',            grupo: 'Otros', label: 'Visita o desplazamiento mínimo (1 a 2 puntos)' }
+];
+
+function getEstimadorMoConfig() {
+    let guardado = {};
+    try {
+        const raw = configuracion['ESTIMADOR_MANO_OBRA_CONFIG'];
+        if (raw) guardado = JSON.parse(raw) || {};
+    } catch (e) {
+        console.error('Config de mano de obra inválida', e);
+    }
+    return {
+        tarifas: Object.assign({}, ESTIMADOR_MO_DEFAULTS.tarifas, guardado.tarifas || {}),
+        jornalMaestroMin: Number(guardado.jornalMaestroMin) || ESTIMADOR_MO_DEFAULTS.jornalMaestroMin,
+        jornalMaestroMax: Number(guardado.jornalMaestroMax) || ESTIMADOR_MO_DEFAULTS.jornalMaestroMax
+    };
+}
+
+function moNum(id) {
+    const el = document.getElementById(id);
+    const v = parseFloat(String(el ? el.value : '').replace(',', '.'));
+    return isNaN(v) || v < 0 ? 0 : v;
+}
+
+function calcularManoDeObra() {
+    const cfg = getEstimadorMoConfig();
+    const t = cfg.tarifas;
+    const todoIncluido = document.getElementById('mo-modalidad').value === 'TI';
+    const empotrado = document.getElementById('mo-instalacion').value === 'EMPOTRADO';
+    const sufijo = todoIncluido ? 'TI' : 'MO';
+    const instTxt = empotrado ? 'Empotrado' : 'Sobrepuesto con canaleta';
+    const marcaMO = todoIncluido ? '' : ' (solo mano de obra)';
+    const soloMO = 'Solo mano de obra, materiales aparte.';
+    const specsPunto = todoIncluido
+        ? `Incluye materiales. Cobertura estándar: ${empotrado ? 'corte de pared hasta 1.5 m' : 'canaleta hasta 2 m'}; tramos adicionales se cobran por metro.`
+        : soloMO;
+
+    const nTomas = moNum('mo-tomas');
+    const nInt = moNum('mo-interruptores');
+    const lineas = [];
+    const add = (nombre, cantidad, precio, specs) => {
+        if (cantidad > 0) lineas.push({ nombre, cantidad, precio, specs, subtotal: cantidad * precio });
+    };
+
+    add(`Punto de tomacorriente - ${instTxt}${marcaMO}`, nTomas, t[(empotrado ? 'tomaEmpotrado' : 'tomaSobrepuesto') + sufijo], specsPunto);
+    add(`Punto de interruptor - ${instTxt}${marcaMO}`, nInt, t[(empotrado ? 'interruptorEmpotrado' : 'interruptorSobrepuesto') + sufijo], specsPunto);
+    add(`Metro adicional de canaleta o tubería eléctrica (${todoIncluido ? 'con materiales' : 'solo mano de obra'})`, moNum('mo-metros'), todoIncluido ? t.metroTI : t.metroMO,
+        todoIncluido ? 'Incluye materiales. Tramo extra más allá de lo incluido en el punto (más de ~2 m).' : 'Solo mano de obra. Tramo extra más allá de lo incluido en el punto (más de ~2 m).');
+    add('Alimentación del tablero desde el totalizador, por metro (solo mano de obra)', moNum('mo-alimentacion'), t.metroMO, 'Tendido de tubería y cable desde el totalizador hasta el tablero. Materiales aparte.');
+    add('Cable tendido en tubería existente, por metro (solo mano de obra)', moNum('mo-cable-existente'), t.cableExistenteMetro, 'Recableado por tubería que ya estaba instalada. Materiales aparte.');
+    add('Circuito independiente nuevo (solo mano de obra)', moNum('mo-circ-nuevos'), t.circuitoNuevo, 'Por circuito: breaker y conexión en el tablero, identificación y pruebas. Metros y materiales aparte.');
+    add('Circuito reutilizado (solo mano de obra)', moNum('mo-circ-reuso'), t.circuitoReutilizado, 'Por circuito existente que se separa o reconecta sin recablear: conexión, identificación y pruebas.');
+    add('Aire acondicionado, línea dedicada 220 V (solo mano de obra)', moNum('mo-aires'), t.aireDedicado, 'Por aire: conexión del breaker bipolar y del equipo, y pruebas. Metros y materiales aparte.');
+    if (document.getElementById('mo-traslado').checked) add('Traslado de tablero eléctrico (solo mano de obra)', 1, t.trasladoTablero, 'Desmontaje, montaje, barraje y conexión en el totalizador. Circuitos y alimentación se cobran aparte.');
+    if (document.getElementById('mo-visita').checked) add('Visita o desplazamiento mínimo (trabajos de 1 a 2 puntos)', 1, t.visitaMinima, 'Cobro mínimo para trabajos pequeños (transporte y tiempo).');
+
+    const total = lineas.reduce((s, l) => s + l.subtotal, 0);
+    const puntos = nTomas + nInt;
+    const circuitos = moNum('mo-circ-nuevos') + moNum('mo-circ-reuso') + moNum('mo-aires');
+    const avisos = [];
+    if (puntos > 0 && !todoIncluido) avisos.push('Los materiales de los puntos (cajas, mecanismos, canaleta) van aparte: agrégalos desde el catálogo.');
+    if (circuitos > 0 || moNum('mo-alimentacion') > 0 || document.getElementById('mo-traslado').checked) avisos.push('Breakers, cable, tubería y empalmes de circuitos, aires y alimentación son materiales aparte.');
+    if (document.getElementById('mo-visita').checked && puntos > 2) avisos.push('La visita mínima es para trabajos de 1 a 2 puntos; con más puntos normalmente no se cobra.');
+    if (moNum('mo-circ-nuevos') > 0 && moNum('mo-circ-reuso') > 0) avisos.push('Cuenta cada circuito una sola vez: nuevo o reutilizado, no los dos.');
+
+    const dias = moNum('mo-dias');
+    let control = '';
+    if (dias > 0 && total > 0) {
+        const porDia = total / dias;
+        const bajo = porDia < cfg.jornalMaestroMin;
+        control = `<div class="small ${bajo ? 'text-warning' : 'text-secondary'} mt-2">Equivale a <strong>${fmt.format(porDia)}</strong> por día de trabajo (jornal de referencia del maestro: ${fmt.format(cfg.jornalMaestroMin)} a ${fmt.format(cfg.jornalMaestroMax)}).${bajo ? ' Estás por debajo del jornal de referencia: revisa si falta cobrar algo.' : ''}</div>`;
+    }
+    return { lineas, total, avisos, control };
+}
+
+function renderManoDeObra() {
+    if (!document.getElementById('mo-resumen')) return;
+    const r = calcularManoDeObra();
+    const resumen = document.getElementById('mo-resumen');
+    if (r.lineas.length === 0) {
+        resumen.innerHTML = '<p class="text-secondary mb-0">Escribe cuántos puntos, metros o circuitos vas a cobrar para ver el resumen.</p>';
+    } else {
+        resumen.innerHTML = r.lineas.map(l => `
+            <div class="d-flex justify-content-between align-items-start py-1" style="border-bottom:1px solid var(--ast-border);">
+                <div class="small pe-2">
+                    <span class="text-white">${l.nombre}</span>
+                    <div class="text-secondary" style="font-size:0.7rem;">${l.cantidad} × ${fmt.format(l.precio)}</div>
+                </div>
+                <strong class="text-cyan small text-nowrap">${fmt.format(l.subtotal)}</strong>
+            </div>`).join('') + `
+            <div class="d-flex justify-content-between pt-2">
+                <span class="text-white fw-bold">Total mano de obra</span>
+                <span class="text-cyan fw-bold" style="font-size:1.1rem;">${fmt.format(r.total)}</span>
+            </div>` + r.control;
+    }
+    document.getElementById('mo-avisos').innerHTML = r.avisos.map(a => `<div class="alert alert-warning small py-2 mb-2"><i class="bi bi-info-circle"></i> ${a}</div>`).join('');
+    document.getElementById('btn-mo-carrito').disabled = r.lineas.length === 0;
+    renderGuiaManoDeObra();
+}
+
+function renderGuiaManoDeObra() {
+    const box = document.getElementById('mo-guia-tarifas');
+    if (!box) return;
+    const t = getEstimadorMoConfig().tarifas;
+    const grupos = {};
+    MO_TARIFAS_META.forEach(m => { (grupos[m.grupo] = grupos[m.grupo] || []).push(m); });
+    box.innerHTML = Object.entries(grupos).map(([g, items]) => `
+        <div class="text-cyan fw-bold mt-2" style="font-size:0.78rem;">${g}</div>` + items.map(m => `
+        <div class="d-flex justify-content-between py-1" style="border-bottom:1px solid var(--ast-border);">
+            <span class="text-white">${m.label}${m.estimado ? ' *' : ''}</span>
+            <span class="text-cyan text-nowrap ms-2">${fmt.format(t[m.key])}</span>
+        </div>`).join('')).join('');
+}
+
+function agregarManoDeObraAlCarrito() {
+    const r = calcularManoDeObra();
+    if (r.lineas.length === 0) return;
+    r.lineas.forEach(l => cart.push({ uuid: generateUUID(), nombre: l.nombre, precio: l.precio, costo: 0, cantidad: Math.ceil(l.cantidad), specs: l.specs }));
+    updateCartUI();
+    showToast('Mano de obra agregada al carrito. Agrega los materiales desde el catálogo.', 'success');
+    openCart();
+}
+
+function limpiarManoDeObra() {
+    ['mo-tomas', 'mo-interruptores', 'mo-metros', 'mo-alimentacion', 'mo-cable-existente', 'mo-circ-nuevos', 'mo-circ-reuso', 'mo-aires', 'mo-dias']
+        .forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('mo-traslado').checked = false;
+    document.getElementById('mo-visita').checked = false;
+    renderManoDeObra();
+}
+
+function openManoDeObraConfigModal() {
+    const t = getEstimadorMoConfig().tarifas;
+    const grupos = {};
+    MO_TARIFAS_META.forEach(m => { (grupos[m.grupo] = grupos[m.grupo] || []).push(m); });
+    document.getElementById('mo-cfg-form').innerHTML = Object.entries(grupos).map(([g, items]) => `
+        <h6 class="text-cyan small fw-bold mt-3 mb-2">${g}</h6>
+        <div class="row g-2">` + items.map(m => `
+            <div class="col-12 col-md-6">
+                <label class="small text-secondary">${m.label}${m.estimado ? ' *' : ''}</label>
+                <input type="number" inputmode="numeric" min="0" step="500" id="cfg-mo-${m.key}" class="form-control form-control-sm bg-dark text-white border-secondary" value="${t[m.key]}">
+            </div>`).join('') + '</div>').join('');
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('moConfigModal')).show();
+}
+
+function restablecerManoDeObraConfig() {
+    MO_TARIFAS_META.forEach(m => { document.getElementById('cfg-mo-' + m.key).value = ESTIMADOR_MO_DEFAULTS.tarifas[m.key]; });
+}
+
+async function guardarManoDeObraConfig() {
+    const tarifas = {};
+    MO_TARIFAS_META.forEach(m => {
+        const v = Number(document.getElementById('cfg-mo-' + m.key).value);
+        tarifas[m.key] = (isNaN(v) || v < 0) ? ESTIMADOR_MO_DEFAULTS.tarifas[m.key] : v;
+    });
+    const actual = getEstimadorMoConfig();
+    const valor = JSON.stringify({ tarifas, jornalMaestroMin: actual.jornalMaestroMin, jornalMaestroMax: actual.jornalMaestroMax });
+
+    const btn = document.querySelector('#moConfigModal .btn-cyan');
+    const textoOriginal = btn.innerText;
+    btn.disabled = true; btn.innerText = 'GUARDANDO...';
+    try {
+        const res = await callApi('updateConfigValue', { clave: 'ESTIMADOR_MANO_OBRA_CONFIG', valor });
+        if (!res.success || (res.data && res.data.success === false)) throw new Error((res.data && res.data.error) || res.error || 'sin conexión');
+        configuracion['ESTIMADOR_MANO_OBRA_CONFIG'] = valor;
+        setCacheWithTimestamp('ast_config', configuracion);
+        bootstrap.Modal.getInstance(document.getElementById('moConfigModal')).hide();
+        renderManoDeObra();
+        showToast('Tarifas de mano de obra guardadas.', 'success');
+    } catch (e) {
+        console.error(e);
+        alert('No se pudieron guardar las tarifas: ' + e.message);
+    } finally {
+        btn.disabled = false; btn.innerText = textoOriginal;
     }
 }
 
@@ -4453,6 +4670,7 @@ function openProductModal() {
     if (document.getElementById('p-proveedor')) document.getElementById('p-proveedor').value = "";
     document.getElementById('btn-github-publish').style.display = "none";
     document.getElementById('btn-cost-history').style.display = "none";
+    document.getElementById('btn-delete-product').style.display = "none";
 
     const alertBox = document.getElementById('p-nombre-alert');
     if (alertBox) { alertBox.style.display = 'none'; alertBox.innerHTML = ''; }
@@ -4511,6 +4729,7 @@ function loadEditModal(uuid) {
     }
 
     document.getElementById('btn-github-publish').style.display = "block";
+    document.getElementById('btn-delete-product').style.display = "block";
     bootstrap.Modal.getOrCreateInstance(document.getElementById('prodModal')).show();
 }
 // ==========================================
@@ -4717,6 +4936,30 @@ async function saveProduct() {
             refreshCatalogOnly(); 
         }
     });
+}
+
+async function deleteProduct() {
+    const uuid = document.getElementById('p-uuid').value;
+    const p = catalog.find(x => x.uuid === uuid);
+    if (!p) return;
+    const etiqueta = p.tipo === 'SERVICIO' ? 'servicio' : 'producto';
+    if (!confirm(`¿Eliminar el ${etiqueta} "${p.nombre}" del catálogo?\n\nNo se puede deshacer. Los proyectos y cotizaciones que ya lo usaron no cambian.`)) return;
+
+    const btn = document.getElementById('btn-delete-product');
+    btn.disabled = true;
+    const res = await callApi('deleteProduct', { uuid });
+    btn.disabled = false;
+    if (!res.success || (res.data && res.data.success === false)) {
+        showToast('No se pudo eliminar: ' + ((res.data && res.data.error) || res.error || 'sin conexión'), 'danger');
+        return;
+    }
+
+    catalog = catalog.filter(x => x.uuid !== uuid);
+    setCacheWithTimestamp('ast_catalog', catalog);
+    const modalInstance = bootstrap.Modal.getInstance(document.getElementById('prodModal'));
+    if (modalInstance) { modalInstance.hide(); cleanBackdrops(); }
+    if (currentView === 'PRODUCTO' || currentView === 'SERVICIO') renderGrid(catalog.filter(x => x.tipo === currentView));
+    showToast(etiqueta.charAt(0).toUpperCase() + etiqueta.slice(1) + ' eliminado.', 'success');
 }
 
 async function publishToGitHub() {

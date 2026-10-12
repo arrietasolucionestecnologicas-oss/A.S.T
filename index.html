@@ -251,6 +251,11 @@
                     </button>
                 </li>
                 <li class="nav-item">
+                    <button class="nav-link" id="subtab-mo" onclick="switchEstimadorSubTab('MO')">
+                        <i class="bi bi-cash-coin"></i> Mano de obra
+                    </button>
+                </li>
+                <li class="nav-item">
                     <button class="nav-link" id="subtab-cctv" onclick="switchEstimadorSubTab('CCTV')">
                         <i class="bi bi-camera-video-fill"></i> CCTV
                     </button>
@@ -336,6 +341,117 @@
                 <div class="text-end">
                     <button class="btn btn-success" id="btn-electrico-carrito" onclick="agregarEstimacionElectricaAlCarrito()" disabled>
                         <i class="bi bi-cart-plus"></i> Agregar al Carrito (precios reales)
+                    </button>
+                </div>
+            </div>
+
+            <div id="estimador-mo" class="hidden-section">
+                <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+                    <small class="text-secondary">Arma la mano de obra de un trabajo con tus tarifas y mándala al carrito.</small>
+                    <button class="btn btn-sm btn-outline-secondary text-nowrap" onclick="openManoDeObraConfigModal()"><i class="bi bi-gear-fill"></i> Tarifas</button>
+                </div>
+
+                <details class="mb-3" id="mo-guia">
+                    <summary class="text-cyan small fw-bold" style="cursor:pointer;"><i class="bi bi-journal-text"></i> Guía de cobro</summary>
+                    <div class="mt-2 small text-white">
+                        <div id="mo-guia-tarifas"></div>
+                        <div class="text-cyan fw-bold mt-3" style="font-size:0.78rem;">Cómo cobrar</div>
+                        <ol class="ps-3 mb-2 mt-1">
+                            <li>Cuenta solo los puntos <strong>nuevos</strong>. Los que ya existían se reconectan y van dentro del circuito.</li>
+                            <li>Cada circuito se cuenta una sola vez: nuevo o reutilizado, nunca los dos.</li>
+                            <li>Metros: solo lo que pase de ~2 m por punto. La alimentación del tablero se cobra por metro desde el totalizador.</li>
+                            <li>"Solo mano de obra": breakers, cable, tubería, cajas y mecanismos se cotizan aparte. No mezcles "todo incluido" con materiales sueltos del mismo punto.</li>
+                            <li>Un anticipo es un <strong>abono</strong>: se registra como pago recibido, no como el precio del trabajo.</li>
+                            <li>Control: el total dividido entre los días trabajados debe quedar por encima del jornal de referencia del maestro.</li>
+                        </ol>
+                        <div class="text-secondary" style="font-size:0.72rem;">Valores de referencia de mercado en Barranquilla 2026. Los marcados con * son estimaciones basadas en jornales (no hay dato de mercado publicado); ajústalos en "Tarifas".</div>
+                    </div>
+                </details>
+
+                <div class="card bg-dark-panel border-secondary mb-3">
+                    <div class="card-body">
+                        <div class="row g-2 mb-2">
+                            <div class="col-12 col-md-6">
+                                <label class="small text-secondary">Cobro de los puntos</label>
+                                <select id="mo-modalidad" class="form-select form-select-sm bg-dark text-white border-secondary" onchange="renderManoDeObra()">
+                                    <option value="MO">Solo mano de obra (materiales aparte)</option>
+                                    <option value="TI">Todo incluido (con materiales)</option>
+                                </select>
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="small text-secondary">Instalación de los puntos</label>
+                                <select id="mo-instalacion" class="form-select form-select-sm bg-dark text-white border-secondary" onchange="renderManoDeObra()">
+                                    <option value="SOBREPUESTO">Sobrepuesto con canaleta</option>
+                                    <option value="EMPOTRADO">Empotrado</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6 col-md-3">
+                                <label class="small text-secondary">Tomas nuevas</label>
+                                <input type="number" inputmode="numeric" min="0" id="mo-tomas" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="0" oninput="renderManoDeObra()">
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="small text-secondary">Interruptores nuevos</label>
+                                <input type="number" inputmode="numeric" min="0" id="mo-interruptores" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="0" oninput="renderManoDeObra()">
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="small text-secondary">Metros nuevos (tubería o canaleta)</label>
+                                <input type="number" inputmode="decimal" min="0" step="0.5" id="mo-metros" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="0" oninput="renderManoDeObra()">
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="small text-secondary">Metros de alimentación (totalizador a tablero)</label>
+                                <input type="number" inputmode="decimal" min="0" step="0.5" id="mo-alimentacion" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="0" oninput="renderManoDeObra()">
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="small text-secondary">Circuitos nuevos</label>
+                                <input type="number" inputmode="numeric" min="0" id="mo-circ-nuevos" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="0" oninput="renderManoDeObra()">
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="small text-secondary">Circuitos reutilizados</label>
+                                <input type="number" inputmode="numeric" min="0" id="mo-circ-reuso" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="0" oninput="renderManoDeObra()">
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="small text-secondary">Aires con línea dedicada</label>
+                                <input type="number" inputmode="numeric" min="0" id="mo-aires" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="0" oninput="renderManoDeObra()">
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="small text-secondary">Metros de cable en tubería existente</label>
+                                <input type="number" inputmode="decimal" min="0" step="0.5" id="mo-cable-existente" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="0" oninput="renderManoDeObra()">
+                            </div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-3 mt-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="mo-traslado" onchange="renderManoDeObra()">
+                                <label class="form-check-label small text-white" for="mo-traslado">Traslado de tablero</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="mo-visita" onchange="renderManoDeObra()">
+                                <label class="form-check-label small text-white" for="mo-visita">Visita mínima (1 a 2 puntos)</label>
+                            </div>
+                        </div>
+                        <div class="row g-2 mt-1">
+                            <div class="col-6 col-md-3">
+                                <label class="small text-secondary">Días trabajados (opcional, control)</label>
+                                <input type="number" inputmode="decimal" min="0" step="0.5" id="mo-dias" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="0" oninput="renderManoDeObra()">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="mo-avisos"></div>
+
+                <div class="card bg-dark-panel border-secondary mb-3">
+                    <div class="card-body">
+                        <h6 class="text-cyan small fw-bold mb-2">Resumen de mano de obra</h6>
+                        <div id="mo-resumen" class="small text-white"></div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between gap-2">
+                    <button class="btn btn-outline-secondary" onclick="limpiarManoDeObra()"><i class="bi bi-eraser"></i> Limpiar</button>
+                    <button class="btn btn-success" id="btn-mo-carrito" onclick="agregarManoDeObraAlCarrito()" disabled>
+                        <i class="bi bi-cart-plus"></i> Agregar al Carrito
                     </button>
                 </div>
             </div>
@@ -643,6 +759,25 @@
         </div>
     </div>
 
+    <div class="modal fade" id="moConfigModal" tabindex="-1" style="z-index: 1060;">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content bg-dark-panel border-cyan">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-white"><i class="bi bi-gear-fill"></i> Tarifas de mano de obra eléctrica</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <small class="text-secondary d-block">Estos valores alimentan la calculadora y la guía de cobro. No cambian el catálogo de servicios. Los marcados con * son estimaciones basadas en jornales.</small>
+                    <div id="mo-cfg-form"></div>
+                </div>
+                <div class="modal-footer border-secondary d-flex gap-2">
+                    <button class="btn btn-outline-secondary" onclick="restablecerManoDeObraConfig()">Restablecer valores estándar</button>
+                    <button class="btn btn-cyan flex-fill" onclick="guardarManoDeObraConfig()">GUARDAR TARIFAS</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="fab-cart" id="fab-cart" onclick="openCart()">
         <i class="bi bi-file-earmark-pdf-fill"></i>
         <span class="fab-badge" id="cart-count">0</span>
@@ -752,6 +887,9 @@
                     </button>
                     <button type="button" class="btn btn-cyan w-100 fw-bold" onclick="saveProduct()">
                         <i class="bi bi-save"></i> GUARDAR DATOS
+                    </button>
+                    <button id="btn-delete-product" type="button" class="btn btn-outline-danger w-100 btn-sm fw-bold" onclick="deleteProduct()" style="display:none;">
+                        <i class="bi bi-trash"></i> ELIMINAR DEL CATÁLOGO
                     </button>
                     <button id="btn-github-publish" type="button" class="btn btn-outline-warning w-100 btn-sm fw-bold" onclick="publishToGitHub()" style="display:none;">
                         <i class="bi bi-cloud-upload"></i> PUBLICAR EN WEB PÚBLICA (GitHub)
