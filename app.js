@@ -6133,8 +6133,6 @@ async function importFromProject() {
     if (nombre && !nombre.value) nombre.value = res.data.info.cliente || '';
     const tel = document.getElementById('c-tel');
     if (tel && !tel.value) tel.value = res.data.info.contacto || '';
-    const exportSelect = document.getElementById('cart-export-project');
-    if (exportSelect && !exportSelect.value) exportSelect.value = id;
 
     updateCartUI();
     showToast('✅ ' + cobrables.length + ' ítem' + (cobrables.length !== 1 ? 's' : '') + ' importado' + (cobrables.length !== 1 ? 's' : '') + ' al carrito', 'success');
@@ -6174,11 +6172,8 @@ function generateQuoteFromProject() {
     document.getElementById('c-nit').value    = '';
     document.getElementById('c-tel').value    = currentProjectData.contacto || '';
 
-    // Vincular automáticamente al proyecto para que el PDF se sincronice de vuelta
-    setTimeout(() => {
-        const exportSelect = document.getElementById('cart-export-project');
-        if (exportSelect) exportSelect.value = currentProject;
-    }, 100);
+    // No se vincula el carrito al proyecto: al generar el PDF el backend copiaría de nuevo
+    // cada ítem al proyecto con el sufijo "(PDF)" y los totales quedarían duplicados.
 
     // Cerrar proyecto y abrir carrito
     const projModal = bootstrap.Modal.getInstance(document.getElementById('projectDetailModal'));
