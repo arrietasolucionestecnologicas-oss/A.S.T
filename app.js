@@ -6100,6 +6100,46 @@ function filtrarMovimientosProyecto(term) {
     list.innerHTML = html;
 }
 
+// Botón "Importar" del carrito: agrega al carrito los ítems cobrables del proyecto elegido
+// en el selector, sin cerrar el carrito (a diferencia de generateQuoteFromProject).
+async function importFromProject() {
+    const sel = document.getElementById('cart-import-project');
+    const id = sel ? sel.value : '';
+    if (!id) { showToast('Elige primero un proyecto para importar', 'warning'); return; }
+
+    showToast('Importando ítems del proyecto...', 'info');
+    const res = await callApi('getProjectDetails', { id: id });
+    if (!res.success || !res.data || !res.data.info) {
+        showToast('No se pudo leer el proyecto, intenta de nuevo', 'warning');
+        return;
+    }
+
+    const cobrables = (res.data.items || []).filter(item => item.esCobrar === true || item.esCobrar === 'TRUE');
+    if (cobrables.length === 0) {
+        showToast('Este proyecto no tiene ítems marcados como cobrables', 'warning');
+        return;
+    }
+
+    cobrables.forEach(item => cart.push({
+        uuid:   generateUUID(),
+        nombre: item.descripcion,
+        specs:  item.notaVisita || '',
+        precio: item.venta,
+        cantidad: item.cantidad,
+        tipo:   item.tipo === 'MANO_OBRA' ? 'SERVICIO' : 'PRODUCTO'
+    }));
+
+    const nombre = document.getElementById('c-nombre');
+    if (nombre && !nombre.value) nombre.value = res.data.info.cliente || '';
+    const tel = document.getElementById('c-tel');
+    if (tel && !tel.value) tel.value = res.data.info.contacto || '';
+    const exportSelect = document.getElementById('cart-export-project');
+    if (exportSelect && !exportSelect.value) exportSelect.value = id;
+
+    updateCartUI();
+    showToast('✅ ' + cobrables.length + ' ítem' + (cobrables.length !== 1 ? 's' : '') + ' importado' + (cobrables.length !== 1 ? 's' : '') + ' al carrito', 'success');
+}
+
 // ==========================================
 // GENERAR COTIZACIÓN DESDE PROYECTO [ZONA-FE-02] v33.3
 // ==========================================
