@@ -1001,8 +1001,15 @@
                         </div>
                     </div>
 
+                    <div class="mb-2">
+                        <label class="small text-cyan fw-bold"><i class="bi bi-arrow-repeat"></i> ¿Actualiza un documento ya emitido? (opcional)</label>
+                        <select id="cart-actualiza-doc" class="form-select form-select-sm bg-dark text-white border-cyan">
+                            <option value="">No, es un documento nuevo</option>
+                        </select>
+                        <small class="text-secondary" style="font-size:0.7rem;">Si eliges uno, conserva el consecutivo y le agrega una letra (ej: COT-0034B) en vez de gastar uno nuevo.</small>
+                    </div>
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <select id="doc-type" class="form-select form-select-sm bg-dark text-white border-secondary w-50">
+                        <select id="doc-type" onchange="poblarSelectActualizaDoc()" class="form-select form-select-sm bg-dark text-white border-secondary w-50">
                             <option value="Cotización">Cotización</option>
                             <option value="Cuenta de Cobro">Cuenta de Cobro</option>
                         </select>

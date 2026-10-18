@@ -5133,7 +5133,27 @@ function addToCart(uuid) {
     setTimeout(() => fab.style.transform = "scale(1)", 200);
 }
 
+// Selector "¿Actualiza un documento ya emitido?": lista la última versión de cada documento
+// del mismo tipo (Cotización / Cuenta de Cobro) para reutilizar su consecutivo con letra.
+function poblarSelectActualizaDoc() {
+    const sel = document.getElementById('cart-actualiza-doc');
+    if (!sel) return;
+    const tipo = document.getElementById('doc-type').value;
+    const previo = sel.value;
+    const vistos = {};
+    let html = '<option value="">No, es un documento nuevo</option>';
+    historyDocs.filter(h => h.tipo === tipo).slice(0, 60).forEach(h => {
+        const base = String(h.consecutivo).replace(/(\d)[A-Z]$/, '$1');
+        if (vistos[base]) return;
+        vistos[base] = true;
+        html += '<option value="' + base + '">' + h.consecutivo + ' · ' + (h.cliente || '').trim() + ' · ' + fmt.format(Number(h.total) || 0) + '</option>';
+    });
+    sel.innerHTML = html;
+    if (previo && vistos[previo]) sel.value = previo;
+}
+
 async function openCart() {
+    poblarSelectActualizaDoc();
     const selectExport = document.getElementById('cart-export-project');
     const selectImport = document.getElementById('cart-import-project');
     
@@ -5437,8 +5457,10 @@ async function generatePDF() {
     const incluyeAlcance = document.getElementById('check-alcance').checked;
     const alcanceText = incluyeAlcance ? document.getElementById('alcance-area').value : '';
 
+    const actualizaConsecutivo = (document.getElementById('cart-actualiza-doc') || {}).value || '';
     const payload = {
         tipoDoc: document.getElementById('doc-type').value,
+        actualizaConsecutivo: actualizaConsecutivo,
         cliente: cliente,
         items: safeItems,
         totales: { subtotal: subtotal, iva: ivaVal, granTotal: subtotal + ivaVal },
@@ -5457,6 +5479,7 @@ async function generatePDF() {
     btn.disabled = false; btn.innerHTML = '<i class="bi bi-file-earmark-pdf"></i> Generar PDF';
     
     if (res.success) {
+        const selActualiza = document.getElementById('cart-actualiza-doc'); if (selActualiza) selActualiza.value = '';
         cart = []; updateCartUI();
         const modalEl = document.getElementById('cartModal');
         const modalInstance = bootstrap.Modal.getInstance(modalEl);
