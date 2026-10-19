@@ -26,6 +26,28 @@ let _bulkSearchTimer = null;
 const fmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
 // --- PUENTE DE NAVEGACIÓN EXTERNA (PDFs, WhatsApp, enlaces) ---
+// Texto para WhatsApp: el WebView de algunos celulares entrega los emojis y símbolos fuera de
+// Latin-1 como "?" o "�" al abrir wa.me. Se normalizan los signos comunes a ASCII y se quita
+// el resto; las tildes y la ñ (Latin-1) se conservan.
+function sanitizarTextoWhatsApp(texto) {
+    return String(texto == null ? '' : texto)
+        .replace(/[\u2014\u2013\u2212]/g, '-')
+        .replace(/[\u201C\u201D\u201E]/g, '"')
+        .replace(/[\u2018\u2019\u201A]/g, "'")
+        .replace(/\u2026/g, '...')
+        .replace(/[\u2022\u25AA\u25AB\u25CF\u25E6\u2023]/g, '-')
+        .replace(/\u00A0/g, ' ')
+        .replace(/[^\u0000-\u00FF]/g, '')
+        .replace(/ {2,}/g, ' ')
+        .replace(/ +\n/g, '\n');
+}
+
+// Abre un chat de WhatsApp con el texto ya escrito (sin enviarlo). telefono10 = 10 dígitos o vacío.
+function abrirWhatsAppTexto(telefono10, texto) {
+    const base = telefono10 ? 'https://wa.me/57' + telefono10 : 'https://wa.me/';
+    openExternalUrl(base + '?text=' + encodeURIComponent(sanitizarTextoWhatsApp(texto)));
+}
+
 async function openExternalUrl(url) {
     if (window.Capacitor && window.Capacitor.Plugins.Browser) {
         await window.Capacitor.Plugins.Browser.open({ url });
@@ -3763,11 +3785,7 @@ function abrirWhatsAppConTelefono(telefonoRaw, mensaje) {
     // ya escrito pero SIN enviarlo -- lo revisas/editas y le das enviar tú.
     // Sin número: deja que sea WhatsApp quien te muestre la lista de chats
     // para elegir a quién mandárselo, en vez de pedirlo por un prompt().
-    const url = tel.length >= 10
-        ? `https://wa.me/57${tel}?text=${encodeURIComponent(mensaje)}`
-        : `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
-
-    openExternalUrl(url);
+    abrirWhatsAppTexto(tel.length >= 10 ? tel : '', mensaje);
 }
 
 async function enviarCuentaCobroSeleccionadosWhatsApp() {
@@ -4988,8 +5006,8 @@ async function publishToGitHub() {
         const finalUrl = res.data.url;
         navigator.clipboard.writeText(finalUrl).then(() => {
             if(confirm("✅ ¡Publicado en GitHub!\nEnlace copiado. ¿Compartir en WhatsApp ahora?")) {
-                 const msgShare = `🏢 *A.S.T. Soluciones Tecnológicas*\n\nConoce más detalles y especificaciones aquí:\n${finalUrl}`;
-                 openExternalUrl(`https://wa.me/?text=${encodeURIComponent(msgShare)}`);
+                 const msgShare = `*A.S.T. Soluciones Tecnológicas*\n\nConoce más detalles y especificaciones aquí:\n${finalUrl}`;
+                 abrirWhatsAppTexto('', msgShare);
             }
         });
     } else {
@@ -5397,19 +5415,20 @@ function sendWhatsApp() {
         const personaNatural = getEstimadorConfig('PERSONA_NATURAL_INFO', {});
         nombreEmisor = personaNatural.nombre || 'Gerson Arrieta';
     }
-    let msg = `${saludo}, cotización preliminar de *${nombreEmisor}*:\n\n`;
+    const esCuentaCobro = document.getElementById('doc-type').value === 'Cuenta de Cobro';
+    let msg = `${saludo}, ${esCuentaCobro ? 'cuenta de cobro' : 'cotización preliminar'} de *${nombreEmisor}*:\n\n`;
     let subtotal = 0;
     cart.forEach(item => {
         const sub = item.precio * item.cantidad;
         subtotal += sub;
-        msg += `▪ ${item.cantidad}x ${item.nombre}\n   $${item.precio.toLocaleString()} = $${sub.toLocaleString()}\n`;
+        msg += `- ${item.cantidad}x ${item.nombre}\n   $${item.precio.toLocaleString()} = $${sub.toLocaleString()}\n`;
     });
     const applyIva = document.getElementById('check-iva').checked;
     const ivaVal = applyIva ? (subtotal * 0.19) : 0;
     const granTotal = subtotal + ivaVal;
     if (applyIva) { msg += `\nSubtotal: $${subtotal.toLocaleString()}\nIVA (19%): $${ivaVal.toLocaleString()}`; }
     msg += `\n*TOTAL: $${granTotal.toLocaleString()}*`;
-    openExternalUrl(`https://wa.me/?text=${encodeURIComponent(msg)}`);
+    abrirWhatsAppTexto('', msg);
 }
 
 async function generatePDF() {
@@ -5500,8 +5519,8 @@ async function generatePDF() {
             }
 
             if (tel.length >= 10) {
-                const msg = `Hola, adjunto tu cotización: ${res.data.url}`;
-                openExternalUrl(`https://wa.me/57${tel}?text=${encodeURIComponent(msg)}`);
+                const nombreDoc = payload.tipoDoc === 'Cuenta de Cobro' ? 'cuenta de cobro' : 'cotización';
+                abrirWhatsAppTexto(tel, `Hola, adjunto tu ${nombreDoc}: ${res.data.url}`);
             } else {
                 // Fallback si el teléfono es inválido o muy corto
                 openExternalUrl(res.data.url);
