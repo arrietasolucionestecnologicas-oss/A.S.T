@@ -3115,6 +3115,7 @@ function openNewProjectModal() {
     document.getElementById('np-proyecto').value = "";
     document.getElementById('np-cliente').value = "";
     document.getElementById('np-contacto').value = "";
+    document.getElementById('np-alcance').value = "";
     bootstrap.Modal.getOrCreateInstance(document.getElementById('newProjectModal')).show();
 }
 
@@ -3123,7 +3124,8 @@ function createNewProject() {
         id: "PROJ-" + new Date().getTime(),
         nombreProyecto: document.getElementById('np-proyecto').value,
         cliente: document.getElementById('np-cliente').value,
-        contacto: document.getElementById('np-contacto').value
+        contacto: document.getElementById('np-contacto').value,
+        alcance: document.getElementById('np-alcance').value.trim()
     };
     if(!payload.nombreProyecto || !payload.cliente) return alert("Nombre y Cliente obligatorios");
     
@@ -3140,6 +3142,7 @@ function createNewProject() {
         cliente: payload.cliente,
         nombreProyecto: payload.nombreProyecto,
         contacto: payload.contacto,
+        alcance: payload.alcance,
         estado: "ABIERTO",
         totalCobrado: 0,
         totalCostos: 0,
@@ -3893,6 +3896,7 @@ function openEditProjectModal() {
     document.getElementById('ep-cliente').value = currentProjectData.cliente;
     document.getElementById('ep-contacto').value = currentProjectData.contacto;
     document.getElementById('ep-estado').value = currentProjectData.estado;
+    document.getElementById('ep-alcance').value = currentProjectData.alcance || '';
     bootstrap.Modal.getOrCreateInstance(document.getElementById('editProjectModal')).show();
 }
 
@@ -3902,7 +3906,8 @@ function updateProject() {
         nombreProyecto: document.getElementById('ep-proyecto').value,
         cliente: document.getElementById('ep-cliente').value,
         contacto: document.getElementById('ep-contacto').value,
-        estado: document.getElementById('ep-estado').value
+        estado: document.getElementById('ep-estado').value,
+        alcance: document.getElementById('ep-alcance').value.trim()
     };
     
     const modalInstance = bootstrap.Modal.getInstance(document.getElementById('editProjectModal'));
@@ -6142,6 +6147,21 @@ function filtrarMovimientosProyecto(term) {
     list.innerHTML = html;
 }
 
+// Pasa el alcance guardado en el proyecto al carrito: activa "Incluir Alcance del Trabajo" y deja el texto
+// listo para que salga en la cotización. Con reemplazar=false (Importar) lo agrega sin repetirlo.
+function aplicarAlcanceProyectoAlCarrito(alcance, reemplazar) {
+    const texto = String(alcance || '').trim();
+    if (!texto) return;
+    const check = document.getElementById('check-alcance');
+    const area = document.getElementById('alcance-area');
+    if (!check || !area) return;
+    const actual = String(area.value || '').trim();
+    if (reemplazar || !actual) area.value = texto;
+    else if (actual.indexOf(texto) === -1) area.value = actual + '\n\n' + texto;
+    check.checked = true;
+    toggleAlcance();
+}
+
 // Botón "Importar" del carrito: agrega al carrito los ítems cobrables del proyecto elegido
 // en el selector, sin cerrar el carrito (a diferencia de generateQuoteFromProject).
 async function importFromProject() {
@@ -6171,6 +6191,7 @@ async function importFromProject() {
         tipo:   item.tipo === 'MANO_OBRA' ? 'SERVICIO' : 'PRODUCTO'
     }));
 
+    aplicarAlcanceProyectoAlCarrito(res.data.info.alcance, false);
     const nombre = document.getElementById('c-nombre');
     if (nombre && !nombre.value) nombre.value = res.data.info.cliente || '';
     const tel = document.getElementById('c-tel');
@@ -6208,6 +6229,8 @@ function generateQuoteFromProject() {
         cantidad: item.cantidad,
         tipo:   item.tipo === 'MANO_OBRA' ? 'SERVICIO' : 'PRODUCTO'
     }));
+
+    aplicarAlcanceProyectoAlCarrito(currentProjectData.alcance, true);
 
     // Autocompletar cliente desde el proyecto
     document.getElementById('c-nombre').value = currentProjectData.cliente || '';
