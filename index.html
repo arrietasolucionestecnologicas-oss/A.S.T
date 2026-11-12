@@ -925,6 +925,19 @@
                             <label class="btn btn-outline-cyan btn-sm" for="plantilla-ordinaria"><i class="bi bi-file-earmark-text"></i> Ordinaria (sencilla)</label>
                             <input type="radio" class="btn-check" name="plantilla-tipo" id="plantilla-empresarial" value="empresarial" onchange="actualizarPlantillaUI()">
                             <label class="btn btn-outline-cyan btn-sm" for="plantilla-empresarial"><i class="bi bi-file-earmark-richtext"></i> Empresarial (oferta)</label>
+                            <input type="radio" class="btn-check" name="plantilla-tipo" id="plantilla-aplicaciones" value="aplicaciones" onchange="actualizarPlantillaUI()">
+                            <label class="btn btn-outline-cyan btn-sm" for="plantilla-aplicaciones"><i class="bi bi-phone"></i> Aplicaciones</label>
+                        </div>
+                        <div id="apps-area" style="display:none;" class="mt-2 p-2 rounded border border-secondary">
+                            <small class="text-cyan fw-bold d-block mb-1">Oferta de aplicaciones: el contenido completo sale del texto de abajo (más la tabla con tus ítems)</small>
+                            <button type="button" class="btn btn-sm btn-outline-cyan w-100 mb-2" onclick="cargarPresetAplicacionesQR()"><i class="bi bi-qr-code"></i> Cargar oferta: app de códigos QR para informes</button>
+                            <div class="row g-2">
+                                <div class="col-12"><input type="text" id="app-proyecto" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Nombre de la aplicación / proyecto"></div>
+                                <div class="col-8"><input type="text" id="app-tipo" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Tipo de servicio"></div>
+                                <div class="col-4"><input type="number" id="app-vigencia" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Vigencia (días)"></div>
+                                <div class="col-12"><textarea id="app-contenido" rows="9" class="form-control form-control-sm bg-dark text-white border-secondary" style="font-size:0.75rem;" placeholder="## Título de sección&#10;Texto o párrafo...&#10;- viñeta&#10;[[TABLA]]  (aquí va la tabla de ítems y totales)"></textarea></div>
+                            </div>
+                            <small class="text-secondary" style="font-size:0.7rem;">Con esta plantilla no se usan el alcance, los términos ni las condiciones de pago de arriba: todo va en este texto.</small>
                         </div>
                         <small id="plantilla-nota" class="text-secondary" style="font-size:0.7rem;"></small>
                         <div id="empresarial-area" style="display:none;" class="mt-2 p-2 rounded border border-secondary">

@@ -5285,7 +5285,7 @@ function esEmisorPersonaNatural() {
 function plantillaSeleccionada() {
     if (document.getElementById('doc-type').value !== 'Cotización' || esEmisorPersonaNatural()) return 'ordinaria';
     const r = document.querySelector('input[name="plantilla-tipo"]:checked');
-    return r && r.value === 'empresarial' ? 'empresarial' : 'ordinaria';
+    return r && (r.value === 'empresarial' || r.value === 'aplicaciones') ? r.value : 'ordinaria';
 }
 function actualizarPlantillaUI() {
     const bloque = document.getElementById('plantilla-bloque');
@@ -5296,7 +5296,37 @@ function actualizarPlantillaUI() {
     document.querySelectorAll('input[name="plantilla-tipo"]').forEach(r => { r.disabled = natural; });
     document.getElementById('plantilla-nota').textContent = natural ? 'Como Persona Natural se usa el diseño sencillo, sin el encabezado de A.S.T.' : '';
     document.getElementById('empresarial-area').style.display = plantillaSeleccionada() === 'empresarial' ? 'block' : 'none';
+    document.getElementById('apps-area').style.display = plantillaSeleccionada() === 'aplicaciones' ? 'block' : 'none';
 }
+// Plantilla "Aplicaciones": oferta de desarrollo de software. El contenido es un texto con "## Título" (sección numerada), "- viñeta" y [[TABLA]] (donde va la
+// tabla de ítems con totales y medios de pago). Se puede editar antes de generar. Debe coincidir con backend-appscript/plantillas-pdf/preset_aplicaciones_qr.js.
+function leerDatosAplicaciones() {
+    const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+    const empresarial = {}; if (v('app-proyecto')) empresarial.proyecto = v('app-proyecto'); if (v('app-tipo')) empresarial.tipoServicio = v('app-tipo');
+    return { contenido: document.getElementById('app-contenido').value, vigenciaDias: Number(v('app-vigencia')) || 0, empresarial: empresarial };
+}
+function cargarPresetAplicacionesQR() {
+    const P = PRESET_APLICACIONES_QR;
+    document.getElementById('app-proyecto').value = P.proyecto;
+    document.getElementById('app-tipo').value = P.tipoServicio;
+    document.getElementById('app-vigencia').value = P.vigenciaDias;
+    document.getElementById('app-contenido').value = P.contenido;
+    if (!cart.some(i => i.nombre === P.nombreItem)) cart.push({ uuid: generateUUID(), nombre: P.nombreItem, precio: P.precio, costo: 0, cantidad: 1, specs: P.specsItem });
+    document.getElementById('check-iva').checked = false;
+    updateCartUI();
+    alert('Listo: se cargó el contenido de la oferta y el ítem de $' + P.precio.toLocaleString('es-CO') + '. Revisa el cliente, el precio y los montos del anticipo y el saldo en el texto antes de generar.');
+}
+// <PRESET_APLICACIONES_QR>
+const PRESET_APLICACIONES_QR = {
+    "nombreItem": "Aplicación web generadora de códigos QR para informes",
+    "specsItem": "Desarrollo, instalación y puesta en funcionamiento. Incluye el registro de un dominio .com por un (1) año, a nombre del cliente.",
+    "precio": 400000,
+    "proyecto": "Aplicación generadora de códigos QR para informes",
+    "tipoServicio": "Desarrollo de software",
+    "vigenciaDias": 15,
+    "contenido": "## Objeto\nDesarrollo, instalación y puesta en funcionamiento de una aplicación web que registra informes de trabajo y genera un código QR por cada informe. Al escanear el código, se abre una página en el dominio del cliente que muestra los datos de ese informe.\n## Alcance: qué incluye\n- Dominio. Registro de un (1) dominio de extensión .com por un (1) año, con el nombre que el cliente elija, sujeto a disponibilidad. El dominio queda a nombre del cliente.\n- Vinculación del dominio. Configuración de los registros DNS para que el dominio abra la aplicación, con conexión segura (HTTPS).\n- Panel de registro. Pantalla protegida con una (1) clave de acceso, donde el cliente digita los datos de cada informe y consulta los informes ya creados.\n- Generador de QR. Por cada informe guardado, la aplicación genera un código QR único y permite descargarlo como imagen PNG para imprimirlo o adjuntarlo.\n- Página de consulta. Página pública que se abre al escanear el QR y muestra los datos del informe, con el nombre del cliente y su logo en el encabezado.\n- Aplicación instalable. La aplicación se puede instalar desde el navegador en celulares Android, iPhone y en computador, y queda con su ícono en la pantalla de inicio.\n- Anulación de informes. El cliente puede marcar un informe como anulado; al escanear su QR, la página lo indica.\n- Entrega. Aplicación funcionando en el dominio, un informe de prueba verificado por escaneo, entrega de accesos y una guía de uso de una página.\n## Funcionamiento y datos del informe\nCada informe contiene únicamente estos seis datos:\n- Número o código del informe: consecutivo automático asignado por la aplicación.\n- Cliente: texto digitado por el usuario.\n- Actividad realizada: texto digitado por el usuario.\n- Fecha: seleccionada por el usuario.\n- Resultado: texto digitado por el usuario.\n- Nombre de quien aprueba, con firma: nombre digitado e imagen de la firma suministrada por el cliente.\nEl código QR muestra exactamente lo que el usuario digitó en la aplicación, sin modificaciones. La aplicación no revisa, valida ni certifica el contenido: la veracidad de los datos registrados es responsabilidad exclusiva del cliente.\nLa firma que aparece en la página es una imagen. No constituye firma digital ni firma electrónica certificada.\n## Límites y exclusiones\nEsta oferta no incluye lo siguiente. Cualquiera de estos puntos puede cotizarse por separado.\n- Campos distintos o adicionales a los seis descritos.\n- Carga de fotos, archivos PDF u otros adjuntos en los informes.\n- Generación del informe en PDF o en formato imprimible.\n- Varios usuarios, roles o claves individuales: se entrega una (1) sola clave de acceso al panel.\n- Edición de un informe ya generado. Para corregir, se anula el informe y se crea uno nuevo.\n- Protección con clave de la página de consulta: cualquier persona que escanee el QR puede ver el informe.\n- Publicación en Google Play o App Store. La instalación se hace desde el navegador.\n- Funcionamiento sin conexión a internet.\n- Impresión de etiquetas, adhesivos o placas con el código QR.\n- Correos electrónicos con el dominio, página web corporativa u otros usos del dominio.\n- Renovación del dominio después del primer año.\n- Diseño de logo o de imagen corporativa. Se usa el logo que entregue el cliente.\n- Migración o digitación de informes anteriores.\nLa aplicación funciona sobre servicios gratuitos de Google (Hojas de cálculo y Apps Script) y GitHub Pages. Su disponibilidad y sus límites de uso dependen de esos proveedores. La aplicación está dimensionada para el registro manual de informes, no para cargas masivas ni automatizadas.\n## Requisitos a cargo del cliente\nPara iniciar, el cliente entrega:\n- Nombre deseado para el dominio y dos alternativas, por si no está disponible.\n- Datos del titular para registrar el dominio (nombre, identificación, correo y teléfono).\n- Logo en buena resolución.\n- Nombre y cargo de la persona que aprueba los informes, y la imagen de su firma.\nEl plazo de entrega empieza a contar cuando el cliente haya entregado todo lo anterior y pagado el anticipo.\n## Plazo de entrega\nCinco (5) días hábiles, contados desde el pago del anticipo y la entrega de los requisitos anteriores. La activación del dominio depende del registrador y puede tardar hasta 48 horas adicionales, tiempo que no está bajo control del proveedor.\n## Valor y forma de pago\nEl valor total es de $400.000 COP, pagaderos 50 % al inicio y 50 % a la entrega.\n[[TABLA]]\n- Anticipo para iniciar (50 %): $200.000 COP. Saldo a la entrega (50 %): $200.000 COP.\n- El trabajo inicia con el pago del anticipo.\n- El saldo se paga cuando la aplicación esté funcionando en el dominio y el cliente haya verificado el informe de prueba. Los accesos se entregan una vez recibido el saldo.\n- Si el cliente desiste después de iniciado el trabajo, el anticipo no es reembolsable, porque cubre el registro del dominio y el trabajo ya ejecutado.\n## Garantía, soporte y cambios\n- Garantía: 30 días calendario desde la entrega. Cubre, sin costo, la corrección de fallas en las funciones descritas en esta oferta.\n- No cubre: fallas causadas por cambios hechos por el cliente o por terceros en la hoja de cálculo, el dominio o las cuentas; pérdida de la clave de acceso; ni caídas de los servicios de Google, GitHub o del registrador del dominio.\n- Cambios y funciones nuevas: todo lo que no esté en el alcance se cotiza por separado antes de ejecutarse.\n- Soporte después de la garantía: se cotiza por separado, por evento o por plan anual.\n## Propiedad y costos posteriores\n- El dominio, la hoja de cálculo y los datos de los informes son propiedad del cliente.\n- El cliente recibe el derecho de uso de la aplicación sin límite de tiempo. El proveedor conserva el código base y puede reutilizarlo en otros proyectos, sin incluir datos ni imagen del cliente.\n- La renovación anual del dominio, a partir del segundo año, corre por cuenta del cliente. Si el dominio no se renueva, los códigos QR ya impresos dejan de funcionar.\n- La custodia de la clave de acceso y de la cuenta de Google es responsabilidad del cliente.\n## Aceptación\nLa oferta se entiende aceptada con la firma de este documento o con el pago del anticipo."
+};
+// </PRESET_APLICACIONES_QR>
 function leerDatosEmpresariales() {
     const campos = { proyecto: 'emp-proyecto', ubicacion: 'emp-ubicacion', tipoServicio: 'emp-tipo', resumen: 'emp-resumen', especificaciones: 'emp-especificaciones',
         normatividad: 'emp-normatividad', tiempo: 'emp-tiempo', inicio: 'emp-inicio', fin: 'emp-fin', garantia: 'emp-garantia', incluye: 'emp-incluye', noIncluye: 'emp-noincluye' };
@@ -5521,7 +5551,9 @@ async function generatePDF() {
             planPago: planPago,
             emisorPersonaNatural: esEmisorPersonaNatural(),
             plantilla: plantillaSeleccionada(),
-            empresarial: plantillaSeleccionada() === 'empresarial' ? leerDatosEmpresariales() : null
+            empresarial: plantillaSeleccionada() === 'empresarial' ? leerDatosEmpresariales() : (plantillaSeleccionada() === 'aplicaciones' ? leerDatosAplicaciones().empresarial : null),
+            contenido: plantillaSeleccionada() === 'aplicaciones' ? leerDatosAplicaciones().contenido : undefined,
+            vigenciaDias: plantillaSeleccionada() === 'aplicaciones' ? (leerDatosAplicaciones().vigenciaDias || undefined) : undefined
         },
         projectId: projectIdToSync
     };
