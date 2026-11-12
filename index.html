@@ -911,10 +911,38 @@
                     <div class="mb-3">
                         <label class="small text-muted d-block mb-1">Cotizar como</label>
                         <div class="btn-group w-100" role="group">
-                            <input type="radio" class="btn-check" name="emisor-tipo" id="emisor-ast" value="AST" checked>
+                            <input type="radio" class="btn-check" name="emisor-tipo" id="emisor-ast" value="AST" checked onchange="actualizarPlantillaUI()">
                             <label class="btn btn-outline-cyan btn-sm" for="emisor-ast"><i class="bi bi-building"></i> A.S.T. (empresa)</label>
-                            <input type="radio" class="btn-check" name="emisor-tipo" id="emisor-natural" value="NATURAL">
+                            <input type="radio" class="btn-check" name="emisor-tipo" id="emisor-natural" value="NATURAL" onchange="actualizarPlantillaUI()">
                             <label class="btn btn-outline-cyan btn-sm" for="emisor-natural"><i class="bi bi-person-fill"></i> Persona Natural</label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3" id="plantilla-bloque">
+                        <label class="small text-muted d-block mb-1">Plantilla del documento</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="plantilla-tipo" id="plantilla-ordinaria" value="ordinaria" checked onchange="actualizarPlantillaUI()">
+                            <label class="btn btn-outline-cyan btn-sm" for="plantilla-ordinaria"><i class="bi bi-file-earmark-text"></i> Ordinaria (sencilla)</label>
+                            <input type="radio" class="btn-check" name="plantilla-tipo" id="plantilla-empresarial" value="empresarial" onchange="actualizarPlantillaUI()">
+                            <label class="btn btn-outline-cyan btn-sm" for="plantilla-empresarial"><i class="bi bi-file-earmark-richtext"></i> Empresarial (oferta)</label>
+                        </div>
+                        <small id="plantilla-nota" class="text-secondary" style="font-size:0.7rem;"></small>
+                        <div id="empresarial-area" style="display:none;" class="mt-2 p-2 rounded border border-secondary">
+                            <small class="text-cyan fw-bold d-block mb-1">Datos de la oferta empresarial (todo es opcional: lo que quede vacío no se muestra)</small>
+                            <div class="row g-2">
+                                <div class="col-12"><input type="text" id="emp-proyecto" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Proyecto / servicio"></div>
+                                <div class="col-6"><input type="text" id="emp-ubicacion" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Ubicación"></div>
+                                <div class="col-6"><input type="text" id="emp-tipo" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Tipo de servicio"></div>
+                                <div class="col-12"><textarea id="emp-resumen" rows="2" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Resumen ejecutivo (si lo dejas vacío sale un texto estándar)"></textarea></div>
+                                <div class="col-12"><input type="text" id="emp-especificaciones" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Equipo / sistema (especificaciones técnicas)"></div>
+                                <div class="col-12"><input type="text" id="emp-normatividad" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Normatividad aplicable (solo si aplica)"></div>
+                                <div class="col-4"><input type="text" id="emp-tiempo" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Tiempo estimado"></div>
+                                <div class="col-4"><input type="text" id="emp-inicio" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Inicio"></div>
+                                <div class="col-4"><input type="text" id="emp-fin" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Finalización"></div>
+                                <div class="col-12"><input type="text" id="emp-garantia" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Garantía (solo si la das)"></div>
+                                <div class="col-6"><input type="text" id="emp-incluye" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Incluye"></div>
+                                <div class="col-6"><input type="text" id="emp-noincluye" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="No incluye"></div>
+                            </div>
                         </div>
                     </div>
 
@@ -1009,7 +1037,7 @@
                         <small class="text-secondary" style="font-size:0.7rem;">Si eliges uno, conserva el consecutivo y le agrega una letra (ej: COT-0034B) en vez de gastar uno nuevo.</small>
                     </div>
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <select id="doc-type" onchange="poblarSelectActualizaDoc()" class="form-select form-select-sm bg-dark text-white border-secondary w-50">
+                        <select id="doc-type" onchange="poblarSelectActualizaDoc(); actualizarPlantillaUI()"class="form-select form-select-sm bg-dark text-white border-secondary w-50">
                             <option value="Cotización">Cotización</option>
                             <option value="Cuenta de Cobro">Cuenta de Cobro</option>
                         </select>

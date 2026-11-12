@@ -5280,6 +5280,31 @@ function esEmisorPersonaNatural() {
     return !!radio && radio.value === 'NATURAL';
 }
 
+// --- Plantilla del documento (Identidad A.S.T. V1.1): ordinaria (sencilla) o empresarial (oferta técnico-económica) ---
+// Solo aplica a cotizaciones emitidas como A.S.T.; como Persona Natural se conserva el diseño sencillo sin encabezado de A.S.T.
+function plantillaSeleccionada() {
+    if (document.getElementById('doc-type').value !== 'Cotización' || esEmisorPersonaNatural()) return 'ordinaria';
+    const r = document.querySelector('input[name="plantilla-tipo"]:checked');
+    return r && r.value === 'empresarial' ? 'empresarial' : 'ordinaria';
+}
+function actualizarPlantillaUI() {
+    const bloque = document.getElementById('plantilla-bloque');
+    if (!bloque) return;
+    const esCotizacion = document.getElementById('doc-type').value === 'Cotización';
+    const natural = esEmisorPersonaNatural();
+    bloque.style.display = esCotizacion ? 'block' : 'none';
+    document.querySelectorAll('input[name="plantilla-tipo"]').forEach(r => { r.disabled = natural; });
+    document.getElementById('plantilla-nota').textContent = natural ? 'Como Persona Natural se usa el diseño sencillo, sin el encabezado de A.S.T.' : '';
+    document.getElementById('empresarial-area').style.display = plantillaSeleccionada() === 'empresarial' ? 'block' : 'none';
+}
+function leerDatosEmpresariales() {
+    const campos = { proyecto: 'emp-proyecto', ubicacion: 'emp-ubicacion', tipoServicio: 'emp-tipo', resumen: 'emp-resumen', especificaciones: 'emp-especificaciones',
+        normatividad: 'emp-normatividad', tiempo: 'emp-tiempo', inicio: 'emp-inicio', fin: 'emp-fin', garantia: 'emp-garantia', incluye: 'emp-incluye', noIncluye: 'emp-noincluye' };
+    const datos = {};
+    Object.keys(campos).forEach(k => { const el = document.getElementById(campos[k]); const v = el ? el.value.trim() : ''; if (v) datos[k] = v; });
+    return datos;
+}
+
 // --- Plantillas de texto reutilizables (alcance / términos) ---
 // Textos predisenados guardados en CONFIGURACION (clave
 // PLANTILLAS_TEXTO_CONFIG, mismo patrón genérico que los Kits del Estimador)
@@ -5494,7 +5519,9 @@ async function generatePDF() {
             alcance: alcanceText,
             condicionesPago: document.getElementById('cart-condiciones-pago').value,
             planPago: planPago,
-            emisorPersonaNatural: esEmisorPersonaNatural()
+            emisorPersonaNatural: esEmisorPersonaNatural(),
+            plantilla: plantillaSeleccionada(),
+            empresarial: plantillaSeleccionada() === 'empresarial' ? leerDatosEmpresariales() : null
         },
         projectId: projectIdToSync
     };
