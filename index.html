@@ -930,7 +930,15 @@
                         </div>
                         <div id="apps-area" style="display:none;" class="mt-2 p-2 rounded border border-secondary">
                             <small class="text-cyan fw-bold d-block mb-1">Oferta de aplicaciones: el contenido completo sale del texto de abajo (más la tabla con tus ítems)</small>
-                            <button type="button" class="btn btn-sm btn-outline-cyan w-100 mb-2" onclick="cargarPresetAplicacionesQR()"><i class="bi bi-qr-code"></i> Cargar oferta: app de códigos QR para informes</button>
+                            <div class="input-group input-group-sm mb-2">
+                                <select id="app-oferta-guardada" class="form-select bg-dark text-white border-secondary"><option value="">-- Elegir oferta guardada --</option></select>
+                                <button type="button" class="btn btn-outline-cyan" onclick="cargarOfertaGuardada()"><i class="bi bi-box-arrow-in-down"></i> Cargar</button>
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-6"><input type="text" id="app-atencion" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Atención (persona de contacto)"></div>
+                                <div class="col-6"><input type="text" id="app-whatsapp" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="WhatsApp o usuario de contacto"></div>
+                                <div class="col-12"><input type="text" id="app-direccion" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Dirección o ubicación del cliente"></div>
+                            </div>
                             <div class="row g-2">
                                 <div class="col-12"><input type="text" id="app-proyecto" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Nombre de la aplicación / proyecto"></div>
                                 <div class="col-8"><input type="text" id="app-tipo" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Tipo de servicio"></div>
@@ -966,6 +974,16 @@
                         <button class="btn btn-outline-cyan" onclick="importFromProject()">Importar</button>
                     </div>
 
+                    <div class="input-group input-group-sm mb-2">
+                        <input type="text" id="libre-nombre" class="form-control bg-dark text-white border-secondary" placeholder="Ítem libre (servicio, compra a proveedor...)">
+                        <input type="number" id="libre-precio" class="form-control bg-dark text-white border-secondary" style="max-width:110px;" placeholder="Precio">
+                        <select id="libre-modo" class="form-select bg-dark text-white border-secondary" style="max-width:120px;">
+                            <option value="normal">A.S.T. cobra</option>
+                            <option value="directo">Pago directo</option>
+                            <option value="cotizar">Por cotizar</option>
+                        </select>
+                        <button class="btn btn-outline-cyan" onclick="agregarItemLibre()"><i class="bi bi-plus-lg"></i></button>
+                    </div>
                     <div id="cart-items" class="mb-3"></div>
 
                     <div class="d-flex justify-content-between align-items-center mb-2">

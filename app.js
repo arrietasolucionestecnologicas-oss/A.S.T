@@ -5203,11 +5203,9 @@ function updateCartUI() {
     document.getElementById('cart-count').innerText = cart.length;
     const container = document.getElementById('cart-items');
     container.innerHTML = '';
-    let subtotal = 0;
-    
     cart.forEach((item, i) => {
-        subtotal += (item.precio * item.cantidad);
         const descValue = item.specs || "";
+        const modo = item.modo || 'normal';
         const safeDescValue = descValue.replace(/"/g, '"');
         
         container.innerHTML += `
@@ -5237,17 +5235,22 @@ function updateCartUI() {
                     </div>
                 </div>
                 <div class="col-3 text-end align-self-center">
-                    <small class="text-muted">${fmt.format(item.precio * item.cantidad)}</small>
+                    <small class="text-muted">${modo === 'cotizar' ? 'Por cotizar' : fmt.format(item.precio * item.cantidad)}</small>
+                </div>
+                <div class="col-12">
+                    <select class="form-select form-select-sm bg-dark text-secondary border-secondary py-0" style="font-size:0.7rem;" onchange="cambiarModoItem(${i}, this.value)">
+                        <option value="normal"${modo === 'normal' ? ' selected' : ''}>Lo cobra A.S.T.</option>
+                        <option value="directo"${modo === 'directo' ? ' selected' : ''}>Pago directo al proveedor (no suma al cobro de A.S.T.)</option>
+                        <option value="cotizar"${modo === 'cotizar' ? ' selected' : ''}>Por cotizar (sin precio, no suma)</option>
+                    </select>
                 </div>
             </div>
         </div>`;
     });
-    
-    const applyIva = document.getElementById('check-iva').checked;
-    const ivaVal = applyIva ? (subtotal * 0.19) : 0;
-    const total = subtotal + ivaVal;
-    document.getElementById('iva-display').innerText = `IVA: ${fmt.format(ivaVal)}`;
-    document.getElementById('cart-total').innerText = fmt.format(total);
+
+    const tc = totalesCarrito();
+    document.getElementById('iva-display').innerText = `IVA: ${fmt.format(tc.iva)}`;
+    document.getElementById('cart-total').innerText = fmt.format(tc.total) + (tc.directo > 0 ? ` (+ ${fmt.format(tc.directo)} al proveedor)` : '');
 
     localStorage.setItem('ast_cart_draft', JSON.stringify(cart));
 }
@@ -5297,36 +5300,182 @@ function actualizarPlantillaUI() {
     document.getElementById('plantilla-nota').textContent = natural ? 'Como Persona Natural se usa el diseño sencillo, sin el encabezado de A.S.T.' : '';
     document.getElementById('empresarial-area').style.display = plantillaSeleccionada() === 'empresarial' ? 'block' : 'none';
     document.getElementById('apps-area').style.display = plantillaSeleccionada() === 'aplicaciones' ? 'block' : 'none';
+    const selOf = document.getElementById('app-oferta-guardada');
+    if (selOf && selOf.options.length <= 1) poblarOfertasGuardadas();
 }
 // Plantilla "Aplicaciones": oferta de desarrollo de software. El contenido es un texto con "## Título" (sección numerada), "- viñeta" y [[TABLA]] (donde va la
 // tabla de ítems con totales y medios de pago). Se puede editar antes de generar. Debe coincidir con backend-appscript/plantillas-pdf/preset_aplicaciones_qr.js.
 function leerDatosAplicaciones() {
     const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
     const empresarial = {}; if (v('app-proyecto')) empresarial.proyecto = v('app-proyecto'); if (v('app-tipo')) empresarial.tipoServicio = v('app-tipo');
-    return { contenido: document.getElementById('app-contenido').value, vigenciaDias: Number(v('app-vigencia')) || 0, empresarial: empresarial };
+    return { contenido: document.getElementById('app-contenido').value, vigenciaDias: Number(v('app-vigencia')) || 0, empresarial: empresarial,
+        cliente: { atencion: v('app-atencion'), direccion: v('app-direccion'), whatsapp: v('app-whatsapp') } };
 }
-function cargarPresetAplicacionesQR() {
-    const P = PRESET_APLICACIONES_QR;
-    document.getElementById('app-proyecto').value = P.proyecto;
-    document.getElementById('app-tipo').value = P.tipoServicio;
-    document.getElementById('app-vigencia').value = P.vigenciaDias;
+// Biblioteca de ofertas guardadas (OFERTAS_GUARDADAS, más abajo): cada una trae texto, ítems y, si se conocen, los datos del cliente.
+function poblarOfertasGuardadas() {
+    const sel = document.getElementById('app-oferta-guardada');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">-- Elegir oferta guardada --</option>' + OFERTAS_GUARDADAS.map(o => '<option value="' + o.id + '">' + o.titulo + '</option>').join('');
+}
+function cargarOfertaGuardada() {
+    const sel = document.getElementById('app-oferta-guardada');
+    const P = OFERTAS_GUARDADAS.find(o => o.id === (sel ? sel.value : ''));
+    if (!P) return alert('Elige primero una oferta guardada.');
+    if (cart.length && !confirm('El carrito ya tiene ítems. ¿Reemplazarlos por los de esta oferta?')) return;
+    document.getElementById('app-proyecto').value = P.proyecto || '';
+    document.getElementById('app-tipo').value = P.tipoServicio || '';
+    document.getElementById('app-vigencia').value = P.vigenciaDias || '';
     document.getElementById('app-contenido').value = P.contenido;
-    if (!cart.some(i => i.nombre === P.nombreItem)) cart.push({ uuid: generateUUID(), nombre: P.nombreItem, precio: P.precio, costo: 0, cantidad: 1, specs: P.specsItem });
+    cart = P.items.map(i => ({ uuid: generateUUID(), nombre: i.nombre, precio: i.precio, costo: 0, cantidad: i.cantidad || 1, specs: i.specs || '', modo: i.modo || 'normal' }));
+    if (P.cliente) {
+        const poner = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+        poner('c-nombre', P.cliente.nombre); poner('c-tel', P.cliente.telefono);
+        poner('app-atencion', P.cliente.atencion); poner('app-direccion', P.cliente.direccion); poner('app-whatsapp', P.cliente.whatsapp);
+    }
     document.getElementById('check-iva').checked = false;
     updateCartUI();
-    alert('Listo: se cargó el contenido de la oferta y el ítem de $' + P.precio.toLocaleString('es-CO') + '. Revisa el cliente, el precio y los montos del anticipo y el saldo en el texto antes de generar.');
+    alert('Listo: se cargaron el texto y los ítems de la oferta. Revisa el cliente, los precios y todo lo que diga "por confirmar" antes de generar.');
 }
-// <PRESET_APLICACIONES_QR>
-const PRESET_APLICACIONES_QR = {
-    "nombreItem": "Aplicación web generadora de códigos QR para informes",
-    "specsItem": "Desarrollo, instalación y puesta en funcionamiento. Incluye el registro de un dominio .com por un (1) año, a nombre del cliente.",
-    "precio": 400000,
+// Ítem libre (sin catálogo): para servicios, compras directas al proveedor o ítems por cotizar.
+function agregarItemLibre() {
+    const nombre = document.getElementById('libre-nombre').value.trim();
+    if (!nombre) return alert('Escribe el nombre del ítem.');
+    cart.push({ uuid: generateUUID(), nombre: nombre, precio: Number(document.getElementById('libre-precio').value) || 0, costo: 0, cantidad: 1, specs: '', modo: document.getElementById('libre-modo').value });
+    document.getElementById('libre-nombre').value = ''; document.getElementById('libre-precio').value = '';
+    updateCartUI();
+}
+function cambiarModoItem(index, modo) { if (cart[index]) { cart[index].modo = modo; updateCartUI(); } }
+// Totales del carrito. Solo suman los ítems que cobra A.S.T. ('normal'): los de pago directo al proveedor ('directo') y los 'por cotizar' no entran
+// al total de A.S.T. (ni al historial, ni al cliente, ni a los proyectos); el de pago directo se muestra aparte en el documento.
+function totalesCarrito() {
+    let subtotal = 0, directo = 0;
+    cart.forEach(c => {
+        const t = c.precio * c.cantidad;
+        if (c.modo === 'directo') directo += t; else if (c.modo !== 'cotizar') subtotal += t;
+    });
+    const ivaVal = document.getElementById('check-iva').checked ? subtotal * 0.19 : 0;
+    return { subtotal: subtotal, directo: directo, iva: ivaVal, total: subtotal + ivaVal };
+}
+// <OFERTAS_GUARDADAS>
+const OFERTAS_GUARDADAS = [
+  {
+    "id": "qr_con_dominio",
+    "titulo": "App de códigos QR para informes, con dominio ($400.000)",
     "proyecto": "Aplicación generadora de códigos QR para informes",
     "tipoServicio": "Desarrollo de software",
     "vigenciaDias": 15,
+    "items": [
+      {
+        "nombre": "Aplicación web generadora de códigos QR para informes",
+        "specs": "Desarrollo, instalación y puesta en funcionamiento. Incluye el registro de un dominio .com por un (1) año, a nombre del cliente.",
+        "cantidad": 1,
+        "precio": 400000,
+        "modo": "normal"
+      }
+    ],
     "contenido": "## Objeto\nDesarrollo, instalación y puesta en funcionamiento de una aplicación web que registra informes de trabajo y genera un código QR por cada informe. Al escanear el código, se abre una página en el dominio del cliente que muestra los datos de ese informe.\n## Alcance: qué incluye\n- Dominio. Registro de un (1) dominio de extensión .com por un (1) año, con el nombre que el cliente elija, sujeto a disponibilidad. El dominio queda a nombre del cliente.\n- Vinculación del dominio. Configuración de los registros DNS para que el dominio abra la aplicación, con conexión segura (HTTPS).\n- Panel de registro. Pantalla protegida con una (1) clave de acceso, donde el cliente digita los datos de cada informe y consulta los informes ya creados.\n- Generador de QR. Por cada informe guardado, la aplicación genera un código QR único y permite descargarlo como imagen PNG para imprimirlo o adjuntarlo.\n- Página de consulta. Página pública que se abre al escanear el QR y muestra los datos del informe, con el nombre del cliente y su logo en el encabezado.\n- Aplicación instalable. La aplicación se puede instalar desde el navegador en celulares Android, iPhone y en computador, y queda con su ícono en la pantalla de inicio.\n- Anulación de informes. El cliente puede marcar un informe como anulado; al escanear su QR, la página lo indica.\n- Entrega. Aplicación funcionando en el dominio, un informe de prueba verificado por escaneo, entrega de accesos y una guía de uso de una página.\n## Funcionamiento y datos del informe\nCada informe contiene únicamente estos seis datos:\n- Número o código del informe: consecutivo automático asignado por la aplicación.\n- Cliente: texto digitado por el usuario.\n- Actividad realizada: texto digitado por el usuario.\n- Fecha: seleccionada por el usuario.\n- Resultado: texto digitado por el usuario.\n- Nombre de quien aprueba, con firma: nombre digitado e imagen de la firma suministrada por el cliente.\nEl código QR muestra exactamente lo que el usuario digitó en la aplicación, sin modificaciones. La aplicación no revisa, valida ni certifica el contenido: la veracidad de los datos registrados es responsabilidad exclusiva del cliente.\nLa firma que aparece en la página es una imagen. No constituye firma digital ni firma electrónica certificada.\n## Límites y exclusiones\nEsta oferta no incluye lo siguiente. Cualquiera de estos puntos puede cotizarse por separado.\n- Campos distintos o adicionales a los seis descritos.\n- Carga de fotos, archivos PDF u otros adjuntos en los informes.\n- Generación del informe en PDF o en formato imprimible.\n- Varios usuarios, roles o claves individuales: se entrega una (1) sola clave de acceso al panel.\n- Edición de un informe ya generado. Para corregir, se anula el informe y se crea uno nuevo.\n- Protección con clave de la página de consulta: cualquier persona que escanee el QR puede ver el informe.\n- Publicación en Google Play o App Store. La instalación se hace desde el navegador.\n- Funcionamiento sin conexión a internet.\n- Impresión de etiquetas, adhesivos o placas con el código QR.\n- Correos electrónicos con el dominio, página web corporativa u otros usos del dominio.\n- Renovación del dominio después del primer año.\n- Diseño de logo o de imagen corporativa. Se usa el logo que entregue el cliente.\n- Migración o digitación de informes anteriores.\nLa aplicación funciona sobre servicios gratuitos de Google (Hojas de cálculo y Apps Script) y GitHub Pages. Su disponibilidad y sus límites de uso dependen de esos proveedores. La aplicación está dimensionada para el registro manual de informes, no para cargas masivas ni automatizadas.\n## Requisitos a cargo del cliente\nPara iniciar, el cliente entrega:\n- Nombre deseado para el dominio y dos alternativas, por si no está disponible.\n- Datos del titular para registrar el dominio (nombre, identificación, correo y teléfono).\n- Logo en buena resolución.\n- Nombre y cargo de la persona que aprueba los informes, y la imagen de su firma.\nEl plazo de entrega empieza a contar cuando el cliente haya entregado todo lo anterior y pagado el anticipo.\n## Plazo de entrega\nCinco (5) días hábiles, contados desde el pago del anticipo y la entrega de los requisitos anteriores. La activación del dominio depende del registrador y puede tardar hasta 48 horas adicionales, tiempo que no está bajo control del proveedor.\n## Valor y forma de pago\nEl valor total es de $400.000 COP, pagaderos 50 % al inicio y 50 % a la entrega.\n[[TABLA]]\n- Anticipo para iniciar (50 %): $200.000 COP. Saldo a la entrega (50 %): $200.000 COP.\n- El trabajo inicia con el pago del anticipo.\n- El saldo se paga cuando la aplicación esté funcionando en el dominio y el cliente haya verificado el informe de prueba. Los accesos se entregan una vez recibido el saldo.\n- Si el cliente desiste después de iniciado el trabajo, el anticipo no es reembolsable, porque cubre el registro del dominio y el trabajo ya ejecutado.\n## Garantía, soporte y cambios\n- Garantía: 30 días calendario desde la entrega. Cubre, sin costo, la corrección de fallas en las funciones descritas en esta oferta.\n- No cubre: fallas causadas por cambios hechos por el cliente o por terceros en la hoja de cálculo, el dominio o las cuentas; pérdida de la clave de acceso; ni caídas de los servicios de Google, GitHub o del registrador del dominio.\n- Cambios y funciones nuevas: todo lo que no esté en el alcance se cotiza por separado antes de ejecutarse.\n- Soporte después de la garantía: se cotiza por separado, por evento o por plan anual.\n## Propiedad y costos posteriores\n- El dominio, la hoja de cálculo y los datos de los informes son propiedad del cliente.\n- El cliente recibe el derecho de uso de la aplicación sin límite de tiempo. El proveedor conserva el código base y puede reutilizarlo en otros proyectos, sin incluir datos ni imagen del cliente.\n- La renovación anual del dominio, a partir del segundo año, corre por cuenta del cliente. Si el dominio no se renueva, los códigos QR ya impresos dejan de funcionar.\n- La custodia de la clave de acceso y de la cuenta de Google es responsabilidad del cliente.\n## Aceptación\nLa oferta se entiende aceptada con la firma de este documento o con el pago del anticipo."
-};
-// </PRESET_APLICACIONES_QR>
+  },
+  {
+    "id": "qr_sin_dominio",
+    "titulo": "App de códigos QR para informes, sin dominio ($300.000)",
+    "proyecto": "Aplicación generadora de códigos QR para informes",
+    "tipoServicio": "Desarrollo de software",
+    "vigenciaDias": 15,
+    "items": [
+      {
+        "nombre": "Aplicación web generadora de códigos QR para informes",
+        "specs": "Desarrollo, instalación y puesta en funcionamiento. Se publica en un servidor gratuito (GitHub Pages), sin dominio propio.",
+        "cantidad": 1,
+        "precio": 300000,
+        "modo": "normal"
+      }
+    ],
+    "contenido": "## Objeto\nDesarrollo, instalación y puesta en funcionamiento de una aplicación web que registra informes de trabajo y genera un código QR por cada informe. Al escanear el código, se abre una página en la dirección de internet de la aplicación que muestra los datos de ese informe.\n## Alcance: qué incluye\n- Publicación. La aplicación se publica en el servidor gratuito de A.S.T. (GitHub Pages), con una dirección de internet gratuita del tipo usuario.github.io/nombre y conexión segura (HTTPS). No incluye dominio propio.\n- Panel de registro. Pantalla protegida con una (1) clave de acceso, donde el cliente digita los datos de cada informe y consulta los informes ya creados.\n- Generador de QR. Por cada informe guardado, la aplicación genera un código QR único y permite descargarlo como imagen PNG para imprimirlo o adjuntarlo.\n- Página de consulta. Página pública que se abre al escanear el QR y muestra los datos del informe, con el nombre del cliente y su logo en el encabezado.\n- Aplicación instalable. La aplicación se puede instalar desde el navegador en celulares Android, iPhone y en computador, y queda con su ícono en la pantalla de inicio.\n- Anulación de informes. El cliente puede marcar un informe como anulado; al escanear su QR, la página lo indica.\n- Entrega. Aplicación funcionando en su dirección de internet, un informe de prueba verificado por escaneo, entrega de accesos y una guía de uso de una página.\n## Funcionamiento y datos del informe\nCada informe contiene únicamente estos seis datos:\n- Número o código del informe: consecutivo automático asignado por la aplicación.\n- Cliente: texto digitado por el usuario.\n- Actividad realizada: texto digitado por el usuario.\n- Fecha: seleccionada por el usuario.\n- Resultado: texto digitado por el usuario.\n- Nombre de quien aprueba, con firma: nombre digitado e imagen de la firma suministrada por el cliente.\nEl código QR muestra exactamente lo que el usuario digitó en la aplicación, sin modificaciones. La aplicación no revisa, valida ni certifica el contenido: la veracidad de los datos registrados es responsabilidad exclusiva del cliente.\nLa firma que aparece en la página es una imagen. No constituye firma digital ni firma electrónica certificada.\n## Límites y exclusiones\nEsta oferta no incluye lo siguiente. Cualquiera de estos puntos puede cotizarse por separado.\n- Campos distintos o adicionales a los seis descritos.\n- Carga de fotos, archivos PDF u otros adjuntos en los informes.\n- Generación del informe en PDF o en formato imprimible.\n- Varios usuarios, roles o claves individuales: se entrega una (1) sola clave de acceso al panel.\n- Edición de un informe ya generado. Para corregir, se anula el informe y se crea uno nuevo.\n- Protección con clave de la página de consulta: cualquier persona que escanee el QR puede ver el informe.\n- Publicación en Google Play o App Store. La instalación se hace desde el navegador.\n- Funcionamiento sin conexión a internet.\n- Impresión de etiquetas, adhesivos o placas con el código QR.\n- Dominio propio (.com u otro), correos electrónicos con dominio y página web corporativa. Se cotizan por separado; los códigos QR ya impresos apuntarían a la dirección gratuita.\n- Diseño de logo o de imagen corporativa. Se usa el logo que entregue el cliente.\n- Migración o digitación de informes anteriores.\nLa aplicación funciona sobre servicios gratuitos de Google (Hojas de cálculo y Apps Script) y GitHub Pages. La dirección de internet de la aplicación pertenece a esa plataforma gratuita y no es una dirección propia. Su disponibilidad y sus límites de uso dependen de esos proveedores. La aplicación está dimensionada para el registro manual de informes, no para cargas masivas ni automatizadas.\n## Requisitos a cargo del cliente\nPara iniciar, el cliente entrega:\n- Nombre deseado para la aplicación, que aparecerá en su dirección de internet, y dos alternativas, por si no está disponible.\n- Logo en buena resolución.\n- Nombre y cargo de la persona que aprueba los informes, y la imagen de su firma.\nEl plazo de entrega empieza a contar cuando el cliente haya entregado todo lo anterior y pagado el anticipo.\n## Plazo de entrega\nCinco (5) días hábiles, contados desde el pago del anticipo y la entrega de los requisitos anteriores.\n## Valor y forma de pago\nEl valor total es de $300.000 COP, pagaderos 50 % al inicio y 50 % a la entrega.\n[[TABLA]]\n- Anticipo para iniciar (50 %): $150.000 COP. Saldo a la entrega (50 %): $150.000 COP.\n- El trabajo inicia con el pago del anticipo.\n- El saldo se paga cuando la aplicación esté funcionando en su dirección de internet y el cliente haya verificado el informe de prueba. Los accesos se entregan una vez recibido el saldo.\n- Si el cliente desiste después de iniciado el trabajo, el anticipo no es reembolsable, porque cubre el trabajo ya ejecutado.\n## Garantía, soporte y cambios\n- Garantía: 30 días calendario desde la entrega. Cubre, sin costo, la corrección de fallas en las funciones descritas en esta oferta.\n- No cubre: fallas causadas por cambios hechos por el cliente o por terceros en la hoja de cálculo, el código publicado o las cuentas; pérdida de la clave de acceso; ni caídas o cambios de condiciones de los servicios de Google o GitHub.\n- Cambios y funciones nuevas: todo lo que no esté en el alcance se cotiza por separado antes de ejecutarse.\n- Soporte después de la garantía: se cotiza por separado, por evento o por plan anual.\n## Propiedad y costos posteriores\n- La hoja de cálculo y los datos de los informes son propiedad del cliente.\n- El cliente recibe el derecho de uso de la aplicación. El proveedor conserva el código base y puede reutilizarlo en otros proyectos, sin incluir datos ni imagen del cliente.\n- La aplicación y su hoja de cálculo se alojan en las cuentas gratuitas de Google y GitHub de A.S.T. Si esas plataformas cambian sus condiciones o dejan de estar disponibles, la aplicación y los códigos QR ya impresos pueden dejar de funcionar.\n- La custodia de la clave de acceso es responsabilidad del cliente.\n## Aceptación\nLa oferta se entiende aceptada con la firma de este documento o con el pago del anticipo."
+  },
+  {
+    "id": "full_empaques",
+    "titulo": "Mantenimiento de transformador seco 20 kVA (FULL EMPAQUES, sin IVA)",
+    "proyecto": "Mantenimiento de transformador trifásico tipo seco de 20 kVA",
+    "tipoServicio": "Mantenimiento eléctrico",
+    "vigenciaDias": 15,
+    "cliente": {
+      "nombre": "FULL EMPAQUES S.A.S",
+      "atencion": "Carlos Hernández",
+      "telefono": "315 191 1686",
+      "direccion": "Vía 40 Cl 51 47"
+    },
+    "items": [
+      {
+        "nombre": "Limpieza general del transformador y soplado de la parte activa con nitrógeno seco",
+        "specs": "",
+        "cantidad": 1,
+        "precio": 300000,
+        "modo": "normal"
+      },
+      {
+        "nombre": "Suministro de nitrógeno seco para el soplado de la parte activa",
+        "specs": "",
+        "cantidad": 1,
+        "precio": 250000,
+        "modo": "normal"
+      },
+      {
+        "nombre": "Prueba de aislamiento (Megger)",
+        "specs": "",
+        "cantidad": 1,
+        "precio": 200000,
+        "modo": "normal"
+      },
+      {
+        "nombre": "Revisión y apriete de conexiones flojas",
+        "specs": "",
+        "cantidad": 1,
+        "precio": 100000,
+        "modo": "normal"
+      }
+    ],
+    "contenido": "## Características del equipo\n- Equipo: transformador trifásico tipo seco.\n- Marca: Fanerlong. Modelo: SZQ-20KVA.\n- Potencia: 20 kVA. Fases: trifásico.\n- Tensión primaria: 220 V. Tensión secundaria: 380 V.\n- Año de fabricación: 2024.\n- Ubicación: planta de FULL EMPAQUES S.A.S., Barranquilla.\n## Objetivo del servicio\nMantenimiento de transformador trifásico tipo seco de 20 kVA.\n## Alcance\nEl presente trabajo comprende la limpieza general del transformador mediante soplado de la parte activa con nitrógeno seco, la revisión y apriete de las conexiones que se encuentran flojas y la prueba de aislamiento (Megger).\n## Actividades principales\n- Limpieza general del transformador y soplado de la parte activa con nitrógeno seco para retirar el polvo acumulado.\n- Revisión y apriete de las conexiones flojas.\n- Prueba de aislamiento (Megger).\n## Materiales y entregables\n- Materiales: nitrógeno seco para el soplado de la parte activa.\n- Entregable: informe técnico de los trabajos realizados.\n## Propuesta económica\n[[TABLA]]\nValores en pesos colombianos (COP). No incluye IVA. El pago se realiza mediante cuenta de cobro.\n## Condiciones de pago\n- Anticipo, antes de iniciar los trabajos (50 %): $ 425.000\n- Al terminar los trabajos (50 %): $ 425.000\n## Aceptación\nLa oferta se entiende aceptada con la firma de este documento o con el pago del anticipo."
+  },
+  {
+    "id": "planta_iglesia",
+    "titulo": "Planta eléctrica para aires acondicionados (compra directa + asesoría e instalación)",
+    "proyecto": "Planta eléctrica para los aires acondicionados",
+    "tipoServicio": "Asesoría técnica, gestión de compra e instalación",
+    "vigenciaDias": 0,
+    "items": [
+      {
+        "nombre": "Planta eléctrica LEES LSC100S3-6, 100 kVA, cabinada (insonorizada)",
+        "specs": "IVA incluido (base $48.319.328 + IVA $9.180.672). La iglesia la compra directo al proveedor y la factura sale a nombre de la iglesia. Proveedor: por confirmar.",
+        "cantidad": 1,
+        "precio": 57500000,
+        "modo": "directo"
+      },
+      {
+        "nombre": "Asesoría técnica y gestión de compra (A.S.T.)",
+        "specs": "Se descuenta si la iglesia contrata la instalación con A.S.T.",
+        "cantidad": 1,
+        "precio": 1000000,
+        "modo": "normal"
+      },
+      {
+        "nombre": "Mano de obra de instalación (A.S.T.)",
+        "specs": "Valor por confirmar.",
+        "cantidad": 1,
+        "precio": 0,
+        "modo": "cotizar"
+      },
+      {
+        "nombre": "Materiales de instalación",
+        "specs": "Por cotizar tras visita.",
+        "cantidad": 1,
+        "precio": 0,
+        "modo": "cotizar"
+      }
+    ],
+    "contenido": "## Objetivo\nPresentar la opción de alimentar con una planta eléctrica propia los 6 aires acondicionados de la iglesia, porque el transformador de la zona no tiene capacidad para conectarlos a la red.\n## Situación actual\n- La iglesia tiene 6 aires acondicionados de 5 TR, marca Blueline, ya instalados.\n- Cada equipo funciona a 220 V, 1 fase, 60 Hz, y consume 36,2 A (unos 8,0 kVA).\n- Los 6 equipos juntos consumen unos 47,8 kVA, repartidos en un sistema trifásico.\n## Planta propuesta\n- Planta LEES LSC100S3-6, cabinada (insonorizada), con motor diésel Cummins 4BTA3.9-G11.\n- Potencia continua: 90 kVA / 72 kW. Potencia de emergencia: 100 kVA / 80 kW. 60 Hz, 220/127 V trifásica.\n- Medidas: 2280 x 960 x 1255 mm. Peso: 1300 kg. Tanque: 79 litros.\n- Con los 6 aires, la planta trabaja al 53 % de su capacidad continua en kVA y al 66,5 % en kW.\n- Consumo estimado de combustible: entre 12,5 y 14 litros por hora, lo que da unas 6 horas de autonomía con el tanque lleno.\n- Garantía según el fabricante: 1 año, limitada.\n## Condiciones de funcionamiento\n- Los aires deben arrancar uno por uno. La planta no soporta el arranque de los 6 al mismo tiempo.\n- La planta se dimensiona con su capacidad continua (90 kVA / 72 kW), no con los 100 kVA de emergencia.\n- La planta alimenta solo los 6 aires. Cualquier otra carga requiere revisión previa.\n- Por confirmar con el proveedor: capacidad de arranque de motores, accesorios incluidos (cargador de baterías, excitación PMG, controlador), transferencia automática, transporte, tiempo de entrega y servicio de garantía en Barranquilla.\n- Por confirmar: corriente de arranque de los compresores (no aparece en las placas).\n## Asesoría técnica y gestión de compra (A.S.T.)\n- Levantamiento de la carga con las placas de los 6 aires.\n- Definición del tamaño de la planta y de la forma de arrancar los aires.\n- Revisión técnica de la oferta del proveedor.\n- Comparación de precios de mercado y negociación.\n- Estimación de consumo de combustible y autonomía.\n- Recomendación escrita con las condiciones de operación.\n## Instalación (A.S.T.)\nPor ajustar según lo que se vaya a ejecutar:\n- Base o ubicación de la planta.\n- Cable desde la planta hasta el tablero de los aires.\n- Interruptor y protecciones.\n- Puesta a tierra.\n- Sistema de arranque escalonado de los aires.\n- Pruebas de puesta en marcha.\n## No incluye\n- Combustible.\n- Transporte de la planta, salvo que el proveedor lo incluya.\n- Transferencia automática, si no viene con la planta.\n- Diseño firmado o certificación RETIE, si llegan a exigirse.\n- Obras civiles mayores.\n## Propuesta económica\nLa planta no la vende A.S.T. La iglesia la compra directo al proveedor y la factura sale a nombre de la iglesia. A.S.T. no le agrega ningún margen.\n[[TABLA]]\n- Referencia de mercado: las plantas de 100 kVA con motor Cummins se publican en Colombia entre $49 y $79 millones, la mayoría entre $57 y $68 millones. El precio de la planta está en negociación y puede bajar o incluir accesorios.\n- Si la iglesia contrata la instalación con A.S.T., el valor de la asesoría se descuenta de la instalación.\n- Forma de pago de los servicios de A.S.T.: por confirmar. Vigencia de la oferta: por confirmar.\n## Aceptación\nLa oferta se entiende aceptada con la firma de este documento o con el pago del anticipo."
+  }
+];
+// </OFERTAS_GUARDADAS>
 function leerDatosEmpresariales() {
     const campos = { proyecto: 'emp-proyecto', ubicacion: 'emp-ubicacion', tipoServicio: 'emp-tipo', resumen: 'emp-resumen', especificaciones: 'emp-especificaciones',
         normatividad: 'emp-normatividad', tiempo: 'emp-tiempo', inicio: 'emp-inicio', fin: 'emp-fin', garantia: 'emp-garantia', incluye: 'emp-incluye', noIncluye: 'emp-noincluye' };
@@ -5477,31 +5626,30 @@ function sendWhatsApp() {
     }
     const esCuentaCobro = document.getElementById('doc-type').value === 'Cuenta de Cobro';
     let msg = `${saludo}, ${esCuentaCobro ? 'cuenta de cobro' : 'cotización preliminar'} de *${nombreEmisor}*:\n\n`;
-    let subtotal = 0;
     cart.forEach(item => {
         const sub = item.precio * item.cantidad;
-        subtotal += sub;
-        msg += `- ${item.cantidad}x ${item.nombre}\n   $${item.precio.toLocaleString()} = $${sub.toLocaleString()}\n`;
+        const nota = item.modo === 'directo' ? ' (pago directo al proveedor)' : '';
+        msg += item.modo === 'cotizar' ? `- ${item.cantidad}x ${item.nombre}\n   Por cotizar\n` : `- ${item.cantidad}x ${item.nombre}${nota}\n   $${item.precio.toLocaleString()} = $${sub.toLocaleString()}\n`;
     });
-    const applyIva = document.getElementById('check-iva').checked;
-    const ivaVal = applyIva ? (subtotal * 0.19) : 0;
-    const granTotal = subtotal + ivaVal;
-    if (applyIva) { msg += `\nSubtotal: $${subtotal.toLocaleString()}\nIVA (19%): $${ivaVal.toLocaleString()}`; }
-    msg += `\n*TOTAL: $${granTotal.toLocaleString()}*`;
+    const tc = totalesCarrito(), subtotal = tc.subtotal, ivaVal = tc.iva, granTotal = tc.total;
+    if (tc.iva > 0) { msg += `\nSubtotal: $${subtotal.toLocaleString()}\nIVA (19%): $${ivaVal.toLocaleString()}`; }
+    msg += `\n*TOTAL A.S.T.: $${granTotal.toLocaleString()}*`;
+    if (tc.directo > 0) msg += `\nPago directo al proveedor: $${tc.directo.toLocaleString()}\n*TOTAL PARA EL CLIENTE: $${(granTotal + tc.directo).toLocaleString()}*`;
     abrirWhatsAppTexto('', msg);
 }
 
 async function generatePDF() {
     const cliente = { nombre: document.getElementById('c-nombre').value, nit: document.getElementById('c-nit').value, telefono: document.getElementById('c-tel').value };
+    if (plantillaSeleccionada() === 'aplicaciones') {
+        const extra = leerDatosAplicaciones().cliente;
+        if (extra.atencion) cliente.atencion = extra.atencion; if (extra.direccion) cliente.direccion = extra.direccion; if (extra.whatsapp) cliente.whatsapp = extra.whatsapp;
+    }
     if(!cliente.nombre || cart.length === 0) return alert("Falta nombre cliente o carrito vacío.");
     
     const btn = document.querySelector('#cartModal .btn-success');
     btn.disabled = true; btn.innerHTML = "GENERANDO...";
     
-    let subtotal = 0;
-    cart.forEach(c => subtotal += (c.precio * c.cantidad));
-    const applyIva = document.getElementById('check-iva').checked;
-    const ivaVal = applyIva ? (subtotal * 0.19) : 0;
+    const tc = totalesCarrito(), subtotal = tc.subtotal, ivaVal = tc.iva;
     const projectIdToSync = document.getElementById('cart-export-project').value;
     
     let includeTerms = false;
@@ -5523,7 +5671,8 @@ async function generatePDF() {
         cantidad: c.cantidad,
         precio: c.precio,
         specs: c.specs,
-        subtotal: c.cantidad * c.precio
+        modo: c.modo || 'normal',
+        subtotal: c.modo === 'cotizar' ? 0 : c.cantidad * c.precio
     }));
 
     const incluyePlanPago = document.getElementById('check-plan-pago').checked;
