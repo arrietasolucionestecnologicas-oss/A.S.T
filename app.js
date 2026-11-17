@@ -124,6 +124,57 @@ async function scheduleRecurringPaymentReminders() {
     }
 }
 
+// --- AVISOS DE MANTENIMIENTO DE CÁMARAS (notificaciones locales en el celular) ---
+// Usa los mismos datos del panel "Mantenimiento de cámaras" (ciclo de 6 meses). Por cada cliente programa: un aviso 15 días antes (9:00 a.m.), otro el día
+// del mantenimiento (9:00 a.m.) y, si ya está vencido, un recordatorio cada 3 días. Se reprograma cada vez que se abre la app, así que si marcas un
+// mantenimiento como realizado los avisos viejos se cancelan solos.
+async function scheduleCameraMaintenanceReminders() {
+    if (!window.Capacitor || !window.Capacitor.Plugins.LocalNotifications) return;
+    try {
+        const LN = window.Capacitor.Plugins.LocalNotifications;
+        let perm = await LN.checkPermissions();
+        if (perm.display !== 'granted') {
+            perm = await LN.requestPermissions();
+            if (perm.display !== 'granted') return;
+        }
+        const res = await callApi('getMantenimientosCamaras', {});
+        if (!res.success || !Array.isArray(res.data)) return;
+
+        // Cancelar los avisos de mantenimiento programados antes (puede haber clientes que ya no estén pendientes).
+        let idsPrevios = [];
+        try { idsPrevios = JSON.parse(localStorage.getItem('ast_mant_notif_ids') || '[]'); } catch (e) {}
+        if (idsPrevios.length) { try { await LN.cancel({ notifications: idsPrevios.map(id => ({ id })) }); } catch (e) {} }
+
+        const ahora = Date.now(), DIAS_ENTRE_AVISOS_VENCIDO = 3, notifications = [];
+        res.data.forEach(m => {
+            const prox = new Date(m.proximaFecha); prox.setHours(9, 0, 0, 0);
+            const aviso = new Date(prox.getTime() - 15 * 86400000);
+            const cliente = m.cliente || 'Cliente';
+            const base = 'mantcam_' + m.id;
+            if (aviso.getTime() > ahora) {
+                notifications.push({ id: hashToNotifId(base + '_aviso'), title: 'Mantenimiento de cámaras en 15 días', body: `${cliente}: ${m.nombreProyecto}. Coordina la visita.`, schedule: { at: aviso } });
+            }
+            if (prox.getTime() > ahora) {
+                notifications.push({ id: hashToNotifId(base + '_dia'), title: 'Hoy toca mantenimiento de cámaras', body: `${cliente}: ${m.nombreProyecto}`, schedule: { at: prox } });
+                return;
+            }
+            // Ya vencido: recordatorio cada DIAS_ENTRE_AVISOS_VENCIDO días (no uno nuevo cada vez que se abre la app).
+            const key = 'ast_last_mant_reminder_' + m.id;
+            let ultimo = 0;
+            try { ultimo = Number(localStorage.getItem(key)) || 0; } catch (e) {}
+            if (ultimo > 0 && (ahora - ultimo) / 86400000 < DIAS_ENTRE_AVISOS_VENCIDO) return;
+            const dias = Math.abs(m.diasParaVencer);
+            notifications.push({ id: hashToNotifId(base + '_vencido'), title: '⚠️ Mantenimiento de cámaras VENCIDO', body: `${cliente}: ${m.nombreProyecto}. Vencido hace ${dias} día${dias === 1 ? '' : 's'}.`, schedule: { at: new Date(ahora + 3000) } });
+            try { localStorage.setItem(key, String(ahora)); } catch (e) {}
+        });
+
+        if (notifications.length > 0) await LN.schedule({ notifications });
+        try { localStorage.setItem('ast_mant_notif_ids', JSON.stringify(notifications.map(n => n.id))); } catch (e) {}
+    } catch (e) {
+        console.error('Error programando avisos de mantenimiento de cámaras', e);
+    }
+}
+
 function generateUUID() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
         var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -414,6 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     initNetworkLogic();
     scheduleRecurringPaymentReminders();
+    scheduleCameraMaintenanceReminders();
 
 document.getElementById('search').addEventListener('input', (e) => {
         const term = e.target.value.toLowerCase().trim();
@@ -5445,7 +5497,7 @@ const OFERTAS_GUARDADAS = [
     "items": [
       {
         "nombre": "Planta eléctrica LEES LSC100S3-6, 100 kVA, cabinada (insonorizada)",
-        "specs": "IVA incluido (base $48.319.328 + IVA $9.180.672). La iglesia la compra directo al proveedor y la factura sale a nombre de la iglesia. Proveedor: por confirmar.",
+        "specs": "IVA incluido (base $48.319.328 + IVA $9.180.672). La iglesia la compra directo al proveedor y la factura sale a nombre de la iglesia. Proveedor: Equipos Del Atlantico ST SAS.",
         "cantidad": 1,
         "precio": 57500000,
         "modo": "directo"
@@ -5472,7 +5524,7 @@ const OFERTAS_GUARDADAS = [
         "modo": "cotizar"
       }
     ],
-    "contenido": "## Objetivo\nPresentar la opción de alimentar con una planta eléctrica propia los 6 aires acondicionados de la iglesia, porque el transformador de la zona no tiene capacidad para conectarlos a la red.\n## Situación actual\n- La iglesia tiene 6 aires acondicionados de 5 TR, marca Blueline, ya instalados.\n- Cada equipo funciona a 220 V, 1 fase, 60 Hz, y consume 36,2 A (unos 8,0 kVA).\n- Los 6 equipos juntos consumen unos 47,8 kVA, repartidos en un sistema trifásico.\n## Planta propuesta\n- Planta LEES LSC100S3-6, cabinada (insonorizada), con motor diésel Cummins 4BTA3.9-G11.\n- Potencia continua: 90 kVA / 72 kW. Potencia de emergencia: 100 kVA / 80 kW. 60 Hz, 220/127 V trifásica.\n- Medidas: 2280 x 960 x 1255 mm. Peso: 1300 kg. Tanque: 79 litros.\n- Con los 6 aires, la planta trabaja al 53 % de su capacidad continua en kVA y al 66,5 % en kW.\n- Consumo estimado de combustible: entre 12,5 y 14 litros por hora, lo que da unas 6 horas de autonomía con el tanque lleno.\n- Garantía según el fabricante: 1 año, limitada.\n## Condiciones de funcionamiento\n- Los aires deben arrancar uno por uno. La planta no soporta el arranque de los 6 al mismo tiempo.\n- La planta se dimensiona con su capacidad continua (90 kVA / 72 kW), no con los 100 kVA de emergencia.\n- La planta alimenta solo los 6 aires. Cualquier otra carga requiere revisión previa.\n- Por confirmar con el proveedor: capacidad de arranque de motores, accesorios incluidos (cargador de baterías, excitación PMG, controlador), transferencia automática, transporte, tiempo de entrega y servicio de garantía en Barranquilla.\n- Por confirmar: corriente de arranque de los compresores (no aparece en las placas).\n## Asesoría técnica y gestión de compra (A.S.T.)\n- Levantamiento de la carga con las placas de los 6 aires.\n- Definición del tamaño de la planta y de la forma de arrancar los aires.\n- Revisión técnica de la oferta del proveedor.\n- Comparación de precios de mercado y negociación.\n- Estimación de consumo de combustible y autonomía.\n- Recomendación escrita con las condiciones de operación.\n## Instalación (A.S.T.)\nPor ajustar según lo que se vaya a ejecutar:\n- Base o ubicación de la planta.\n- Cable desde la planta hasta el tablero de los aires.\n- Interruptor y protecciones.\n- Puesta a tierra.\n- Sistema de arranque escalonado de los aires.\n- Pruebas de puesta en marcha.\n## No incluye\n- Combustible.\n- Transporte de la planta, salvo que el proveedor lo incluya.\n- Transferencia automática, si no viene con la planta.\n- Diseño firmado o certificación RETIE, si llegan a exigirse.\n- Obras civiles mayores.\n## Propuesta económica\nLa planta no la vende A.S.T. La iglesia la compra directo al proveedor y la factura sale a nombre de la iglesia. A.S.T. no le agrega ningún margen.\n[[TABLA]]\n- Referencia de mercado: las plantas de 100 kVA con motor Cummins se publican en Colombia entre $49 y $79 millones, la mayoría entre $57 y $68 millones. El precio de la planta está en negociación y puede bajar o incluir accesorios.\n- Si la iglesia contrata la instalación con A.S.T., el valor de la asesoría se descuenta de la instalación.\n- Forma de pago de los servicios de A.S.T.: por confirmar. Vigencia de la oferta: por confirmar.\n## Aceptación\nLa oferta se entiende aceptada con la firma de este documento o con el pago del anticipo."
+    "contenido": "## Objetivo\nPresentar la opción de alimentar con una planta eléctrica propia los 6 aires acondicionados de la iglesia, porque el transformador de la zona no tiene capacidad para conectarlos a la red.\n## Situación actual\n- La iglesia tiene 6 aires acondicionados de 5 TR, marca Blueline, ya instalados.\n- Cada equipo funciona a 220 V, 1 fase, 60 Hz, y consume 36,2 A (unos 8,0 kVA).\n- Los 6 equipos juntos consumen unos 47,8 kVA, repartidos en un sistema trifásico.\n## Planta propuesta\n- Planta LEES LSC100S3-6, cabinada (insonorizada), con motor diésel Cummins 4BTA3.9-G11.\n- Potencia continua: 90 kVA / 72 kW. Potencia de emergencia: 100 kVA / 80 kW. 60 Hz, 220/127 V trifásica.\n- Medidas: 2280 x 960 x 1255 mm. Peso: 1300 kg. Tanque: 79 litros.\n- Con los 6 aires, la planta trabaja al 53 % de su capacidad continua en kVA y al 66,5 % en kW.\n- Consumo estimado de combustible: entre 12,5 y 14 litros por hora, lo que da unas 6 horas de autonomía con el tanque lleno.\n- Nivel de ruido: 80 dB a 7 metros, según el proveedor. Incluye módulo de control.\n- Se entrega configurada a 220/127 V trifásica; la configuración se hace al momento del alistamiento y, según el proveedor, la capacidad queda en 80 kW.\n- Garantía: 1 año, confirmada por el proveedor, Equipos Del Atlantico ST SAS. Los repuestos son comerciales y se consiguen en Montecarlos y Donsson.\n- Si se quisiera cambiar la planta de trifásica a bifásica, el proveedor cobra $1.500.000 adicionales. Esta oferta usa la planta trifásica.\n## Condiciones de funcionamiento\n- Los aires deben arrancar uno por uno, de forma secuencial. La planta no soporta el arranque de los 6 al mismo tiempo.\n- El proveedor confirma que la planta se puede usar de forma continua, porque tiene motor Cummins a 1800 rpm. Aun así, la planta se dimensiona con su capacidad continua (90 kVA / 72 kW) y no con los 100 kVA de emergencia.\n- La planta alimenta solo los 6 aires. Cualquier otra carga requiere revisión previa.\n- Por confirmar con el proveedor: tabla de arranque de motores (que un compresor de 220 V y 5 TR arranque con los otros 5 funcionando), accesorios incluidos (cargador de baterías, excitación PMG), transferencia automática, transporte y tiempo de entrega.\n- Por confirmar: corriente de arranque de los compresores (no aparece en las placas).\n## Asesoría técnica y gestión de compra (A.S.T.)\n- Levantamiento de la carga con las placas de los 6 aires.\n- Definición del tamaño de la planta y de la forma de arrancar los aires.\n- Revisión técnica de la oferta del proveedor.\n- Comparación de precios de mercado y negociación.\n- Estimación de consumo de combustible y autonomía.\n- Recomendación escrita con las condiciones de operación.\n## Instalación (A.S.T.)\nPor ajustar según lo que se vaya a ejecutar:\n- Base o ubicación de la planta.\n- Cable desde la planta hasta el tablero de los aires.\n- Interruptor y protecciones.\n- Puesta a tierra.\n- Sistema de arranque escalonado de los aires.\n- Pruebas de puesta en marcha.\n## No incluye\n- Combustible.\n- Transporte de la planta, salvo que el proveedor lo incluya.\n- Transferencia automática, si no viene con la planta.\n- Diseño firmado o certificación RETIE, si llegan a exigirse.\n- Obras civiles mayores.\n## Propuesta económica\nLa planta no la vende A.S.T. La iglesia la compra directo al proveedor y la factura sale a nombre de la iglesia. A.S.T. no le agrega ningún margen.\n[[TABLA]]\n- Referencia de mercado: las plantas de 100 kVA con motor Cummins se publican en Colombia entre $49 y $79 millones, la mayoría entre $57 y $68 millones. El precio de la planta está en negociación y puede bajar o incluir accesorios.\n- Si la iglesia contrata la instalación con A.S.T., el valor de la asesoría se descuenta de la instalación.\n- Forma de pago de los servicios de A.S.T.: por confirmar. Vigencia de la oferta: por confirmar.\n## Aceptación\nLa oferta se entiende aceptada con la firma de este documento o con el pago del anticipo."
   }
 ];
 // </OFERTAS_GUARDADAS>
