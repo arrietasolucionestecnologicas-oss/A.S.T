@@ -5353,7 +5353,7 @@ function actualizarPlantillaUI() {
     document.getElementById('empresarial-area').style.display = plantillaSeleccionada() === 'empresarial' ? 'block' : 'none';
     document.getElementById('apps-area').style.display = plantillaSeleccionada() === 'aplicaciones' ? 'block' : 'none';
     const selOf = document.getElementById('app-oferta-guardada');
-    if (selOf && selOf.options.length <= 1) poblarOfertasGuardadas();
+    if (selOf && selOf.options.length <= 1) { poblarOfertasGuardadas(); refrescarOfertasUsuario(); }
 }
 // Plantilla "Aplicaciones": oferta de desarrollo de software. El contenido es un texto con "## Título" (sección numerada), "- viñeta" y [[TABLA]] (donde va la
 // tabla de ítems con totales y medios de pago). Se puede editar antes de generar. Debe coincidir con backend-appscript/plantillas-pdf/preset_aplicaciones_qr.js.
@@ -5364,14 +5364,57 @@ function leerDatosAplicaciones() {
         cliente: { atencion: v('app-atencion'), direccion: v('app-direccion'), whatsapp: v('app-whatsapp') } };
 }
 // Biblioteca de ofertas guardadas (OFERTAS_GUARDADAS, más abajo): cada una trae texto, ítems y, si se conocen, los datos del cliente.
+// Dos fuentes: las que vienen con la app (OFERTAS_GUARDADAS, solo lectura) y las que guarda Gerson desde la app (hoja OFERTAS_GUARDADAS, ofertasUsuario).
+let ofertasUsuario = [];
+function todasLasOfertas() { return OFERTAS_GUARDADAS.concat(ofertasUsuario.map(o => Object.assign({}, o, { propia: true }))); }
+function ofertaGuardadaPorId(id) { return todasLasOfertas().find(o => o.id === id); }
 function poblarOfertasGuardadas() {
     const sel = document.getElementById('app-oferta-guardada');
     if (!sel) return;
-    sel.innerHTML = '<option value="">-- Elegir oferta guardada --</option>' + OFERTAS_GUARDADAS.map(o => '<option value="' + o.id + '">' + o.titulo + '</option>').join('');
+    const previo = sel.value;
+    sel.innerHTML = '<option value="">-- Elegir oferta guardada --</option>' + todasLasOfertas().map(o => '<option value="' + o.id + '">' + (o.propia ? '★ ' : '') + o.titulo + '</option>').join('');
+    if (previo && ofertaGuardadaPorId(previo)) sel.value = previo;
+}
+async function refrescarOfertasUsuario() {
+    const res = await callApi('getOfertasGuardadas', {});
+    if (res && res.success && Array.isArray(res.data)) { ofertasUsuario = res.data; poblarOfertasGuardadas(); }
+}
+// Guarda como oferta lo que hay ahora en el formulario: texto, datos de la oferta y los ítems del carrito (y, si quieres, el cliente).
+async function guardarOfertaActual() {
+    const d = leerDatosAplicaciones();
+    if (!d.contenido.trim()) return alert('Escribe primero el texto de la oferta.');
+    if (!cart.length) return alert('Agrega al menos un ítem al carrito: se guardan junto con la oferta.');
+    const sel = document.getElementById('app-oferta-guardada');
+    const actual = sel && sel.value ? ofertaGuardadaPorId(sel.value) : null;
+    const titulo = prompt('Nombre de la oferta guardada:', actual ? actual.titulo : (d.empresarial.proyecto || ''));
+    if (!titulo || !titulo.trim()) return;
+    const oferta = { titulo: titulo.trim(), proyecto: d.empresarial.proyecto || '', tipoServicio: d.empresarial.tipoServicio || '', vigenciaDias: d.vigenciaDias, contenido: d.contenido,
+        items: cart.map(c => ({ nombre: c.nombre, specs: c.specs || '', cantidad: c.cantidad, precio: c.precio, modo: c.modo || 'normal' })) };
+    if (actual && actual.propia && actual.titulo === oferta.titulo) oferta.id = actual.id;   // mismo nombre de una oferta propia: se actualiza en vez de duplicar
+    if (confirm('¿Guardar también los datos del cliente (nombre, teléfono, atención, dirección, WhatsApp)?\n\nAceptar = sí, Cancelar = solo la oferta.')) {
+        const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+        oferta.cliente = { nombre: v('c-nombre'), telefono: v('c-tel'), atencion: v('app-atencion'), direccion: v('app-direccion'), whatsapp: v('app-whatsapp') };
+    }
+    const res = await callApi('saveOfertaGuardada', { oferta: oferta });
+    if (!res || !res.success) return alert('No se pudo guardar la oferta: ' + ((res && res.error) || 'sin conexión') + '.');
+    await refrescarOfertasUsuario();
+    if (sel && res.data && res.data.id) sel.value = res.data.id;
+    showToast('Oferta guardada: ' + oferta.titulo, 'success');
+}
+async function eliminarOfertaGuardada() {
+    const sel = document.getElementById('app-oferta-guardada');
+    const o = sel && sel.value ? ofertaGuardadaPorId(sel.value) : null;
+    if (!o) return alert('Elige primero una oferta guardada.');
+    if (!o.propia) return alert('Esa oferta viene con la app y no se puede eliminar. Solo se eliminan las que tienen ★ (las que tú guardas).');
+    if (!confirm('¿Eliminar la oferta "' + o.titulo + '"? Esta acción no se puede deshacer.')) return;
+    const res = await callApi('deleteOfertaGuardada', { id: o.id });
+    if (!res || !res.success) return alert('No se pudo eliminar: ' + ((res && res.error) || 'sin conexión') + '.');
+    await refrescarOfertasUsuario();
+    showToast('Oferta eliminada.', 'success');
 }
 function cargarOfertaGuardada() {
     const sel = document.getElementById('app-oferta-guardada');
-    const P = OFERTAS_GUARDADAS.find(o => o.id === (sel ? sel.value : ''));
+    const P = ofertaGuardadaPorId(sel ? sel.value : '');
     if (!P) return alert('Elige primero una oferta guardada.');
     if (cart.length && !confirm('El carrito ya tiene ítems. ¿Reemplazarlos por los de esta oferta?')) return;
     document.getElementById('app-proyecto').value = P.proyecto || '';

@@ -934,6 +934,10 @@
                                 <select id="app-oferta-guardada" class="form-select bg-dark text-white border-secondary"><option value="">-- Elegir oferta guardada --</option></select>
                                 <button type="button" class="btn btn-outline-cyan" onclick="cargarOfertaGuardada()"><i class="bi bi-box-arrow-in-down"></i> Cargar</button>
                             </div>
+                            <div class="d-flex gap-2 mb-2">
+                                <button type="button" class="btn btn-sm btn-outline-success flex-fill" onclick="guardarOfertaActual()"><i class="bi bi-save"></i> Guardar esta oferta</button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="eliminarOfertaGuardada()" title="Eliminar la oferta elegida (solo las ★)"><i class="bi bi-trash"></i></button>
+                            </div>
                             <div class="row g-2 mb-2">
                                 <div class="col-6"><input type="text" id="app-atencion" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Atención (persona de contacto)"></div>
                                 <div class="col-6"><input type="text" id="app-whatsapp" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="WhatsApp o usuario de contacto"></div>
