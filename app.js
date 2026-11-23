@@ -256,12 +256,46 @@ function loadLocalCache() {
     }
 }
 
-async function fetchAllDataBackground() {
-    showSyncIndicator();
-    const res = await callApi('getAllData');
-    if (res.success) {
+// --- Refrescos que no pisan datos nuevos con datos viejos ---
+// Una lectura que empieza antes de una escritura puede volver con los datos de antes; si se aplicara, la pantalla "volvería atrás".
+// Por eso: se espera a que terminen las escrituras, se descarta la lectura si hubo una escritura mientras tanto (y se repite), y
+// los refrescos repetidos de lo mismo se juntan en uno solo (antes se disparaban 3 y 4 seguidos).
+const _refEnCurso = {};
+const _pausa = ms => new Promise(r => setTimeout(r, ms));
+async function refrescarSeguro(clave, accion, aplicar) {
+    if (_refEnCurso[clave]) return _refEnCurso[clave];
+    _refEnCurso[clave] = (async () => {
+        try {
+            for (let intento = 0; intento < 3; intento++) {
+                const W = () => window.AST_ESCRITURAS || { epoca: 0, pendientes: 0 };
+                while (W().pendientes > 0) await _pausa(250);
+                const ep = W().epoca;
+                const res = await callApi(accion);
+                if (W().epoca !== ep || W().pendientes > 0) continue;   // hubo una escritura durante la lectura: puede ser vieja
+                if (res && res.success) aplicar(res.data);
+                return;
+            }
+            // 3 lecturas seguidas coincidieron con escrituras: no se descarta el refresco, se reprograma para cuando haya calma.
+            setTimeout(() => refrescarSeguro(clave, accion, aplicar), 2500);
+        } finally { delete _refEnCurso[clave]; }
+    })();
+    return _refEnCurso[clave];
+}
+let _ultimaCargaTotal = 0;
+async function fetchAllDataBackground(forzar) {
+    // La app ya muestra lo guardado en el teléfono; esta carga es en segundo plano. Se evita repetirla si acaba de hacerse (arranque, login y cambio de red la disparaban juntos).
+    if (!forzar && Date.now() - _ultimaCargaTotal < 20000) return;
+    const hayCache = (catalog && catalog.length) || (projects && projects.length);
+    if (!hayCache) showSyncIndicator();
+    await refrescarSeguro('todo', 'getAllData', aplicarTodo_);
+    if (!hayCache) hideSyncIndicator();
+}
+function aplicarTodo_(data) {
+    const res = { data: data };
+    _ultimaCargaTotal = Date.now();
+    {
         catalog     = res.data.catalog     || [];
-        projects    = res.data.projects    || [];
+        if (window.AST_SYNC) AST_SYNC.aplicarLista(res.data.projects || []); else projects = res.data.projects || [];
         clients     = res.data.clients     || [];
         historyDocs = res.data.historyDocs || [];
         proveedores = res.data.proveedores || [];
@@ -289,56 +323,48 @@ async function fetchAllDataBackground() {
 }
 
 async function refreshCatalogOnly() {
-    const res = await callApi('getCatalogData');
-    if (res.success) {
-        catalog = res.data || [];
-       setCacheWithTimestamp('ast_catalog', catalog);
+    await refrescarSeguro('catalogo', 'getCatalogData', data => {
+        catalog = data || [];
+        setCacheWithTimestamp('ast_catalog', catalog);
         if (currentView === 'PRODUCTO' || currentView === 'SERVICIO') {
             renderGrid(catalog.filter(p => p.tipo === currentView));
         }
-    }
+    });
 }
 
 async function refreshProjectsOnly() {
-    const res = await callApi('getProjectsData');
-    if (res.success) {
-        projects = res.data || [];
-        setCacheWithTimestamp('ast_projects', projects);
-        if (currentView === 'PROYECTOS') {
-            renderProjects();
-            calculateDashboard();
-        }
-    }
+    // Si las escrituras ya devolvieron el trabajo actualizado (AST_SYNC), no hace falta volver a pedir la lista completa.
+    if (window.AST_SYNC && AST_SYNC.listaCargada && !AST_SYNC.sucio) return;
+    await refrescarSeguro('proyectos', 'getProjectsData', data => {
+        if (window.AST_SYNC) AST_SYNC.aplicarLista(data || []); else { projects = data || []; setCacheWithTimestamp('ast_projects', projects); if (currentView === 'PROYECTOS') { renderProjects(); calculateDashboard(); } }
+    });
 }
 
 async function refreshProveedoresOnly() {
-    const res = await callApi('getProveedoresData');
-    if (res.success) {
-        proveedores = res.data || [];
-        setCacheWithTimestamp('ast_proveedores', proveedores);;
+    await refrescarSeguro('proveedores', 'getProveedoresData', data => {
+        proveedores = data || [];
+        setCacheWithTimestamp('ast_proveedores', proveedores);
         if (currentView === 'PROVEEDORES') {
             renderProveedores();
         }
         updateProvidersDatalist();
-    }
+    });
 }
 
 async function refreshHistoryOnly() {
-    const res = await callApi('getHistoryData');
-    if (res.success) {
-        historyDocs = res.data || [];
+    await refrescarSeguro('historial', 'getHistoryData', data => {
+        historyDocs = data || [];
         setCacheWithTimestamp('ast_history', historyDocs);
         if (currentView === 'HISTORIAL') renderHistory();
-    }
+    });
 }
 
 async function refreshClientsOnly() {
-    const res = await callApi('getClientsData');
-    if (res.success) {
-        clients = res.data || [];
+    await refrescarSeguro('clientes', 'getClientsData', data => {
+        clients = data || [];
         setCacheWithTimestamp('ast_clients', clients);
         updateClientsDatalist();
-    }
+    });
 }
 
 function showSyncIndicator() {
@@ -2952,22 +2978,25 @@ let dashboardData = null;
 let dashboardChart = null;
 let cierreMensualCursor = null;
 
+let _dashTs = 0, _mantDatos = null;
+function invalidarDashboard_() { _dashTs = 0; }   // lo llama AST_SYNC tras escrituras que cambian pagos o cierres
 async function renderDashboard() {
-    if (!dashboardData) {
-        const res = await callApi('getMonthlyDashboard', {});
-        if (!res.success) {
-            showToast('Error cargando el dashboard', 'danger');
-            return;
-        }
-        dashboardData = res.data;
-    }
     if (!cierreMensualCursor) {
         const hoy = new Date();
         cierreMensualCursor = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
     }
-    dibujarGraficaDashboard();
-    renderCierreMensual();
-    renderMantenimientosCamaras();
+    if (dashboardData) {   // pinta ya con lo último que se tiene
+        dibujarGraficaDashboard(); renderCierreMensual();
+        if (_mantDatos) pintarMantenimientosCamaras(_mantDatos);
+    }
+    if (dashboardData && Date.now() - _dashTs < 60000) return;   // al día: no se vuelve a pedir
+    showSyncIndicator();
+    const [d, m] = await Promise.all([callApi('getMonthlyDashboard', {}), callApi('getMantenimientosCamaras', {})]);
+    hideSyncIndicator();
+    if (!d.success) { if (!dashboardData) showToast('Error cargando el dashboard', 'danger'); return; }
+    dashboardData = d.data; _dashTs = Date.now();
+    dibujarGraficaDashboard(); renderCierreMensual();
+    if (m.success) { _mantDatos = m.data; pintarMantenimientosCamaras(m.data); }
 }
 
 // Mantenimiento de camaras: ciclo cada 6 meses, ver
@@ -2975,11 +3004,14 @@ async function renderDashboard() {
 // siempre (no se cachea como dashboardData) porque "Marcar realizado" cambia
 // el resultado de inmediato.
 async function renderMantenimientosCamaras() {
+    const res = await callApi('getMantenimientosCamaras', {});
+    if (!res.success) { document.getElementById('mant-camaras-lista').innerHTML = ''; return; }
+    _mantDatos = res.data; pintarMantenimientosCamaras(res.data);
+}
+function pintarMantenimientosCamaras(datos) {
     const cont = document.getElementById('mant-camaras-lista');
     const vacio = document.getElementById('mant-camaras-vacio');
-    const res = await callApi('getMantenimientosCamaras', {});
-    if (!res.success) { cont.innerHTML = ''; return; }
-
+    const res = { data: datos };
     const pendientes = res.data.filter(m => m.status !== 'OK');
     if (pendientes.length === 0) {
         cont.innerHTML = '';
@@ -3247,9 +3279,18 @@ async function openProjectDetail(id) {
 
     // Si el backend aún no encuentra el proyecto (race condition),
     // esperar 1.5s y reintentar una vez
-    if (!res.success || !res.data || !res.data.info) {
+    if (res.codigo !== 'SIN_RED' && (!res.success || !res.data || !res.data.info)) {   // sin red no tiene sentido esperar y repetir
         await new Promise(r => setTimeout(r, 1500));
         res = await callApi('getProjectDetails', { id: id });
+    }
+
+    if (res.codigo === 'SIN_RED') {
+        document.getElementById('pd-items-list').innerHTML = `
+            <div class="text-center mt-4">
+                <i class="bi bi-wifi-off text-warning" style="font-size:2rem;"></i>
+                <p class="text-muted small mt-2"><b>Sin conexión.</b><br>El detalle de este trabajo necesita internet. Los datos de la lista sí están guardados en el teléfono.</p>
+            </div>`;
+        return;
     }
 
     if (!res.success || !res.data || !res.data.info) {
@@ -3973,8 +4014,10 @@ function updateProject() {
         cleanBackdrops();
     }
     
-    // OPTIMISTIC UPDATE
     const idx = projects.findIndex(p => p.id === payload.id);
+    const previoProj = idx !== -1 ? Object.assign({}, projects[idx]) : null;
+    const previoDet = (currentProjectData && currentProjectData.id === payload.id) ? Object.assign({}, currentProjectData) : null;
+    // OPTIMISTIC UPDATE
     if (idx !== -1) projects[idx] = { ...projects[idx], ...payload };
     
     if (currentProjectData && currentProjectData.id === payload.id) {
@@ -3989,9 +4032,15 @@ function updateProject() {
         hideSyncIndicator();
         // El servidor puede contestar "éxito" con un fallo dentro (p. ej. proyecto no encontrado): se trata como error.
         const fallo = !res.success ? ((res.error && res.error.mensaje) || res.error || 'No se pudo guardar.') : (res.data && res.data.success === false ? (res.data.error || 'No se pudo guardar.') : '');
+        if (fallo || !(res.data && res.data.proyecto)) { if (window.AST_SYNC) AST_SYNC.sucio = true; }   // solo se relee la lista si no hubo respuesta con el trabajo
+        if (fallo) {   // se deshace lo que se mostró: la pantalla no afirma un cambio que el servidor no confirmó
+            const j = projects.findIndex(p => p.id === payload.id); if (j !== -1 && previoProj) projects[j] = previoProj;
+            if (previoDet && currentProjectData && currentProjectData.id === payload.id) { currentProjectData = previoDet; renderProjectItems(); }
+            renderProjects(); calculateDashboard();
+        }
         await refreshProjectsOnly();
-        const guardado = projects.find(p => p.id === payload.id);
-        if (fallo) showToast('❌ El trabajo NO se guardó: ' + fallo, 'danger');
+        const guardado = (res.data && res.data.proyecto) || projects.find(p => p.id === payload.id);
+        if (fallo) showToast(res.codigo === 'SIN_RED' ? '⚠️ Sin conexión: no se pudo confirmar el guardado del trabajo. Se dejó como estaba; revísalo al volver la red.' : '❌ El trabajo NO se guardó: ' + fallo, 'danger');
         else if (guardado && guardado.estado !== payload.estado) showToast('❌ El servidor no guardó el estado «' + payload.estado + '»: sigue «' + guardado.estado + '». Intenta de nuevo.', 'danger');
         else showToast('✅ Trabajo guardado' + (guardado ? ' (' + guardado.estado + ')' : ''), 'success');
     });
@@ -4326,6 +4375,21 @@ function toggleVentaInput() {
     else div.style.display = 'none';
 }
 
+// Si un guardado falla o no se pudo confirmar (sin red), se deshace lo que se mostró de forma optimista: la pantalla no debe afirmar un cambio que el servidor no tiene.
+function revertirMovimientos_(snap, res) {
+    currentProjectItems.length = 0; snap.items.forEach(x => currentProjectItems.push(x));
+    Object.assign(currentProjectData, snap.data);
+    const j = projects.findIndex(p => p.id === snap.projectId); if (j !== -1 && snap.proj) projects[j] = snap.proj;
+    renderProjectItems(); calculateDashboard();
+    if (window.AST_SYNC) AST_SYNC.sucio = true;
+    const sinRed = res && res.codigo === 'SIN_RED';
+    const motivo = (res && res.success !== false && res.data && res.data.error) || (res && res.error && res.error.mensaje) || (res && res.error) || 'error del servidor';
+    showToast(sinRed ? '⚠️ Sin conexión: no se pudo confirmar el cambio. Se dejó como estaba; revísalo al volver la red.' : '❌ No se guardó el cambio: ' + motivo, 'danger');
+}
+function instantaneaMovimientos_() {
+    return { items: JSON.parse(JSON.stringify(currentProjectItems)), data: Object.assign({}, currentProjectData), projectId: currentProject, proj: Object.assign({}, projects.find(p => p.id === currentProject) || {}) };
+}
+
 function saveProjectItem() {
     let idMov  = document.getElementById('ai-id').value;
     const isNew = !idMov;
@@ -4356,6 +4420,7 @@ function saveProjectItem() {
         cleanBackdrops();
     }
 
+    const snapMov = instantaneaMovimientos_();
     // OPTIMISTIC UPDATE
     if (isNew) {
         currentProjectItems.push({ ...payload, fecha: new Date().toISOString() });
@@ -4387,19 +4452,19 @@ function saveProjectItem() {
     showSyncIndicator();
     callApi(action, payload).then(res => {
         hideSyncIndicator();
-        if (res.success) {
+        if (res.success && !(res.data && res.data.success === false)) {
             refreshProjectsOnly();
-            if (payload.tipo === 'MATERIAL' && payload.costo > 0) refreshCatalogOnly();
+            if (payload.tipo === 'MATERIAL' && payload.costo > 0 && !(res.data && res.data.productoActualizado === false)) refreshCatalogOnly();
             if (payload.proveedor) refreshProveedoresOnly();
         } else {
-            showToast("Error de sincronización", "danger");
-            openProjectDetail(currentProject);
+            revertirMovimientos_(snapMov, res);
         }
     });
 }
 
 function deleteProjectMovement(idMov) {
     if(confirm("¿Borrar movimiento?")) {
+        const snapMov = instantaneaMovimientos_();
         // OPTIMISTIC UPDATE
         const idx = currentProjectItems.findIndex(x => x.idMov === idMov);
         if (idx !== -1) currentProjectItems.splice(idx, 1);
@@ -4418,11 +4483,10 @@ function deleteProjectMovement(idMov) {
         showSyncIndicator();
         callApi('deleteProjectMovement', { idMov: idMov, projectId: currentProject }).then(res => {
             hideSyncIndicator();
-            if(res.success) {
+            if(res.success && !(res.data && res.data.success === false)) {
                 refreshProjectsOnly();
             } else {
-                showToast("Error de sincronización", "danger");
-                openProjectDetail(currentProject); 
+                revertirMovimientos_(snapMov, res);
             }
         });
     }

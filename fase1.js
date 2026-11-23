@@ -5,7 +5,7 @@
   const VERSION = '1.4-fase1';
   window.AST_VERSION = VERSION;
   const PUBLICAS = ['login', 'getPublicCatalog', 'version'];
-  const CON_CONFIRMAR = ['deleteProduct', 'deleteProject', 'deleteDocument'];
+  const CON_CONFIRMAR = ['deleteProduct', 'deleteProject', 'deleteDocument', 'deleteProjectPayment'];
   const SESION_ERR = ['NO_AUTENTICADO', 'SESION_VENCIDA', 'SESION_REVOCADA'];
   const $ = id => document.getElementById(id);
   const uuid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); });
@@ -32,7 +32,21 @@
 
   // ---------- 2. callApi con sesión. El contrato de errores es {success:false, error:{codigo,mensaje}}; aquí se aplana a error (texto) + codigo para no romper los llamadores actuales ----------
   let enLogin = false, cola = [];
+  // Seguimiento de escrituras: las lecturas que empiezan antes de una escritura pueden traer datos viejos y no deben pisar lo nuevo (ver refrescarSeguro en app.js).
+  window.AST_ESCRITURAS = { epoca: 0, pendientes: 0 };
+  const ES_LECTURA = /^(get|preview|version|evaluar|login|logout)/;
   window.callApi = async function (action, payload) {
+    const S = window.AST_SYNC;
+    if (ES_LECTURA.test(action)) { const r = await llamarApi(action, payload); if (S) { try { S.alRecibir(action, r); } catch (e) { console.error(e); } } return r; }
+    window.AST_ESCRITURAS.epoca++; window.AST_ESCRITURAS.pendientes++; if (S) S.escrituraInicia();
+    let r = null;
+    try { r = await llamarApi(action, payload); return r; }
+    finally {
+      window.AST_ESCRITURAS.pendientes--; window.AST_ESCRITURAS.epoca++;
+      if (S) { const rr = r || { success: false, error: 'Error inesperado' }; try { S.alRecibir(action, rr); } catch (e) { console.error(e); } S.escrituraFin(action, rr); }
+    }
+  };
+  async function llamarApi(action, payload) {
     payload = Object.assign({}, payload || {});
     if (action === 'createDocument' && !payload.idSolicitud) payload.idSolicitud = uuid();
     if (CON_CONFIRMAR.indexOf(action) >= 0) payload.confirmar = true;    // todas las rutas de la interfaz piden confirmación antes de llamar
@@ -75,7 +89,7 @@
       else $('f1-login-msg').textContent = r.codigo === 'DEMASIADOS_INTENTOS' ? 'Demasiados intentos. Espera ' + Math.ceil(((r.extra && r.extra.reintentarEnSeg) || 900) / 60) + ' min.' : r.error;
     });
   }
-  function iniciarDatos() { try { fetchAllDataBackground(); scheduleRecurringPaymentReminders(); scheduleCameraMaintenanceReminders(); } catch (e) { console.error(e); } }
+  function iniciarDatos() { try { fetchAllDataBackground(true); scheduleRecurringPaymentReminders(); scheduleCameraMaintenanceReminders(); } catch (e) { console.error(e); } }
   window.cerrarSesionAST = async function () {
     if (!confirm('¿Cerrar sesión en este dispositivo?')) return;
     await window.callApi('logout', {}); await borrarToken();

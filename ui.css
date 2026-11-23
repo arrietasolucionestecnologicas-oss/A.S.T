@@ -106,3 +106,21 @@ body { padding-bottom: calc(var(--ui-nav-h) + var(--ui-seguro-inf) + 12px); }
 #cartModal .row.g-1 > .col-5 { flex: 0 0 auto; width: 40%; }
 #cartModal .row.g-1 > .col-3 { flex: 0 0 auto; width: 24%; }
 #cartModal .row.g-1 .input-group-text { min-width: 38px; justify-content: center; }
+
+/* ===== A.S.T. 2.1: ACCESIBILIDAD DE MODALES Y TEXTO PEQUEÑO ===== */
+.btn-close { width: 44px; height: 44px; padding: 0; background-size: 14px; opacity: .9; display: inline-flex; align-items: center; justify-content: center; }
+.modal-header .btn-close { margin: -6px -6px -6px auto; }
+.modal .btn-sm, .modal .btn-outline-secondary, .modal .btn-outline-cyan, .modal .nav-link, .modal .nav-tabs .nav-link, .modal .nav-pills .nav-link { min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.modal .text-muted, .modal .text-secondary, .modal .small.text-muted, .modal .form-text { color: #aebfcf !important; }
+.badge { font-size: 12px !important; }
+[style*="font-size:0.55rem"], [style*="font-size: 0.55rem"], [style*="font-size:0.6rem"], [style*="font-size: 0.6rem"], [style*="font-size:0.65rem"], [style*="font-size: 0.65rem"], [style*="font-size:0.7rem"], [style*="font-size: 0.7rem"], [style*="font-size:0.75rem"], [style*="font-size: 0.75rem"], [style*="font-size:0.78rem"], [style*="font-size:10px"], [style*="font-size: 10px"], [style*="font-size:11px"], [style*="font-size: 11px"] { font-size: 12px !important; }
+
+/* Texto mínimo de 12 px y contraste en los últimos casos de la auditoría visual */
+:root { --ui-t-peq: max(12px, .8125rem); }
+small, .small { font-size: max(12px, .875em); }
+#ui-nav button { font-size: 12px; }
+#vp-img-placeholder { color: #9fb3c4 !important; }
+#bulkItemModal [style*="#4A6680"], #bulkItemModal [style*="#4a6680"], #bulkItemModal p[style*="font-size:0.85rem"] { color: #aebfcf !important; }
+#bulk-tab-items, #bulk-tab-factura { min-height: 44px; }
+.ui-kpi .nota, .kpi-label, .kpi-card .kpi-label { font-size: 12px !important; }
+[style*="font-size:0.72rem"], [style*="font-size: 0.72rem"], [style*="font-size:0.7rem"] { font-size: 12px !important; }

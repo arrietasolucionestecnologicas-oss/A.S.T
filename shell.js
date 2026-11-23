@@ -91,34 +91,76 @@
   // ---- Pagos recibidos por trabajo (cobrado = pagos registrados; pendiente = vendido - cobrado)
   const uuid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); });
   const fechaCorta = iso => new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
-  let pagoPendiente = null;   // identificador estable del intento en curso (un reintento no duplica el pago)
-  async function inyectarPagos(id) {
-    const cuerpo = document.querySelector('#projectDetailModal .modal-body'); if (!cuerpo) return;
-    let box = $('ui-pagos'); if (!box) { box = document.createElement('div'); box.id = 'ui-pagos'; box.className = 'ui-card'; cuerpo.insertBefore(box, cuerpo.firstChild); }
-    const p = (typeof projects !== 'undefined' ? projects : []).find(x => x.id === id) || {}; const r = await window.callApi('getProjectPayments', { projectId: id });
-    const lista = r && r.success ? r.data : []; const recibido = lista.reduce((t, x) => t + x.monto, 0); const vendido = Number(p.totalCobrado) || 0; const cerrado = p.estado === 'CERRADO';
-    const pendiente = Math.max(0, vendido - recibido);
-    box.innerHTML = '<h2 class="ui-h2" style="margin-top:0">Cobros del trabajo</h2><div class="ui-kpis"><div class="ui-kpi"><small>' + (cerrado ? 'Vendido' : 'Cotizado') + '</small><b>' + pesos(vendido) + '</b></div><div class="ui-kpi"><small>Cobrado</small><b class="ui-ok">' + pesos(recibido) + '</b></div></div>' +
-      (cerrado ? '<div class="ui-kpi mt-2"><small>Pendiente por cobrar</small><b class="' + (pendiente > 0 ? 'ui-aviso' : 'ui-ok') + '">' + pesos(pendiente) + '</b><div class="nota">Un trabajo cerrado no significa dinero recibido: solo cuentan los pagos registrados.</div></div>' : '<p class="ui-peq mt-2">Registra aquí anticipos y abonos a medida que los recibas.</p>') +
-      '<div class="ui-lista mt-3">' + (lista.length ? lista.map(x => '<div class="ui-fila"><i class="bi bi-cash-coin"></i><span class="txt"><b>' + pesos(x.monto) + ' · ' + esc(x.medio) + '</b><span>' + fechaCorta(x.fecha) + (x.nota ? ' · ' + esc(x.nota) : '') + '</span></span><button type="button" class="btn btn-outline-secondary btn-sm" data-borrar="' + esc(x.id) + '" aria-label="Eliminar pago">' + '<i class="bi bi-trash"></i></button></div>').join('') : '<div class="ui-vacio" style="border:0"><b>Sin pagos registrados</b>Aún no se ha recibido dinero de este trabajo.</div>') + '</div>' +
+  /* PAGOS 2.1 */
+  // Respaldo: si por caché llegara shell.js sin sync.js, la sección de pagos sigue funcionando por el camino de compatibilidad.
+  if (!window.AST_SYNC) window.AST_SYNC = { pagos: {}, oyentesPagos: [], sucio: false, aceptar: () => true, guardarPagos: function (id, l) { this.pagos[id] = { lista: l || [] }; this.oyentesPagos.forEach(g => g(id)); return true; } };
+  // El bloque "Cobros del trabajo" se arma UNA vez por trabajo; después solo cambian los números y las filas (el formulario conserva lo escrito).
+  // Todo dato sale de AST_SYNC: la respuesta del servidor trae la lista de pagos y el trabajo con su revisión; una respuesta vieja se descarta ahí.
+  const lista_ = id => (window.AST_SYNC.pagos[id] || {}).lista;
+  const proyecto_ = id => (typeof projects !== 'undefined' ? projects : []).find(x => x.id === id) || {};
+  function filaPago(x) { return '<div class="ui-fila" data-fila="' + esc(x.id) + '"><i class="bi bi-cash-coin"></i><span class="txt"><b>' + pesos(x.monto) + ' · ' + esc(x.medio) + '</b><span>' + fechaCorta(x.fecha) + (x.nota ? ' · ' + esc(x.nota) : '') + '</span></span><button type="button" class="btn btn-outline-secondary btn-sm" data-borrar="' + esc(x.id) + '" aria-label="Eliminar pago"><i class="bi bi-trash"></i></button></div>'; }
+  function armarPagos(id) {
+    const cuerpo = document.querySelector('#projectDetailModal .modal-body'); if (!cuerpo) return null;
+    let box = $('ui-pagos'); if (box && box.dataset.id === id) return box;
+    if (!box) { box = document.createElement('div'); box.id = 'ui-pagos'; box.className = 'ui-card'; cuerpo.insertBefore(box, cuerpo.firstChild); }
+    box.dataset.id = id;
+    box.innerHTML = '<h2 class="ui-h2" style="margin-top:0">Cobros del trabajo</h2><div class="ui-kpis"><div class="ui-kpi"><small id="ui-k1-l"></small><b id="ui-k1"></b></div><div class="ui-kpi"><small>Cobrado</small><b class="ui-ok" id="ui-k2"></b></div></div><div id="ui-k3"></div>' +
+      '<div class="ui-lista mt-3" id="ui-pagos-lista"></div>' +
       '<form id="ui-pago-form" class="mt-3"><label class="ui-peq" for="ui-pago-monto">Registrar un pago recibido</label><div class="d-flex gap-2 mb-2"><input id="ui-pago-monto" class="form-control" inputmode="numeric" placeholder="Monto (COP)" autocomplete="off"><select id="ui-pago-medio" class="form-select" style="max-width:150px"><option>Efectivo</option><option>Transferencia</option><option>Nequi</option><option>Bre-B</option><option>Otro</option></select></div><input id="ui-pago-nota" class="form-control mb-2" placeholder="Nota (opcional)" maxlength="200" autocomplete="off"><div id="ui-pago-err" class="ui-aviso ui-peq" role="alert"></div><button class="btn btn-cyan w-100" type="submit">Registrar pago</button></form>';
-    box.querySelectorAll('[data-borrar]').forEach(b => b.addEventListener('click', async () => { if (!confirm('¿Eliminar este pago? Esta acción no se puede deshacer.')) return; const d = await window.callApi('deleteProjectPayment', { id: b.dataset.borrar }); if (!d.success) { aviso('No se pudo eliminar: ' + d.error); return; } await refrescarProyectos(); inyectarPagos(id); }));
-    $('ui-pago-form').addEventListener('submit', async ev => {
-      ev.preventDefault(); const err = $('ui-pago-err'); err.textContent = ''; const monto = parseInt(String($('ui-pago-monto').value).replace(/\D/g, ''), 10) || 0;
-      if (!(monto > 0)) { err.textContent = 'Escribe el monto recibido (mayor que cero).'; return; } if (monto > 999999999) { err.textContent = 'El monto es demasiado alto; revisa los ceros.'; return; }
-      if (cerrado && monto > pendiente && !confirm('El pago supera el saldo pendiente (' + pesos(pendiente) + '). ¿Registrarlo de todos modos?')) return;
-      const btn = ev.target.querySelector('button[type=submit]'); if (btn.disabled) return; btn.disabled = true; btn.textContent = 'Guardando…';
-      if (!pagoPendiente || pagoPendiente.k !== id + '|' + monto) pagoPendiente = { k: id + '|' + monto, id: uuid() };
-      const d = await window.callApi('addProjectPayment', { idPago: pagoPendiente.id, projectId: id, monto: monto, medio: $('ui-pago-medio').value, nota: $('ui-pago-nota').value.trim() });
-      btn.disabled = false; btn.textContent = 'Registrar pago';
-      if (!d.success) { err.textContent = d.codigo === 'SIN_RED' ? 'Sin conexión. Toca de nuevo cuando vuelva la red: el pago no se duplicará.' : d.error; return; }
-      pagoPendiente = null; await refrescarProyectos(); inyectarPagos(id);
-    });
+    $('ui-pagos-lista').addEventListener('click', ev => { const b = ev.target.closest('[data-borrar]'); if (b) borrarPago(id, b); });
+    $('ui-pago-form').addEventListener('submit', ev => { ev.preventDefault(); registrarPago(id, ev.target); });
+    pintarPagos(id); return box;
   }
-  async function refrescarProyectos() { try { const r = await window.callApi('getProjects', {}); if (r && r.success && typeof projects !== 'undefined') { projects.length = 0; r.data.forEach(x => projects.push(x)); if (typeof renderProjects === 'function' && $('projects-list')) renderProjects(); } } catch (e) {} }
+  // Actualiza SOLO lo que depende del cambio: Vendido/Cotizado, Cobrado, Pendiente y las filas (en el orden que manda el servidor).
+  function pintarPagos(id) {
+    const box = $('ui-pagos'); if (!box || box.dataset.id !== id) return;
+    const p = proyecto_(id), lista = lista_(id), cerrado = p.estado === 'CERRADO', vendido = Number(p.totalCobrado) || 0;
+    const recibido = lista ? lista.reduce((t, x) => t + x.monto, 0) : (Number(p.totalRecibido) || 0), pendiente = Math.max(0, vendido - recibido);
+    const set = (i, t) => { const e = $(i); if (e && e.textContent !== t) e.textContent = t; };
+    set('ui-k1-l', cerrado ? 'Vendido' : 'Cotizado'); set('ui-k1', pesos(vendido)); set('ui-k2', pesos(recibido));
+    const k3 = (cerrado ? 'c' + (pendiente > 0 ? 'a' : 'b') + pendiente : 'n'); const caja = $('ui-k3');
+    if (caja.dataset.k !== k3) { caja.dataset.k = k3; caja.innerHTML = cerrado ? '<div class="ui-kpi mt-2"><small>Pendiente por cobrar</small><b class="' + (pendiente > 0 ? 'ui-aviso' : 'ui-ok') + '">' + pesos(pendiente) + '</b><div class="nota">Un trabajo cerrado no significa dinero recibido: solo cuentan los pagos registrados.</div></div>' : '<p class="ui-peq mt-2">Registra aquí anticipos y abonos a medida que los recibas.</p>'; }
+    const cont = $('ui-pagos-lista'); const firma = lista ? lista.map(x => x.id + ':' + x.monto + ':' + x.medio + ':' + x.nota).join('|') : '?';
+    if (cont.dataset.f !== firma) { cont.dataset.f = firma; cont.innerHTML = !lista ? '<div class="ui-vacio" style="border:0"><b>Cargando pagos…</b></div>' : (lista.length ? lista.map(filaPago).join('') : '<div class="ui-vacio" style="border:0"><b>Sin pagos registrados</b>Aún no se ha recibido dinero de este trabajo.</div>'); }
+  }
+  window.AST_SYNC.oyentesPagos.push(pintarPagos);
+  let pagoPendiente = null;   // identificador estable del intento en curso: reintentar el mismo monto NO duplica el pago (el servidor lo reconoce)
+  async function registrarPago(id, form) {
+    const err = $('ui-pago-err'); err.textContent = ''; const monto = parseInt(String($('ui-pago-monto').value).replace(/\D/g, ''), 10) || 0;
+    if (!(monto > 0)) { err.textContent = 'Escribe el monto recibido (mayor que cero).'; return; } if (monto > 999999999) { err.textContent = 'El monto es demasiado alto; revisa los ceros.'; return; }
+    const btn = form.querySelector('button[type=submit]'); if (btn.disabled) return;   // doble toque: el segundo se ignora
+    const p = proyecto_(id), lista = lista_(id) || [], pendiente = Math.max(0, (Number(p.totalCobrado) || 0) - lista.reduce((t, x) => t + x.monto, 0));
+    if (p.estado === 'CERRADO' && monto > pendiente && !confirm('El pago supera el saldo pendiente (' + pesos(pendiente) + '). ¿Registrarlo de todos modos?')) return;
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    if (!pagoPendiente || pagoPendiente.k !== id + '|' + monto) pagoPendiente = { k: id + '|' + monto, id: uuid() };
+    const d = await window.callApi('addProjectPayment', { idPago: pagoPendiente.id, projectId: id, monto: monto, medio: $('ui-pago-medio').value, nota: $('ui-pago-nota').value.trim() });
+    btn.disabled = false; btn.textContent = 'Registrar pago';
+    // El éxito se muestra SOLO si el servidor confirmó. La lista y los totales ya se actualizaron con la respuesta (AST_SYNC), sin volver a pedirlos.
+    if (!d.success) { err.textContent = d.codigo === 'SIN_RED' ? 'Sin conexión: no se pudo confirmar el guardado del pago. Toca de nuevo cuando vuelva la red: si ya se había guardado, no se duplica.' : d.error; return; }
+    pagoPendiente = null; $('ui-pago-monto').value = ''; $('ui-pago-nota').value = '';
+    if (!(d.data && d.data.pagos)) await recargarPagos(id);   // servidor anterior a 2.1: no devuelve la lista
+  }
+  const borrando = {};
+  async function borrarPago(id, b) {
+    const pid = b.dataset.borrar; if (borrando[pid]) return; if (!confirm('¿Eliminar este pago? Esta acción no se puede deshacer.')) return;
+    borrando[pid] = true; b.disabled = true;
+    const d = await window.callApi('deleteProjectPayment', { id: pid, projectId: id }); delete borrando[pid]; b.disabled = false;
+    if (!d.success) { aviso('No se pudo eliminar el pago: ' + d.error); return; }
+    if (!(d.data && d.data.pagos)) await recargarPagos(id);
+  }
+  async function recargarPagos(id) {   // camino de compatibilidad con el servidor anterior (143)
+    const r = await window.callApi('getProjectPayments', { projectId: id }); if (r && r.success) window.AST_SYNC.guardarPagos(id, r.data, undefined);
+    window.AST_SYNC.sucio = true; if (typeof refreshProjectsOnly === 'function') await refreshProjectsOnly(); pintarPagos(id);
+  }
   function aviso(m) { try { showToast(m, 'danger'); } catch (e) { alert(m); } }
   const abrirOriginal = window.openProjectDetail;
-  window.openProjectDetail = async function (id) { const r = await abrirOriginal.apply(this, arguments); try { await inyectarPagos(id); } catch (e) { console.error('pagos', e); } return r; };
+  window.openProjectDetail = async function (id) {
+    const antes = abrirOriginal.apply(this, arguments);   // pide el detalle; la respuesta trae también los pagos (hook de AST_SYNC)
+    try { armarPagos(id); } catch (e) { console.error('pagos', e); }
+    const r = await antes;
+    try { armarPagos(id); if (!lista_(id)) await recargarPagos(id); else pintarPagos(id); } catch (e) { console.error('pagos', e); }
+    return r;
+  };
 
   function iniciar() { construir(); window.switchTab('INICIO'); }
   const esperar = setInterval(() => { if (typeof callApi === 'function' && $('view-dashboard') && typeof switchTab === 'function') { clearInterval(esperar); iniciar(); } }, 150);
