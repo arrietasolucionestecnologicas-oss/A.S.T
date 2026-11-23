@@ -3985,10 +3985,15 @@ function updateProject() {
     calculateDashboard();
     
     showSyncIndicator();
-    callApi('updateProject', payload).then(res => {
+    callApi('updateProject', payload).then(async res => {
         hideSyncIndicator();
-        if(res.success) refreshProjectsOnly();
-        else refreshProjectsOnly();
+        // El servidor puede contestar "éxito" con un fallo dentro (p. ej. proyecto no encontrado): se trata como error.
+        const fallo = !res.success ? ((res.error && res.error.mensaje) || res.error || 'No se pudo guardar.') : (res.data && res.data.success === false ? (res.data.error || 'No se pudo guardar.') : '');
+        await refreshProjectsOnly();
+        const guardado = projects.find(p => p.id === payload.id);
+        if (fallo) showToast('❌ El trabajo NO se guardó: ' + fallo, 'danger');
+        else if (guardado && guardado.estado !== payload.estado) showToast('❌ El servidor no guardó el estado «' + payload.estado + '»: sigue «' + guardado.estado + '». Intenta de nuevo.', 'danger');
+        else showToast('✅ Trabajo guardado' + (guardado ? ' (' + guardado.estado + ')' : ''), 'success');
     });
 }
 

@@ -59,6 +59,7 @@
   function crearOverlay(id, html) { let o = $(id); if (!o) { o = document.createElement('div'); o.id = id; o.className = 'f1-overlay'; o.addEventListener('focusin', e => e.stopPropagation()); document.body.appendChild(o); } o.innerHTML = html; o.style.display = 'flex'; return o; }
   function mostrarObsoleta(msg) { crearOverlay('f1-obsoleta', '<div class="f1-card"><h2>Actualiza la app</h2><p>' + (msg || 'Esta versión ya no tiene acceso.') + '</p><p class="f1-peq">Versión instalada: ' + VERSION + '</p></div>'); }
   function mostrarLogin(msg) {
+    if (!msg) { try { msg = localStorage.getItem('ast_aviso_login') || ''; localStorage.removeItem('ast_aviso_login'); } catch (e) {} }
     if (enLogin) { const e = $('f1-login-msg'); if (e && msg) e.textContent = msg; return; }
     enLogin = true;
     const o = crearOverlay('f1-login', '<form class="f1-card" id="f1-login-form" autocomplete="on"><h2>A.S.T.</h2><p class="f1-peq">Ingresa para continuar</p>' +
@@ -79,6 +80,36 @@
     if (!confirm('¿Cerrar sesión en este dispositivo?')) return;
     await window.callApi('logout', {}); await borrarToken();
     Object.keys(localStorage).filter(k => k.indexOf('ast_') === 0 && k !== 'ast_token').forEach(k => localStorage.removeItem(k)); location.reload();
+  };
+
+  // ---------- 3b. Cambiar mi clave (la inicial es larga y aleatoria; aquí el dueño pone una que recuerde) ----------
+  window.cambiarClaveAST = function () {
+    if (!$('f1-clave-modal')) {
+      const d = document.createElement('div'); d.className = 'modal fade'; d.id = 'f1-clave-modal'; d.tabIndex = -1;
+      d.innerHTML = '<div class="modal-dialog modal-dialog-scrollable modal-fullscreen-sm-down"><div class="modal-content bg-dark-panel border-cyan"><div class="modal-header border-secondary"><h5 class="modal-title text-cyan">Cambiar mi clave</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body">' +
+        '<form id="f1-clave-form" autocomplete="off"><div class="f1-paso"><label for="f1-clave-act">Clave actual</label><input type="password" id="f1-clave-act" autocomplete="current-password"></div>' +
+        '<div class="f1-paso"><label for="f1-clave-nueva">Clave nueva (mínimo 16 caracteres)</label><input type="password" id="f1-clave-nueva" autocomplete="new-password"><small class="f1-peq">Una frase fácil de recordar sirve: varias palabras juntas, con 16 o más caracteres, mejor que una clave corta con símbolos.</small></div>' +
+        '<div class="f1-paso"><label for="f1-clave-rep">Repite la clave nueva</label><input type="password" id="f1-clave-rep" autocomplete="new-password"></div>' +
+        '<label class="f1-peq" style="display:flex;gap:8px;align-items:center;margin-bottom:12px"><input type="checkbox" id="f1-clave-ver"> Mostrar las claves</label>' +
+        '<div id="f1-clave-msg" class="f1-error" role="alert"></div><button type="submit" id="f1-clave-ok" class="btn btn-lg w-100 f1-btn-primario">Guardar clave nueva</button><small class="f1-peq">Al cambiarla se cierra la sesión en todos tus dispositivos y entras de nuevo con la clave nueva.</small></form></div></div></div>';
+      document.body.appendChild(d);
+      $('f1-clave-ver').onchange = e => ['f1-clave-act', 'f1-clave-nueva', 'f1-clave-rep'].forEach(i => { $(i).type = e.target.checked ? 'text' : 'password'; });
+      $('f1-clave-form').addEventListener('submit', async ev => {
+        ev.preventDefault(); const m = $('f1-clave-msg'), b = $('f1-clave-ok'); if (b.disabled) return; m.textContent = '';
+        const a = $('f1-clave-act').value, n = $('f1-clave-nueva').value, r = $('f1-clave-rep').value;
+        if (!a) { m.textContent = 'Escribe tu clave actual.'; return; }
+        if (n.length < 16) { m.textContent = 'La clave nueva debe tener al menos 16 caracteres (ahora tiene ' + n.length + ').'; return; }
+        if (n !== r) { m.textContent = 'Las dos claves nuevas no coinciden.'; return; }
+        if (n === a) { m.textContent = 'La clave nueva debe ser distinta de la actual.'; return; }
+        b.disabled = true; b.textContent = 'Guardando…';
+        const res = await window.callApi('cambiarClave', { claveActual: a, claveNueva: n });
+        b.disabled = false; b.textContent = 'Guardar clave nueva';
+        if (!res.success) { m.textContent = res.codigo === 'CREDENCIALES_INVALIDAS' ? 'La clave actual no es correcta.' : (res.error || 'No se pudo cambiar la clave.'); return; }
+        await borrarToken(); try { localStorage.setItem('ast_aviso_login', 'Clave cambiada. Entra con la clave nueva.'); } catch (e) {}
+        Object.keys(localStorage).filter(k => k.indexOf('ast_') === 0 && k !== 'ast_aviso_login').forEach(k => localStorage.removeItem(k)); location.reload();
+      });
+    }
+    $('f1-clave-form').reset(); $('f1-clave-msg').textContent = ''; bootstrap.Modal.getOrCreateInstance($('f1-clave-modal')).show();
   };
 
   // ---------- 4. Documentos privados: se abren/comparten bajo demanda (sin enlace público) ----------
@@ -160,8 +191,28 @@
   // ---------- 6. Cuenta de cobro rápida ----------
   const monto = s => { const d = dig(s); return d ? parseInt(d, 10) : 0; };
   const pesos = n => (typeof fmt !== 'undefined' ? fmt.format(n) : '$ ' + n);
-  const est = { cliente: null, concepto: '', valor: 0, abonos: 0, idSolicitud: null, huella: '', enVuelo: false, resultado: null };
-  function huella() { return JSON.stringify([est.cliente && est.cliente.nombre, est.concepto, est.valor, est.abonos]); }
+  const itemVacio = () => ({ uuid: uuid(), concepto: '', cantidad: 1, valor: 0 });
+  const est = { cliente: null, items: [itemVacio()], valor: 0, abonos: 0, idSolicitud: null, huella: '', enVuelo: false, resultado: null };
+  const totalItems = () => est.items.reduce((t, i) => t + (i.cantidad || 0) * (i.valor || 0), 0);
+  const resumenConceptos = () => est.items.map(i => i.concepto.trim()).filter(Boolean).join('; ');
+  function huella() { return JSON.stringify([est.cliente && est.cliente.nombre, est.items.map(i => [i.concepto, i.cantidad, i.valor]), est.abonos]); }
+  function leerItemsDelForm() {   // sincroniza lo escrito en pantalla con el estado (antes de agregar/quitar un ítem)
+    document.querySelectorAll('#ccr-items .ccr-item').forEach((el, k) => { const it = est.items[k]; if (!it) return; it.concepto = el.querySelector('.ccr-concepto').value; it.cantidad = monto(el.querySelector('.ccr-cant').value) || 0; it.valor = monto(el.querySelector('.ccr-val').value); });
+  }
+  function pintarItemsCCR() {
+    $('ccr-items').innerHTML = est.items.map((it, k) => '<div class="f1-tarjeta ccr-item" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center"><small>Ítem ' + (k + 1) + '</small>' + (est.items.length > 1 ? '<button type="button" class="btn btn-sm btn-outline-danger ccr-quitar" data-k="' + k + '" aria-label="Quitar ítem ' + (k + 1) + '" style="min-height:44px;min-width:44px">Quitar</button>' : '') + '</div>' +
+      '<label>Concepto</label><textarea class="ccr-concepto" rows="2" maxlength="300" placeholder="Ej: Cambio de breaker y revisión de tablero">' + esc1(it.concepto) + '</textarea>' +
+      '<div style="display:flex;gap:8px"><div style="flex:1"><label>Cantidad</label><input class="ccr-cant" inputmode="numeric" autocomplete="off" value="' + (it.cantidad || '') + '"></div><div style="flex:2"><label>Valor unitario (COP)</label><input class="ccr-val" inputmode="numeric" autocomplete="off" placeholder="0" value="' + (it.valor || '') + '"></div></div>' +
+      '<small class="ccr-sub"></small></div>').join('');
+    document.querySelectorAll('#ccr-items .ccr-quitar').forEach(b => b.onclick = () => { leerItemsDelForm(); est.items.splice(Number(b.dataset.k), 1); pintarItemsCCR(); actCCR(); });
+    document.querySelectorAll('#ccr-items input, #ccr-items textarea').forEach(e => e.addEventListener('input', actCCR));
+    actCCR();
+  }
+  function actCCR() {
+    leerItemsDelForm(); est.valor = totalItems(); est.abonos = monto(($('ccr-abonos') || {}).value);
+    document.querySelectorAll('#ccr-items .ccr-item').forEach((el, k) => { const it = est.items[k]; el.querySelector('.ccr-sub').innerHTML = 'Subtotal <b>' + pesos((it.cantidad || 0) * (it.valor || 0)) + '</b>'; });
+    const r = $('ccr-res'); if (r) r.innerHTML = 'Valor total <b>' + pesos(est.valor) + '</b> · Abonos <b>' + pesos(est.abonos) + '</b> · Saldo pendiente <b>' + pesos(Math.max(0, est.valor - est.abonos)) + '</b>';
+  }
   function crearModalCCR() {
     if ($('ccrModal')) return;
     const d = document.createElement('div'); d.className = 'modal fade'; d.id = 'ccrModal'; d.tabIndex = -1;
@@ -172,16 +223,15 @@
     const c = $('ccr-cuerpo'), saldo = est.valor - est.abonos;
     if (paso === 'form') {
       c.innerHTML = '<div class="f1-paso"><label>1. Cliente</label><button type="button" id="ccr-cli" class="f1-campo-boton">' + (est.cliente ? '<b>' + esc1(est.cliente.nombre) + '</b><span>' + esc1([est.cliente.nit, est.cliente.telefono].filter(Boolean).join(' · ')) + '</span>' : 'Toca para elegir o crear cliente') + '</button></div>' +
-        '<div class="f1-paso"><label for="ccr-concepto">2. Concepto del servicio</label><textarea id="ccr-concepto" rows="3" maxlength="300" placeholder="Ej: Cambio de breaker y revisión de tablero">' + esc1(est.concepto) + '</textarea></div>' +
-        '<div class="f1-paso"><label for="ccr-valor">3. Valor a cobrar (COP)</label><input id="ccr-valor" inputmode="numeric" autocomplete="off" placeholder="0" value="' + (est.valor || '') + '"></div>' +
-        '<div class="f1-paso"><label for="ccr-abonos">4. Abonos recibidos (opcional)</label><input id="ccr-abonos" inputmode="numeric" autocomplete="off" placeholder="0" value="' + (est.abonos || '') + '"></div>' +
+        '<div class="f1-paso"><label>2. Qué se cobra (puedes agregar varios ítems)</label><div id="ccr-items"></div><button type="button" id="ccr-agregar" class="btn btn-lg w-100 f1-btn-sec">+ Agregar otro ítem</button></div>' +
+        '<div class="f1-paso"><label for="ccr-abonos">3. Abonos recibidos (opcional)</label><input id="ccr-abonos" inputmode="numeric" autocomplete="off" placeholder="0" value="' + (est.abonos || '') + '"></div>' +
         '<div class="f1-resumen" id="ccr-res"></div><div id="ccr-err" class="f1-error" role="alert"></div><button type="button" id="ccr-revisar" class="btn btn-lg w-100 f1-btn-primario">Revisar</button>';
-      $('ccr-cli').onclick = () => window.abrirSelectorCliente(cl => { est.cliente = cl; pintarCCR('form'); });
-      const act = () => { est.concepto = $('ccr-concepto').value; est.valor = monto($('ccr-valor').value); est.abonos = monto($('ccr-abonos').value); $('ccr-res').innerHTML = 'Valor total <b>' + pesos(est.valor) + '</b> · Abonos <b>' + pesos(est.abonos) + '</b> · Saldo pendiente <b>' + pesos(Math.max(0, est.valor - est.abonos)) + '</b>'; };
-      ['ccr-concepto', 'ccr-valor', 'ccr-abonos'].forEach(id => $(id).addEventListener('input', act)); act();
-      $('ccr-revisar').onclick = () => { act(); const e = validarCCR(); if (e) { $('ccr-err').textContent = e; return; } if (est.huella !== huella()) { est.idSolicitud = uuid(); est.itemUuid = uuid(); est.huella = huella(); } pintarCCR('revisar'); };
+      $('ccr-cli').onclick = () => { leerItemsDelForm(); window.abrirSelectorCliente(cl => { est.cliente = cl; pintarCCR('form'); }); };
+      pintarItemsCCR(); $('ccr-abonos').addEventListener('input', actCCR);
+      $('ccr-agregar').onclick = () => { leerItemsDelForm(); if (est.items.length >= 15) { $('ccr-err').textContent = 'Máximo 15 ítems por cuenta de cobro.'; return; } est.items.push(itemVacio()); pintarItemsCCR(); const ult = document.querySelectorAll('#ccr-items .ccr-concepto'); if (ult.length) ult[ult.length - 1].focus(); };
+      $('ccr-revisar').onclick = () => { actCCR(); const e = validarCCR(); if (e) { $('ccr-err').textContent = e; return; } if (est.huella !== huella()) { est.idSolicitud = uuid(); est.huella = huella(); } pintarCCR('revisar'); };
     } else if (paso === 'revisar') {
-      c.innerHTML = '<div class="f1-tarjeta"><div><small>Cliente</small><b>' + esc1(est.cliente.nombre) + '</b></div><div><small>Concepto</small><b>' + esc1(est.concepto) + '</b></div><div><small>Valor total</small><b>' + pesos(est.valor) + '</b></div><div><small>Abonos recibidos</small><b>' + pesos(est.abonos) + '</b></div><div class="f1-saldo"><small>Saldo pendiente</small><b>' + pesos(saldo) + '</b></div></div>' +
+      c.innerHTML = '<div class="f1-tarjeta"><div><small>Cliente</small><b>' + esc1(est.cliente.nombre) + '</b></div><div><small>Ítems</small>' + est.items.map(i => '<b style="display:block">' + esc1(i.concepto.trim()) + ' — ' + i.cantidad + ' × ' + pesos(i.valor) + ' = ' + pesos(i.cantidad * i.valor) + '</b>').join('') + '</div><div><small>Valor total</small><b>' + pesos(est.valor) + '</b></div><div><small>Abonos recibidos</small><b>' + pesos(est.abonos) + '</b></div><div class="f1-saldo"><small>Saldo pendiente</small><b>' + pesos(saldo) + '</b></div></div>' +
         '<p class="f1-peq">Es una cuenta de cobro de persona natural. No es una factura electrónica y no incluye IVA.</p><div id="ccr-err" class="f1-error" role="alert"></div>' +
         '<button type="button" id="ccr-generar" class="btn btn-lg w-100 f1-btn-primario">Generar PDF</button><button type="button" id="ccr-volver" class="btn btn-lg w-100 f1-btn-sec">Volver a editar</button>';
       $('ccr-volver').onclick = () => pintarCCR('form'); $('ccr-generar').onclick = generarCCR;
@@ -192,12 +242,15 @@
         '<button type="button" id="ccr-enlace" class="btn btn-lg w-100 f1-btn-sec">Enviar enlace por WhatsApp</button><small class="f1-peq">El enlace hace público ese documento para quien lo reciba; el PDF directo no.</small><button type="button" id="ccr-nueva" class="btn btn-lg w-100 f1-btn-sec">Otra cuenta de cobro</button>';
       $('ccr-ver').onclick = () => window.abrirPdfPrivado({ consecutivo: r.consecutivo }); $('ccr-enviar').onclick = () => window.enviarPdfPrivado({ consecutivo: r.consecutivo });
       $('ccr-enlace').onclick = () => enviarEnlaceWhatsApp(r.consecutivo, tel, 'Hola' + (est.cliente.nombre ? ' ' + est.cliente.nombre : '') + ', te envío la cuenta de cobro ' + r.consecutivo + ' por ' + pesos(est.valor) + (est.abonos ? ' (abonos ' + pesos(est.abonos) + ', saldo ' + pesos(saldo) + ')' : '') + ':');
-      $('ccr-nueva').onclick = () => { Object.assign(est, { cliente: null, concepto: '', valor: 0, abonos: 0, idSolicitud: null, huella: '', resultado: null }); pintarCCR('form'); };
+      $('ccr-nueva').onclick = () => { Object.assign(est, { cliente: null, items: [itemVacio()], valor: 0, abonos: 0, idSolicitud: null, huella: '', resultado: null }); pintarCCR('form'); };
     }
   }
   function validarCCR() {
     if (!est.cliente || !est.cliente.nombre) return 'Elige o crea el cliente.';
-    if (est.concepto.trim().length < 5) return 'Describe el servicio cobrado (mínimo 5 letras).';
+    for (let k = 0; k < est.items.length; k++) { const i = est.items[k], n = est.items.length > 1 ? 'Ítem ' + (k + 1) + ': ' : '';
+      if (i.concepto.trim().length < 3) return n + 'describe lo que se cobra (mínimo 3 letras).';
+      if (!(i.cantidad >= 1)) return n + 'la cantidad debe ser 1 o más.';
+      if (!(i.valor > 0)) return n + 'escribe el valor unitario (mayor que cero).'; }
     if (!(est.valor > 0)) return 'Escribe el valor a cobrar (mayor que cero).'; if (est.valor > 999999999) return 'El valor es demasiado alto; revisa los ceros.';
     if (est.abonos < 0) return 'Los abonos no pueden ser negativos.'; if (est.abonos >= est.valor && est.abonos > 0) return 'Los abonos no pueden ser iguales ni mayores al valor: no habría saldo por cobrar.';
     return '';
@@ -206,7 +259,7 @@
     if (est.enVuelo) return; est.enVuelo = true; const b = $('ccr-generar'); b.disabled = true; b.textContent = 'Generando…'; $('ccr-err').textContent = '';
     const v = est.valor, c = est.cliente;
     const payload = { idSolicitud: est.idSolicitud, tipoDoc: 'Cuenta de Cobro', cliente: { nombre: c.nombre, nit: c.nit || '', telefono: c.telefono || '' },
-      items: [{ uuid: est.itemUuid || (est.itemUuid = uuid()), nombre: est.concepto.trim(), cantidad: 1, precio: v, specs: '', subtotal: v }], totales: { subtotal: v, iva: 0, granTotal: v },
+      items: est.items.map(i => ({ uuid: i.uuid, nombre: i.concepto.trim(), cantidad: i.cantidad, precio: i.valor, specs: '', subtotal: i.cantidad * i.valor })), totales: { subtotal: v, iva: 0, granTotal: v },
       opciones: { mostrarDesc: true, terminos: '', planPago: null, abonos: est.abonos, emisorPersonaNatural: false } };
     const r = await window.callApi('createDocument', payload);
     est.enVuelo = false;

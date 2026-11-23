@@ -85,7 +85,7 @@
   function pintarMas() {
     $('view-mas').innerHTML = '<h1 class="ui-h">Más</h1><h2 class="ui-h2">Gestión</h2><div class="ui-lista">' + fila('people', 'Clientes', 'Contacto, NIT y teléfono', "switchTab('CLIENTES')") + fila('truck', 'Proveedores', 'Lugares de compra y contactos', "switchTab('PROVEEDORES')") + '</div>' +
       '<h2 class="ui-h2">Herramientas</h2><div class="ui-lista">' + fila('calculator', 'Estimador eléctrico, mano de obra y CCTV', 'Materiales y cobro por puntos', "switchTab('ESTIMADOR')") + fila('graph-up', 'Dashboard financiero', 'Ventas, gastos y utilidad por mes', "switchTab('DASHBOARD')") + fila('rulers', 'Levantamiento en campo', 'Se abre dentro de cada trabajo', "switchTab('PROYECTOS')") + '</div>' +
-      '<h2 class="ui-h2">Cuenta</h2><div class="ui-lista">' + fila('box-arrow-right', 'Cerrar sesión', 'Versión ' + (window.AST_VERSION || ''), 'cerrarSesionAST()') + '</div>';
+      '<h2 class="ui-h2">Cuenta</h2><div class="ui-lista">' + fila('key', 'Cambiar mi clave', 'Pon una que recuerdes', 'cambiarClaveAST()') + fila('box-arrow-right', 'Cerrar sesión', 'Versión ' + (window.AST_VERSION || ''), 'cerrarSesionAST()') + '</div>';
   }
 
   // ---- Pagos recibidos por trabajo (cobrado = pagos registrados; pendiente = vendido - cobrado)
