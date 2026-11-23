@@ -106,9 +106,22 @@
     box.dataset.id = id;
     box.innerHTML = '<h2 class="ui-h2" style="margin-top:0">Cobros del trabajo</h2><div class="ui-kpis"><div class="ui-kpi"><small id="ui-k1-l"></small><b id="ui-k1"></b></div><div class="ui-kpi"><small>Cobrado</small><b class="ui-ok" id="ui-k2"></b></div></div><div id="ui-k3"></div>' +
       '<div class="ui-lista mt-3" id="ui-pagos-lista"></div>' +
-      '<form id="ui-pago-form" class="mt-3"><label class="ui-peq" for="ui-pago-monto">Registrar un pago recibido</label><div class="d-flex gap-2 mb-2"><input id="ui-pago-monto" class="form-control" inputmode="numeric" placeholder="Monto (COP)" autocomplete="off"><select id="ui-pago-medio" class="form-select" style="max-width:150px"><option>Efectivo</option><option>Transferencia</option><option>Nequi</option><option>Bre-B</option><option>Otro</option></select></div><input id="ui-pago-nota" class="form-control mb-2" placeholder="Nota (opcional)" maxlength="200" autocomplete="off"><div id="ui-pago-err" class="ui-aviso ui-peq" role="alert"></div><button class="btn btn-cyan w-100" type="submit">Registrar pago</button></form>';
+      /* PAGO RÁPIDO */ '<div id="ui-pago-rapido" class="mt-3"><div class="ui-peq mb-1">Registrar un pago recibido</div>' +
+      '<select id="ui-pago-medio" class="form-select mb-2" aria-label="Medio de pago"><option>Efectivo</option><option>Transferencia</option><option>Nequi</option><option>Bre-B</option><option>Otro</option></select>' +
+      '<button type="button" id="ui-pago-total" class="btn btn-cyan w-100 mb-2" style="display:none"></button>' +
+      '<div class="d-flex gap-2 mb-2"><button type="button" id="ui-pago-mitad" class="btn btn-outline-cyan flex-fill" style="display:none"></button><button type="button" id="ui-pago-otro" class="btn btn-outline-secondary flex-fill">Otro monto…</button></div>' +
+      '<div id="ui-pago-ok" class="ui-ok ui-peq" role="status"></div><div id="ui-pago-err" class="ui-aviso ui-peq" role="alert"></div>' +
+      '<form id="ui-pago-form" class="mt-2" style="display:none"><input id="ui-pago-monto" class="form-control mb-2" inputmode="numeric" enterkeyhint="done" placeholder="Monto recibido (COP)" autocomplete="off" aria-label="Monto recibido"><input id="ui-pago-nota" class="form-control mb-2" placeholder="Nota (opcional)" maxlength="200" autocomplete="off" aria-label="Nota"><button class="btn btn-cyan w-100" type="submit">Registrar pago</button></form></div>';
     $('ui-pagos-lista').addEventListener('click', ev => { const b = ev.target.closest('[data-borrar]'); if (b) borrarPago(id, b); });
     $('ui-pago-form').addEventListener('submit', ev => { ev.preventDefault(); registrarPago(id, ev.target); });
+    try { const m = localStorage.getItem('ast_medio_pago'); if (m) $('ui-pago-medio').value = m; } catch (e) {}
+    $('ui-pago-medio').addEventListener('change', e => { try { localStorage.setItem('ast_medio_pago', e.target.value); } catch (x) {} });
+    $('ui-pago-total').addEventListener('click', () => pagoRapido(id, 1));
+    $('ui-pago-mitad').addEventListener('click', () => pagoRapido(id, 0.5));
+    $('ui-pago-otro').addEventListener('click', () => { const fo = $('ui-pago-form'); fo.style.display = fo.style.display === 'none' ? 'block' : 'none'; const md = $('projectDetailModal'); if (fo.style.display === 'block') { md.classList.add('ui-escribiendo'); $('ui-pago-monto').focus(); setTimeout(() => { try { $('ui-pago-monto').scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (x) {} }, 320); } else md.classList.remove('ui-escribiendo'); });
+    const m = $('ui-pago-monto'); m.addEventListener('input', () => { const d = String(m.value).replace(/\D/g, ''); m.value = d ? Number(d).toLocaleString('es-CO') : ''; });   // 1130000 → 1.130.000 mientras se escribe
+    const modal = $('projectDetailModal'); const visible = e => setTimeout(() => { try { e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (x) {} }, 320);
+    ['ui-pago-monto', 'ui-pago-nota'].forEach(i => { $(i).addEventListener('focus', e => { modal.classList.add('ui-escribiendo'); visible(e); }); $(i).addEventListener('blur', () => setTimeout(() => { if (!document.activeElement || !/^ui-pago-(monto|nota)$/.test(document.activeElement.id)) modal.classList.remove('ui-escribiendo'); }, 250)); });
     pintarPagos(id); return box;
   }
   // Actualiza SOLO lo que depende del cambio: Vendido/Cotizado, Cobrado, Pendiente y las filas (en el orden que manda el servidor).
@@ -122,22 +135,34 @@
     if (caja.dataset.k !== k3) { caja.dataset.k = k3; caja.innerHTML = cerrado ? '<div class="ui-kpi mt-2"><small>Pendiente por cobrar</small><b class="' + (pendiente > 0 ? 'ui-aviso' : 'ui-ok') + '">' + pesos(pendiente) + '</b><div class="nota">Un trabajo cerrado no significa dinero recibido: solo cuentan los pagos registrados.</div></div>' : '<p class="ui-peq mt-2">Registra aquí anticipos y abonos a medida que los recibas.</p>'; }
     const cont = $('ui-pagos-lista'); const firma = lista ? lista.map(x => x.id + ':' + x.monto + ':' + x.medio + ':' + x.nota).join('|') : '?';
     if (cont.dataset.f !== firma) { cont.dataset.f = firma; cont.innerHTML = !lista ? '<div class="ui-vacio" style="border:0"><b>Cargando pagos…</b></div>' : (lista.length ? lista.map(filaPago).join('') : '<div class="ui-vacio" style="border:0"><b>Sin pagos registrados</b>Aún no se ha recibido dinero de este trabajo.</div>'); }
+    // Botones rápidos: solo cuando ya se cargaron los pagos y hay saldo pendiente
+    const bt = $('ui-pago-total'), bm = $('ui-pago-mitad'); if (bt && bm) { const ver = !!lista && pendiente > 0; bt.style.display = ver ? 'block' : 'none'; bm.style.display = (ver && pendiente >= 2) ? 'block' : 'none'; bt.textContent = 'Pago completo · ' + pesos(pendiente); bm.textContent = '50 % · ' + pesos(Math.round(pendiente / 2)); }
   }
   window.AST_SYNC.oyentesPagos.push(pintarPagos);
   let pagoPendiente = null;   // identificador estable del intento en curso: reintentar el mismo monto NO duplica el pago (el servidor lo reconoce)
-  async function registrarPago(id, form) {
+  const enVueloPago = {};
+  function pagoRapido(id, fraccion) {   // un toque: el monto sale del saldo pendiente, no se digita
+    const lista = lista_(id); if (!lista) return; const p = proyecto_(id); const pend = Math.max(0, (Number(p.totalCobrado) || 0) - lista.reduce((t, x) => t + x.monto, 0));
+    const monto = fraccion === 1 ? pend : Math.round(pend * fraccion); if (!(monto > 0)) return;
+    if (!confirm('¿Registrar ' + (fraccion === 1 ? 'el pago completo' : 'un pago del 50 %') + ' de ' + pesos(monto) + ' (' + $('ui-pago-medio').value + ')?')) return;
+    enviarPago(id, monto, '', fraccion === 1 ? $('ui-pago-total') : $('ui-pago-mitad'));
+  }
+  async function registrarPago(id, form) {   // pago escrito a mano (parcial)
     const err = $('ui-pago-err'); err.textContent = ''; const monto = parseInt(String($('ui-pago-monto').value).replace(/\D/g, ''), 10) || 0;
     if (!(monto > 0)) { err.textContent = 'Escribe el monto recibido (mayor que cero).'; return; } if (monto > 999999999) { err.textContent = 'El monto es demasiado alto; revisa los ceros.'; return; }
-    const btn = form.querySelector('button[type=submit]'); if (btn.disabled) return;   // doble toque: el segundo se ignora
     const p = proyecto_(id), lista = lista_(id) || [], pendiente = Math.max(0, (Number(p.totalCobrado) || 0) - lista.reduce((t, x) => t + x.monto, 0));
     if (p.estado === 'CERRADO' && monto > pendiente && !confirm('El pago supera el saldo pendiente (' + pesos(pendiente) + '). ¿Registrarlo de todos modos?')) return;
-    btn.disabled = true; btn.textContent = 'Guardando…';
+    enviarPago(id, monto, $('ui-pago-nota').value.trim(), form.querySelector('button[type=submit]'));
+  }
+  async function enviarPago(id, monto, nota, btn) {   // una sola ruta de guardado: doble toque ignorado, mismo identificador al reintentar, éxito solo con confirmación del servidor
+    const err = $('ui-pago-err'), ok = $('ui-pago-ok'); err.textContent = ''; ok.textContent = ''; if (enVueloPago[id] || (btn && btn.disabled)) return; enVueloPago[id] = true;
+    const botones = ['ui-pago-total', 'ui-pago-mitad', 'ui-pago-otro'].map($).concat(btn ? [btn] : []); const textos = botones.map(b => b && b.textContent); botones.forEach(b => { if (b) b.disabled = true; }); if (btn) btn.textContent = 'Guardando…';
     if (!pagoPendiente || pagoPendiente.k !== id + '|' + monto) pagoPendiente = { k: id + '|' + monto, id: uuid() };
-    const d = await window.callApi('addProjectPayment', { idPago: pagoPendiente.id, projectId: id, monto: monto, medio: $('ui-pago-medio').value, nota: $('ui-pago-nota').value.trim() });
-    btn.disabled = false; btn.textContent = 'Registrar pago';
-    // El éxito se muestra SOLO si el servidor confirmó. La lista y los totales ya se actualizaron con la respuesta (AST_SYNC), sin volver a pedirlos.
+    const d = await window.callApi('addProjectPayment', { idPago: pagoPendiente.id, projectId: id, monto: monto, medio: $('ui-pago-medio').value, nota: nota });
+    botones.forEach((b, i) => { if (b) { b.disabled = false; b.textContent = textos[i]; } }); enVueloPago[id] = false; pintarPagos(id);
     if (!d.success) { err.textContent = d.codigo === 'SIN_RED' ? 'Sin conexión: no se pudo confirmar el guardado del pago. Toca de nuevo cuando vuelva la red: si ya se había guardado, no se duplica.' : d.error; return; }
-    pagoPendiente = null; $('ui-pago-monto').value = ''; $('ui-pago-nota').value = '';
+    pagoPendiente = null; $('ui-pago-monto').value = ''; $('ui-pago-nota').value = ''; $('ui-pago-form').style.display = 'none'; $('projectDetailModal').classList.remove('ui-escribiendo');
+    ok.textContent = '✓ Pago de ' + pesos(monto) + ' registrado'; setTimeout(() => { if (ok.textContent.indexOf('registrado') > 0) ok.textContent = ''; }, 3500);
     if (!(d.data && d.data.pagos)) await recargarPagos(id);   // servidor anterior a 2.1: no devuelve la lista
   }
   const borrando = {};

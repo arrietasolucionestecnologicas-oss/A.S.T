@@ -124,3 +124,8 @@ small, .small { font-size: max(12px, .875em); }
 #bulk-tab-items, #bulk-tab-factura { min-height: 44px; }
 .ui-kpi .nota, .kpi-label, .kpi-card .kpi-label { font-size: 12px !important; }
 [style*="font-size:0.72rem"], [style*="font-size: 0.72rem"], [style*="font-size:0.7rem"] { font-size: 12px !important; }
+
+/* Pago rápido: al escribir un monto se oculta la barra inferior del detalle para que el teclado no tape el formulario */
+#projectDetailModal.ui-escribiendo .modal-footer { display: none; }
+#ui-pago-total, #ui-pago-mitad, #ui-pago-otro { min-height: 48px; font-weight: 700; }
+#ui-pago-medio { min-height: 48px; }
