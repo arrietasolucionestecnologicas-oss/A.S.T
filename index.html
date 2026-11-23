@@ -2,7 +2,7 @@
 <html lang="es" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>A.S.T. Admin Console</title>
     
     <link rel="manifest" href="manifest.json">
@@ -69,6 +69,8 @@
         .list-item-name:hover { color: var(--ast-cyan); }
         .list-item-spec { font-size: 0.7rem; color: #7d93a8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
     </style>
+    <link rel="stylesheet" href="fase1.css">
+    <link rel="stylesheet" href="ui.css">
 </head>
 <body>
 
@@ -185,7 +187,7 @@
             <div id="projects-dashboard" class="row g-2 mb-3 d-none">
                 <div class="col-4">
                     <div class="kpi-card">
-                        <div class="kpi-label">Facturado (cerrados)</div>
+                        <div class="kpi-label">Vendido (cerrados)</div>
                         <div class="kpi-value text-cyan" id="kpi-cobrado">$0</div>
                     </div>
                 </div>
@@ -536,11 +538,11 @@
 
             <div class="row g-2 mb-2">
                 <div class="col-12">
-                    <small class="text-secondary" style="font-size:0.7rem;"><i class="bi bi-info-circle"></i> "Facturado" son proyectos <strong>cerrados</strong> (trabajo confirmado y terminado). Los <strong>abiertos</strong> son cotizaciones/oportunidades que el cliente aún no ha aceptado — no cuentan aquí todavía.</small>
+                    <small class="text-secondary" style="font-size:0.75rem;"><i class="bi bi-info-circle"></i> «Vendido» suma los trabajos <strong>cerrados</strong>. <strong>Cerrado no significa dinero recibido</strong>: el cobro se confirma con los pagos que registras en cada trabajo y con las cuotas pagadas.</small>
                 </div>
                 <div class="col-4">
                     <div class="kpi-card">
-                        <div class="kpi-label">Facturado (cerrados)</div>
+                        <div class="kpi-label">Vendido (cerrados)</div>
                         <div class="kpi-value text-cyan" id="dash-total-facturado">$0</div>
                     </div>
                 </div>
@@ -560,7 +562,7 @@
 
             <div class="row g-2 mb-3">
                 <div class="col-12">
-                    <small class="text-secondary" style="font-size:0.7rem;"><i class="bi bi-cash-coin"></i> <strong>Ingreso Real</strong> es la plata que de verdad entró: proyectos cerrados + cuotas de pagos recurrentes ya cobradas (con su fecha real de pago).</small>
+                    <small class="text-secondary" style="font-size:0.7rem;"><i class="bi bi-cash-coin"></i> <strong>Ingreso Real</strong> es el dinero que de verdad se recibió: pagos registrados en cada trabajo + cuotas de pagos recurrentes ya cobradas (con su fecha real de pago). Un trabajo cerrado sin pagos registrados no suma.</small>
                 </div>
                 <div class="col-6">
                     <div class="kpi-card" style="border-color: rgba(0,255,136,0.4);">
@@ -582,7 +584,7 @@
             <div class="card bg-dark-panel border-secondary mb-3" id="card-mant-camaras">
                 <div class="card-body">
                     <h6 class="text-white small fw-bold mb-1"><i class="bi bi-camera-video-fill text-cyan"></i> Mantenimiento de Cámaras</h6>
-                    <small class="text-secondary d-block mb-3" style="font-size:0.7rem;">Ciclo de mantenimiento cada 6 meses (la norma técnica de contratación pública en Colombia exige mínimo cada 3 meses).</small>
+                    <small class="text-secondary d-block mb-3" style="font-size:0.7rem;">Ciclo de mantenimiento propuesto por A.S.T.: cada 6 meses. Algunos contratos (por ejemplo, de contratación pública) fijan otra frecuencia: en cada caso manda el contrato.</small>
                     <div id="mant-camaras-vacio" class="text-center text-secondary py-3 hidden-section">
                         <i class="bi bi-check-circle display-6"></i>
                         <p class="mt-2 mb-0 small">Ningún cliente de cámaras tiene mantenimiento próximo o vencido.</p>
@@ -611,7 +613,7 @@
                     <div class="row g-2 mb-3">
                         <div class="col-4">
                             <div class="kpi-card">
-                                <div class="kpi-label">Facturado</div>
+                                <div class="kpi-label">Vendido</div>
                                 <div class="kpi-value text-cyan" id="cierre-facturado">$0</div>
                             </div>
                         </div>
@@ -728,7 +730,7 @@
                             <input type="number" id="cfg-llenado-diseno" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" max="100" step="1">
                         </div>
                         <div class="col-6">
-                            <label class="small text-muted">Máximo NTC 2050 (%)</label>
+                            <label class="small text-muted">Llenado máximo de referencia, informativo (%)</label>
                             <input type="number" id="cfg-llenado-max" class="form-control form-control-sm bg-dark text-white border-secondary" min="0" max="100" step="1">
                         </div>
                     </div>
@@ -2113,6 +2115,9 @@
 
     <script src="vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="vendor/chartjs/chart.umd.min.js"></script>
+    <script src="config-entorno.js"></script>
     <script src="app.js"></script>
+    <script src="fase1.js"></script>
+    <script src="shell.js"></script>
 </body>
 </html>

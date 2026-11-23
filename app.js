@@ -2,8 +2,8 @@
 // A.S.T. ADMIN FRONTEND (V33 - LATENCIA CERO & OPTIMISTIC UI)
 // ==========================================
 // *** PEGA AQUÍ TU URL DEL SCRIPT ***
-const API_URL = "https://script.google.com/macros/s/AKfycbxpCp7aY4L48znjtqH_1svYzY6MjVY58bXxt3iZvyuPQwBBt0u7S32aXxxt9VVgtaHd/exec";
-const API_KEY = "AST Web App 2026"; 
+const API_URL = window.AST_API_URL || "https://script.google.com/macros/s/AKfycbxpCp7aY4L48znjtqH_1svYzY6MjVY58bXxt3iZvyuPQwBBt0u7S32aXxxt9VVgtaHd/exec";
+const API_KEY = undefined; // ELIMINADA (Fase 1): la autenticación es por sesión, ver fase1.js 
 
 let catalog = [];
 let cart = [];
@@ -1018,9 +1018,12 @@ function calcularEstimacionElectrica() {
     const cajasEmpotradas = {};
     const cajasSobrepuestas = {};
     let cajasPasoExtra = 0;
+    const tiposSinRegla = [];
 
     estimadorElectricoPuntos.forEach(p => {
-        const tipo = elec.tiposPunto.find(t => t.id === p.tipoId) ||
+        const tipoConfig = elec.tiposPunto.find(t => t.id === p.tipoId);
+        if (!tipoConfig && !tiposSinRegla.includes(p.tipoId)) tiposSinRegla.push(p.tipoId);
+        const tipo = tipoConfig ||
             { id: p.tipoId, nombre: p.tipoId, calibreAwg: '-', amperaje: '-', conductores: 1, colores: [] };
 
         if (!porTipo[tipo.id]) {
@@ -1070,7 +1073,7 @@ function calcularEstimacionElectrica() {
     });
 
     return {
-        totalPuntos: estimadorElectricoPuntos.length, porTipo, cablePorColor, totalMetrosCable,
+        totalPuntos: estimadorElectricoPuntos.length, porTipo, cablePorColor, totalMetrosCable, tiposSinRegla,
         metrosCanaleta, metrosTuberia,
         // Un adaptador terminal PVC en cada extremo de cada tramo de tubería
         // (donde el tubo entra a una caja): 2 por tramo. Las curvas NO se
@@ -1152,9 +1155,10 @@ function renderElectricoSummary() {
 
     const r = calcularEstimacionElectrica();
     estimadorElectricoResumen = r;
-    btnCarrito.disabled = false;
+    btnCarrito.disabled = r.tiposSinRegla.length > 0;
 
-    let html = `<div class="mb-2"><span class="text-secondary">Total de puntos:</span> <strong>${r.totalPuntos}</strong></div>`;
+    let html = r.tiposSinRegla.length ? `<div class="alert alert-warning small" role="alert"><b>Falta la regla de cable para: ${r.tiposSinRegla.join(', ')}.</b> Sin calibre ni número de conductores el cálculo no es confiable (se contó 1 conductor). Corrige el tipo de punto o agrégalo en Configurar antes de llevar esto al carrito.</div>` : '';
+    html += `<div class="mb-2"><span class="text-secondary">Total de puntos:</span> <strong>${r.totalPuntos}</strong></div>`;
     html += '<table class="table table-dark table-sm mb-2"><thead><tr class="text-secondary small"><th>Tipo</th><th>Cant.</th><th>Calibre</th><th>Recorrido (m)</th></tr></thead><tbody>';
     Object.values(r.porTipo).forEach(t => {
         html += `<tr><td class="small">${t.nombre}</td><td class="small">${t.cantidadPuntos}</td><td class="small">${t.calibreAwg} AWG (${t.amperaje}A)</td><td class="small">${t.metrosRecorrido.toFixed(2)}</td></tr>`;
@@ -2790,7 +2794,7 @@ function buildProjectCardHtml(p) {
     const estadoClass = p.estado === 'ABIERTO' ? 'text-success' : 'text-secondary';
     // Mientras el proyecto sigue abierto, lo cotizado no es ganancia real todavia:
     // se etiqueta como proyectado en vez de como si ya se hubiera cobrado.
-    const labelCobrado  = estaCerrado ? 'COBRADO'  : 'COTIZADO';
+    const labelCobrado  = estaCerrado ? 'VENDIDO'  : 'COTIZADO';
     const labelUtilidad = estaCerrado ? 'UTILIDAD' : 'UTILIDAD PROY.';
     return `
     <div class="project-card" onclick="openProjectDetail('${p.id}')">
@@ -2813,6 +2817,7 @@ function buildProjectCardHtml(p) {
                 <span class="${p.utilidad >= 0 ? 'text-profit' : 'text-loss'}">${fmt.format(p.utilidad)}</span>
             </div>
         </div>
+        ${estaCerrado ? `<div class="ui-peq mt-2">Cobrado ${fmt.format(p.totalRecibido || 0)} · <span class="${(p.totalCobrado - (p.totalRecibido || 0)) > 0 ? 'ui-aviso' : 'ui-ok'}">Pendiente ${fmt.format(Math.max(0, p.totalCobrado - (p.totalRecibido || 0)))}</span></div>` : ''}
     </div>`;
 }
 
@@ -3062,8 +3067,8 @@ function dibujarGraficaDashboard() {
         data: {
             labels: labels,
             datasets: [
-                { type: 'bar', label: 'Facturado (cerrados)', data: meses.map(m => m.facturado), backgroundColor: '#00c8ff' },
-                { type: 'bar', label: 'Ingreso Real (cobrado)', data: meses.map(m => m.ingresoReal), backgroundColor: '#00ff88' },
+                { type: 'bar', label: 'Venta en trabajos cerrados', data: meses.map(m => m.facturado), backgroundColor: '#00c8ff' },
+                { type: 'bar', label: 'Ingreso reconocido (cerrado o cuota pagada)', data: meses.map(m => m.ingresoReal), backgroundColor: '#00ff88' },
                 { type: 'line', label: 'Utilidad Real', data: meses.map(m => m.utilidadReal), borderColor: '#ffcc00', backgroundColor: '#ffcc00', tension: 0.3 }
             ]
         },
@@ -3228,7 +3233,7 @@ async function openProjectDetail(id) {
         document.getElementById('pd-cobrado').innerText  = fmt.format(pInfo.totalCobrado);
         document.getElementById('pd-gastos').innerText   = fmt.format(pInfo.totalCostos);
         document.getElementById('pd-utilidad').innerText = fmt.format(pInfo.utilidad);
-        document.getElementById('pd-cobrado-label').innerText  = pInfo.estado === 'CERRADO' ? 'COBRADO' : 'COTIZADO';
+        document.getElementById('pd-cobrado-label').innerText  = pInfo.estado === 'CERRADO' ? 'VENDIDO' : 'COTIZADO';
         document.getElementById('pd-utilidad-label').innerText = pInfo.estado === 'CERRADO' ? 'UTILIDAD' : 'UTILIDAD PROY.';
     }
     document.getElementById('pd-items-list').innerHTML = `

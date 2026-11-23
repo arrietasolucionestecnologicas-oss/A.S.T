@@ -1,0 +1,58 @@
+/* A.S.T. Fase 1: acceso, selector de clientes, cuenta de cobro rápida y mejoras móviles. Paleta institucional (no se cambia). */
+:root { --f1-navy:#0B2D4A; --f1-cian:#00BEFF; --f1-ambar:#FF8A00; --f1-vvh:100vh; }
+.f1-oculto { display:none !important; }
+.f1-sin-scroll { overflow:hidden; }
+.f1-overlay { position:fixed; inset:0; z-index:3000; background:#061a2b; display:none; align-items:center; justify-content:center; padding:16px; overflow-y:auto; }
+.f1-card { width:100%; max-width:420px; background:#0f2b44; border:1px solid var(--f1-cian); border-radius:14px; padding:22px; color:#fff; display:flex; flex-direction:column; gap:10px; }
+.f1-card h2 { color:var(--f1-cian); margin:0; text-align:center; }
+.f1-card label { font-size:.85rem; color:#9fb3c4; margin-top:4px; }
+.f1-card input[type=text], .f1-card input[type=password], .f1-hoja input, .f1-paso input, .f1-paso textarea { width:100%; min-height:48px; font-size:16px; padding:10px 12px; border-radius:10px; border:1px solid #3a5873; background:#0a1f33; color:#fff; }
+.f1-chk { display:flex; align-items:center; gap:8px; font-size:.85rem; } .f1-chk input { width:20px; height:20px; }
+.f1-peq { font-size:.75rem; color:#8aa0b3; margin:0; text-align:center; }
+.f1-error { min-height:1.2em; color:#ff8080; font-size:.9rem; }
+.f1-btn-primario, .f1-btn-sec { min-height:48px; padding:10px 16px; border-radius:10px; border:0; font-weight:700; font-size:1rem; touch-action:manipulation; }
+.f1-btn-primario { background:var(--f1-cian); color:#052033; } .f1-btn-primario:disabled { opacity:.6; }
+.f1-btn-sec { background:transparent; color:var(--f1-cian); border:1px solid var(--f1-cian); margin-top:8px; }
+.f1-btn-ccr { min-height:56px; margin-bottom:10px; background:var(--f1-ambar); color:#1d1200; font-weight:800; font-size:1.05rem; border:0; border-radius:12px; }
+/* selector de clientes: hoja a pantalla completa (la lista se desplaza dentro y no la tapa el teclado) */
+#f1-cliente { align-items:stretch; padding:0; background:rgba(2,12,22,.92); z-index:3100; }
+.f1-hoja { width:100%; max-width:640px; margin:0 auto; height:var(--f1-vvh); display:flex; flex-direction:column; background:#0f2b44; }
+.f1-hoja-cab { display:flex; gap:8px; align-items:center; padding:10px; border-bottom:1px solid #2b4a66; }
+.f1-hoja-cab input { flex:1; min-width:0; } .f1-icono { min-width:48px; min-height:48px; background:transparent; border:0; color:#fff; font-size:1.3rem; }
+.f1-cl-res { flex:1; overflow-y:auto; padding:8px; -webkit-overflow-scrolling:touch; }
+.f1-cl-item { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; min-height:60px; padding:10px 14px; margin-bottom:8px; background:#0a1f33; border:1px solid #2b4a66; border-radius:12px; color:#fff; text-align:left; touch-action:manipulation; }
+.f1-cl-item b { font-size:1.02rem; } .f1-cl-item span { font-size:.82rem; color:#9fb3c4; }
+.f1-vacio { color:#9fb3c4; text-align:center; padding:24px 8px; }
+.f1-cl-form { display:none; flex-direction:column; gap:10px; padding:14px; overflow-y:auto; flex:1; } .f1-cl-form h3 { color:var(--f1-cian); font-size:1.1rem; margin:0; }
+.f1-campo-toque { cursor:pointer; background-image:none; }
+/* cuenta de cobro rápida */
+.f1-paso { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; } .f1-paso label { color:#9fb3c4; font-size:.9rem; font-weight:600; }
+.f1-campo-boton { display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-height:56px; padding:10px 14px; background:#0a1f33; border:1px solid #3a5873; border-radius:10px; color:#fff; text-align:left; }
+.f1-campo-boton span { font-size:.82rem; color:#9fb3c4; }
+.f1-resumen { background:#0a1f33; border:1px dashed #3a5873; border-radius:10px; padding:10px 12px; margin-bottom:10px; color:#cfe3f3; font-size:.95rem; }
+.f1-tarjeta { background:#0a1f33; border:1px solid #2b4a66; border-radius:12px; padding:12px; margin-bottom:10px; display:flex; flex-direction:column; gap:10px; color:#fff; }
+.f1-tarjeta small { display:block; color:#8aa0b3; } .f1-saldo b { color:var(--f1-ambar); font-size:1.25rem; }
+.f1-ok { text-align:center; color:#fff; margin-bottom:12px; } .f1-ok h3 { color:#5ee08a; }
+#ccrModal .btn { margin-top:8px; }
+/* tipo de documento (segmentado) */
+.f1-seg > div { display:flex; gap:0; } .f1-seg button { flex:1; min-height:48px; background:transparent; color:var(--f1-cian); border:1px solid var(--f1-cian); font-weight:700; }
+.f1-seg button:first-child { border-radius:10px 0 0 10px; } .f1-seg button:last-child { border-radius:0 10px 10px 0; } .f1-seg button.activo { background:var(--f1-cian); color:#052033; }
+.f1-version { position:fixed; right:8px; bottom:4px; font-size:.65rem; color:#6f8aa0; z-index:900; background:rgba(5,20,33,.7); padding:1px 6px; border-radius:6px; }
+.f1-version a { color:var(--f1-cian); }
+/* teclado abierto: espacio extra al final de los formularios para poder desplazar los últimos campos y botones por encima del teclado */
+:root { --f1-kb: 0px; }
+.modal-body, .f1-cl-form, .f1-cl-res { padding-bottom: calc(var(--f1-kb, 0px) + 16px) !important; }
+/* Android: objetivos táctiles de ~44 px en acciones importantes y navegación que no se corta */
+@media (max-width: 768px) {
+  .btn, .form-select, .form-control, .form-control-sm, .form-select-sm { min-height:44px; }
+  .btn-sm, .btn-group-sm > .btn { min-height:44px; min-width:44px; padding:.45rem .7rem; font-size:.9rem; }
+  .form-control, .form-select, .form-control-sm, .form-select-sm, textarea { font-size:16px; }
+  .form-check-input { width:1.6em; height:1.6em; } .form-switch .form-check-input { width:3em; }
+  .card .d-flex.gap-1, .card .btn-group { flex-wrap:wrap; gap:6px !important; }
+  .nav, .btn-group, #tab-prov, [id^="tab-"] { flex-wrap:wrap; }
+  /* las pestañas ya no se esconden a la derecha con scroll invisible: pasan a 2 filas y todas se ven */
+  .nav.nav-pills.flex-nowrap { flex-wrap:wrap !important; gap:6px; } .overflow-auto.scroll-hide { overflow:visible !important; }
+  .nav-pills .nav-item { flex:1 1 45%; } .nav-pills .nav-link { width:100%; text-align:center; white-space:normal; }
+  [id^="tab-"] { min-height:44px; }
+  .modal-footer .btn { min-height:48px; }
+}
