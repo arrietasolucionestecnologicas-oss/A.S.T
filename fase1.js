@@ -34,13 +34,13 @@
   let enLogin = false, cola = [];
   // Seguimiento de escrituras: las lecturas que empiezan antes de una escritura pueden traer datos viejos y no deben pisar lo nuevo (ver refrescarSeguro en app.js).
   window.AST_ESCRITURAS = { epoca: 0, pendientes: 0 };
-  const ES_LECTURA = /^(get|preview|version|evaluar|login|logout)/;
+  const ES_LECTURA = /^(get|preview|version|evaluar|login|logout|estadoLlave)/;
   window.callApi = async function (action, payload) {
     const S = window.AST_SYNC;
     if (ES_LECTURA.test(action)) { const r = await llamarApi(action, payload); if (S) { try { S.alRecibir(action, r); } catch (e) { console.error(e); } } return r; }
     window.AST_ESCRITURAS.epoca++; window.AST_ESCRITURAS.pendientes++; if (S) S.escrituraInicia();
     let r = null;
-    try { r = await llamarApi(action, payload); return r; }
+    try { r = await llamarApi(action, payload); if (r && r.success && window.AST_NOTIF) AST_NOTIF.alEscribir(action); return r; }
     finally {
       window.AST_ESCRITURAS.pendientes--; window.AST_ESCRITURAS.epoca++;
       if (S) { const rr = r || { success: false, error: 'Error inesperado' }; try { S.alRecibir(action, rr); } catch (e) { console.error(e); } S.escrituraFin(action, rr); }
@@ -126,6 +126,46 @@
     $('f1-clave-form').reset(); $('f1-clave-msg').textContent = ''; bootstrap.Modal.getOrCreateInstance($('f1-clave-modal')).show();
   };
 
+  // ---------- 3c. Llave del asistente (la crea y la anula Gerson; se muestra UNA sola vez; el servidor guarda solo su huella) ----------
+  window.llaveAsistenteAST = async function () {
+    if (!$('f1-llave-modal')) {
+      const d = document.createElement('div'); d.className = 'modal fade'; d.id = 'f1-llave-modal'; d.tabIndex = -1;
+      d.innerHTML = '<div class="modal-dialog modal-dialog-scrollable modal-fullscreen-sm-down"><div class="modal-content bg-dark-panel border-cyan"><div class="modal-header border-secondary"><h5 class="modal-title text-cyan">Llave del asistente</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body">' +
+        '<p class="f1-peq">Con esta llave el asistente de la nube puede crear clientes y trabajos, agregar ítems, registrar pagos y hacer cuentas de cobro. <b>No puede borrar nada</b>, ni tocar configuración, claves o documentos compartidos. Todo lo que haga queda en la bitácora como «asistente».</p>' +
+        '<div id="f1-llave-estado" class="f1-peq" role="status" style="margin-bottom:12px"></div>' +
+        '<div id="f1-llave-nueva" style="display:none;margin-bottom:12px"><div class="f1-peq"><b>Copia la llave ahora: no se vuelve a mostrar.</b></div><textarea id="f1-llave-valor" readonly rows="3" class="form-control bg-dark text-white border-secondary" style="font-size:.8rem;word-break:break-all"></textarea><button type="button" id="f1-llave-copiar" class="btn w-100 f1-btn-primario" style="margin-top:8px">Copiar llave</button></div>' +
+        '<div class="f1-paso"><label for="f1-llave-clave">Tu clave actual (para crear una llave nueva)</label><input type="password" id="f1-llave-clave" autocomplete="current-password"></div>' +
+        '<div id="f1-llave-msg" class="f1-error" role="alert"></div>' +
+        '<button type="button" id="f1-llave-crear" class="btn btn-lg w-100 f1-btn-primario">Crear llave nueva (dura 90 días)</button>' +
+        '<button type="button" id="f1-llave-anular" class="btn btn-lg w-100 btn-outline-danger" style="margin-top:8px">Anular llave</button>' +
+        '<small class="f1-peq">Crear una llave nueva anula la anterior. Pégala tú mismo en las variables del entorno de la nube (AST_API_KEY); no la escribas en el repositorio ni en el chat.</small></div></div></div>';
+      document.body.appendChild(d);
+      $('f1-llave-crear').onclick = async () => {
+        const m = $('f1-llave-msg'), b = $('f1-llave-crear'); m.textContent = ''; const c = $('f1-llave-clave').value;
+        if (!c) { m.textContent = 'Escribe tu clave actual.'; return; }
+        b.disabled = true; b.textContent = 'Creando…';
+        const r = await window.callApi('crearLlaveAsistente', { claveActual: c });
+        b.disabled = false; b.textContent = 'Crear llave nueva (dura 90 días)'; $('f1-llave-clave').value = '';
+        if (!r.success) { m.textContent = r.codigo === 'CREDENCIALES_INVALIDAS' ? 'La clave no es correcta.' : (r.error || 'No se pudo crear la llave.'); return; }
+        $('f1-llave-valor').value = r.data.llave; $('f1-llave-nueva').style.display = 'block'; pintarEstadoLlave();
+      };
+      $('f1-llave-copiar').onclick = async () => { try { await navigator.clipboard.writeText($('f1-llave-valor').value); aviso('Llave copiada.'); } catch (e) { $('f1-llave-valor').select(); aviso('Selecciónala y cópiala a mano.', 'danger'); } };
+      $('f1-llave-anular').onclick = async () => {
+        if (!confirm('¿Anular la llave? El asistente dejará de poder escribir en tu app.')) return;
+        const r = await window.callApi('anularLlaveAsistente', {}); if (!r.success) { $('f1-llave-msg').textContent = r.error || 'No se pudo anular.'; return; }
+        $('f1-llave-valor').value = ''; $('f1-llave-nueva').style.display = 'none'; pintarEstadoLlave();
+      };
+    }
+    async function pintarEstadoLlave() {
+      const r = await window.callApi('estadoLlaveAsistente', {}), e = $('f1-llave-estado');
+      if (!r.success) { e.textContent = r.error || 'No se pudo consultar.'; return; }
+      const f = iso => new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+      e.textContent = r.data.activa ? 'Llave activa. Vence el ' + f(r.data.vence) + '.' : (r.data.anulada ? 'La llave fue anulada.' : (r.data.vence ? 'La llave venció el ' + f(r.data.vence) + '.' : 'Todavía no hay llave.'));
+    }
+    $('f1-llave-clave').value = ''; $('f1-llave-msg').textContent = ''; $('f1-llave-valor').value = ''; $('f1-llave-nueva').style.display = 'none';
+    bootstrap.Modal.getOrCreateInstance($('f1-llave-modal')).show(); pintarEstadoLlave();
+  };
+
   // ---------- 4. Documentos privados: se abren/comparten bajo demanda (sin enlace público) ----------
   function b64aBlob(b64) { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], { type: 'application/pdf' }); }
   async function compartirOAbrir(ref, compartir) {
@@ -205,17 +245,26 @@
   // ---------- 6. Cuenta de cobro rápida ----------
   const monto = s => { const d = dig(s); return d ? parseInt(d, 10) : 0; };
   const pesos = n => (typeof fmt !== 'undefined' ? fmt.format(n) : '$ ' + n);
-  const itemVacio = () => ({ uuid: uuid(), concepto: '', cantidad: 1, valor: 0 });
-  const est = { cliente: null, items: [itemVacio()], valor: 0, abonos: 0, idSolicitud: null, huella: '', enVuelo: false, resultado: null };
+  const itemVacio = () => ({ uuid: uuid(), concepto: '', detalle: '', cantidad: 1, valor: 0 });
+  const est = { cliente: null, items: [itemVacio()], valor: 0, abonos: 0, retPct: 0, libre: true, fecha: '', emisor: 'NATURAL', idSolicitud: null, huella: '', enVuelo: false, resultado: null };
   const totalItems = () => est.items.reduce((t, i) => t + (i.cantidad || 0) * (i.valor || 0), 0);
   const resumenConceptos = () => est.items.map(i => i.concepto.trim()).filter(Boolean).join('; ');
-  function huella() { return JSON.stringify([est.cliente && est.cliente.nombre, est.items.map(i => [i.concepto, i.cantidad, i.valor]), est.abonos]); }
+  function huella() { return JSON.stringify([est.cliente && est.cliente.nombre, est.items.map(i => [i.concepto, i.detalle, i.cantidad, i.valor]), est.abonos, est.retPct, est.libre, est.fecha, est.emisor]); }
+  // Retención en la fuente: con «recibir libre» se suma un ítem de ajuste para que, descontada la retención, quede en mano exactamente el valor de los ítems (ej. 600.000 con 6 % → documento por 638.298, retención 38.298).
+  function calcRet() {
+    const base = est.valor, p = est.retPct > 0 && est.retPct <= 30 ? est.retPct : 0;
+    if (!p) return { pct: 0, ajuste: 0, total: base, ret: 0, neto: base };
+    const total = est.libre ? Math.round(base / (1 - p / 100)) : base, ret = Math.round(total * p / 100);
+    return { pct: p, ajuste: total - base, total: total, ret: ret, neto: total - ret };
+  }
+  const textoPct = p => String(p).replace('.', ',');
   function leerItemsDelForm() {   // sincroniza lo escrito en pantalla con el estado (antes de agregar/quitar un ítem)
-    document.querySelectorAll('#ccr-items .ccr-item').forEach((el, k) => { const it = est.items[k]; if (!it) return; it.concepto = el.querySelector('.ccr-concepto').value; it.cantidad = monto(el.querySelector('.ccr-cant').value) || 0; it.valor = monto(el.querySelector('.ccr-val').value); });
+    document.querySelectorAll('#ccr-items .ccr-item').forEach((el, k) => { const it = est.items[k]; if (!it) return; it.concepto = el.querySelector('.ccr-concepto').value; it.detalle = el.querySelector('.ccr-detalle').value; it.cantidad = monto(el.querySelector('.ccr-cant').value) || 0; it.valor = monto(el.querySelector('.ccr-val').value); });
   }
   function pintarItemsCCR() {
     $('ccr-items').innerHTML = est.items.map((it, k) => '<div class="f1-tarjeta ccr-item" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center"><small>Ítem ' + (k + 1) + '</small>' + (est.items.length > 1 ? '<button type="button" class="btn btn-sm btn-outline-danger ccr-quitar" data-k="' + k + '" aria-label="Quitar ítem ' + (k + 1) + '" style="min-height:44px;min-width:44px">Quitar</button>' : '') + '</div>' +
       '<label>Concepto</label><textarea class="ccr-concepto" rows="2" maxlength="300" placeholder="Ej: Cambio de breaker y revisión de tablero">' + esc1(it.concepto) + '</textarea>' +
+      '<label>Detalle del servicio (opcional)</label><textarea class="ccr-detalle" rows="3" maxlength="600" placeholder="Ej: pruebas realizadas, lugar y días de ejecución">' + esc1(it.detalle || '') + '</textarea>' +
       '<div style="display:flex;gap:8px"><div style="flex:1"><label>Cantidad</label><input class="ccr-cant" inputmode="numeric" autocomplete="off" value="' + (it.cantidad || '') + '"></div><div style="flex:2"><label>Valor unitario (COP)</label><input class="ccr-val" inputmode="numeric" autocomplete="off" placeholder="0" value="' + (it.valor || '') + '"></div></div>' +
       '<small class="ccr-sub"></small></div>').join('');
     document.querySelectorAll('#ccr-items .ccr-quitar').forEach(b => b.onclick = () => { leerItemsDelForm(); est.items.splice(Number(b.dataset.k), 1); pintarItemsCCR(); actCCR(); });
@@ -224,8 +273,11 @@
   }
   function actCCR() {
     leerItemsDelForm(); est.valor = totalItems(); est.abonos = monto(($('ccr-abonos') || {}).value);
+    if ($('ccr-fecha')) est.fecha = $('ccr-fecha').value || '';
+    if (document.querySelector('input[name="ccr-emisor"]:checked')) est.emisor = document.querySelector('input[name="ccr-emisor"]:checked').value;
+    if ($('ccr-ret')) { est.retPct = parseFloat(String($('ccr-ret').value).replace(',', '.')) || 0; est.libre = $('ccr-libre') ? $('ccr-libre').checked : true; }
     document.querySelectorAll('#ccr-items .ccr-item').forEach((el, k) => { const it = est.items[k]; el.querySelector('.ccr-sub').innerHTML = 'Subtotal <b>' + pesos((it.cantidad || 0) * (it.valor || 0)) + '</b>'; });
-    const r = $('ccr-res'); if (r) r.innerHTML = 'Valor total <b>' + pesos(est.valor) + '</b> · Abonos <b>' + pesos(est.abonos) + '</b> · Saldo pendiente <b>' + pesos(Math.max(0, est.valor - est.abonos)) + '</b>';
+    const r = $('ccr-res'); if (r) { const R = calcRet(); r.innerHTML = 'Valor total <b>' + pesos(R.total) + '</b>' + (R.pct ? (R.ajuste ? ' (incluye ajuste ' + pesos(R.ajuste) + ')' : '') + ' · Retención ' + textoPct(R.pct) + ' % <b>- ' + pesos(R.ret) + '</b> · Neto a recibir <b>' + pesos(R.neto) + '</b>' : '') + ' · Abonos <b>' + pesos(est.abonos) + '</b> · Saldo pendiente <b>' + pesos(Math.max(0, R.neto - est.abonos)) + '</b>'; }
   }
   function crearModalCCR() {
     if ($('ccrModal')) return;
@@ -234,19 +286,22 @@
     document.body.appendChild(d);
   }
   function pintarCCR(paso) {
-    const c = $('ccr-cuerpo'), saldo = est.valor - est.abonos;
+    const c = $('ccr-cuerpo'), R = calcRet(), saldo = R.neto - est.abonos;
     if (paso === 'form') {
       c.innerHTML = '<div class="f1-paso"><label>1. Cliente</label><button type="button" id="ccr-cli" class="f1-campo-boton">' + (est.cliente ? '<b>' + esc1(est.cliente.nombre) + '</b><span>' + esc1([est.cliente.nit, est.cliente.telefono].filter(Boolean).join(' · ')) + '</span>' : 'Toca para elegir o crear cliente') + '</button></div>' +
         '<div class="f1-paso"><label>2. Qué se cobra (puedes agregar varios ítems)</label><div id="ccr-items"></div><button type="button" id="ccr-agregar" class="btn btn-lg w-100 f1-btn-sec">+ Agregar otro ítem</button></div>' +
         '<div class="f1-paso"><label for="ccr-abonos">3. Abonos recibidos (opcional)</label><input id="ccr-abonos" inputmode="numeric" autocomplete="off" placeholder="0" value="' + (est.abonos || '') + '"></div>' +
+        '<div class="f1-paso"><label>4. Emitir como</label><label class="f1-peq" style="display:flex;gap:8px;align-items:center;margin-bottom:4px"><input type="radio" name="ccr-emisor" value="NATURAL"' + (est.emisor === 'NATURAL' ? ' checked' : '') + '> Persona natural (tu nombre y cédula, sin encabezado de A.S.T.)</label><label class="f1-peq" style="display:flex;gap:8px;align-items:center"><input type="radio" name="ccr-emisor" value="AST"' + (est.emisor === 'AST' ? ' checked' : '') + '> A.S.T. (con el encabezado y logo de A.S.T.)</label></div>' +
+        '<div class="f1-paso"><label for="ccr-fecha">5. Fecha del documento (déjala vacía si es de hoy)</label><input type="date" id="ccr-fecha" max="' + new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10) + '" value="' + (est.fecha || '') + '"><small class="f1-peq">Si el trabajo fue en días pasados, pon la fecha real del cobro. El número lo asigna el sistema.</small></div>' +
+        '<div class="f1-paso"><label for="ccr-ret">6. Retención en la fuente % (opcional)</label><input id="ccr-ret" inputmode="decimal" autocomplete="off" placeholder="Ej: 6" value="' + (est.retPct || '') + '"><label class="f1-peq" style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="ccr-libre"' + (est.libre ? ' checked' : '') + '> Quiero recibir libre el valor de los ítems (se suma un ítem de ajuste para cubrir la retención)</label></div>' +
         '<div class="f1-resumen" id="ccr-res"></div><div id="ccr-err" class="f1-error" role="alert"></div><button type="button" id="ccr-revisar" class="btn btn-lg w-100 f1-btn-primario">Revisar</button>';
       $('ccr-cli').onclick = () => { leerItemsDelForm(); window.abrirSelectorCliente(cl => { est.cliente = cl; pintarCCR('form'); }); };
-      pintarItemsCCR(); $('ccr-abonos').addEventListener('input', actCCR);
+      pintarItemsCCR(); $('ccr-abonos').addEventListener('input', actCCR); $('ccr-ret').addEventListener('input', actCCR); $('ccr-fecha').addEventListener('change', actCCR); document.querySelectorAll('input[name="ccr-emisor"]').forEach(r => r.addEventListener('change', actCCR)); $('ccr-libre').addEventListener('change', actCCR);
       $('ccr-agregar').onclick = () => { leerItemsDelForm(); if (est.items.length >= 15) { $('ccr-err').textContent = 'Máximo 15 ítems por cuenta de cobro.'; return; } est.items.push(itemVacio()); pintarItemsCCR(); const ult = document.querySelectorAll('#ccr-items .ccr-concepto'); if (ult.length) ult[ult.length - 1].focus(); };
       $('ccr-revisar').onclick = () => { actCCR(); const e = validarCCR(); if (e) { $('ccr-err').textContent = e; return; } if (est.huella !== huella()) { est.idSolicitud = uuid(); est.huella = huella(); } pintarCCR('revisar'); };
     } else if (paso === 'revisar') {
-      c.innerHTML = '<div class="f1-tarjeta"><div><small>Cliente</small><b>' + esc1(est.cliente.nombre) + '</b></div><div><small>Ítems</small>' + est.items.map(i => '<b style="display:block">' + esc1(i.concepto.trim()) + ' — ' + i.cantidad + ' × ' + pesos(i.valor) + ' = ' + pesos(i.cantidad * i.valor) + '</b>').join('') + '</div><div><small>Valor total</small><b>' + pesos(est.valor) + '</b></div><div><small>Abonos recibidos</small><b>' + pesos(est.abonos) + '</b></div><div class="f1-saldo"><small>Saldo pendiente</small><b>' + pesos(saldo) + '</b></div></div>' +
-        '<p class="f1-peq">Es una cuenta de cobro de persona natural. No es una factura electrónica y no incluye IVA.</p><div id="ccr-err" class="f1-error" role="alert"></div>' +
+      c.innerHTML = '<div class="f1-tarjeta"><div><small>Cliente</small><b>' + esc1(est.cliente.nombre) + '</b></div><div><small>Ítems</small>' + est.items.map(i => '<b style="display:block">' + esc1(i.concepto.trim()) + ' — ' + i.cantidad + ' × ' + pesos(i.valor) + ' = ' + pesos(i.cantidad * i.valor) + '</b>').join('') + '</div>' + (R.ajuste ? '<div><small>Ajuste para cubrir la retención</small><b>' + pesos(R.ajuste) + '</b></div>' : '') + '<div><small>Emitida como</small><b>' + (est.emisor === 'AST' ? 'A.S.T.' : 'Persona natural') + '</b></div><div><small>Fecha del documento</small><b>' + (est.fecha ? est.fecha.split('-').reverse().join('/') : 'Hoy') + '</b></div><div><small>Valor total</small><b>' + pesos(R.total) + '</b></div>' + (R.pct ? '<div><small>Retención en la fuente (' + textoPct(R.pct) + ' %)</small><b>- ' + pesos(R.ret) + '</b></div><div><small>Neto a recibir</small><b>' + pesos(R.neto) + '</b></div>' : '') + '<div><small>Abonos recibidos</small><b>' + pesos(est.abonos) + '</b></div><div class="f1-saldo"><small>Saldo pendiente</small><b>' + pesos(saldo) + '</b></div></div>' +
+        '<p class="f1-peq">' + (est.emisor === 'AST' ? 'Cuenta de cobro con el encabezado de A.S.T.' : 'Es una cuenta de cobro de persona natural.') + ' No es una factura electrónica y no incluye IVA.</p><div id="ccr-err" class="f1-error" role="alert"></div>' +
         '<button type="button" id="ccr-generar" class="btn btn-lg w-100 f1-btn-primario">Generar PDF</button><button type="button" id="ccr-volver" class="btn btn-lg w-100 f1-btn-sec">Volver a editar</button>';
       $('ccr-volver').onclick = () => pintarCCR('form'); $('ccr-generar').onclick = generarCCR;
     } else {
@@ -256,7 +311,7 @@
         '<button type="button" id="ccr-enlace" class="btn btn-lg w-100 f1-btn-sec">Enviar enlace por WhatsApp</button><small class="f1-peq">El enlace hace público ese documento para quien lo reciba; el PDF directo no.</small><button type="button" id="ccr-nueva" class="btn btn-lg w-100 f1-btn-sec">Otra cuenta de cobro</button>';
       $('ccr-ver').onclick = () => window.abrirPdfPrivado({ consecutivo: r.consecutivo }); $('ccr-enviar').onclick = () => window.enviarPdfPrivado({ consecutivo: r.consecutivo });
       $('ccr-enlace').onclick = () => enviarEnlaceWhatsApp(r.consecutivo, tel, 'Hola' + (est.cliente.nombre ? ' ' + est.cliente.nombre : '') + ', te envío la cuenta de cobro ' + r.consecutivo + ' por ' + pesos(est.valor) + (est.abonos ? ' (abonos ' + pesos(est.abonos) + ', saldo ' + pesos(saldo) + ')' : '') + ':');
-      $('ccr-nueva').onclick = () => { Object.assign(est, { cliente: null, items: [itemVacio()], valor: 0, abonos: 0, idSolicitud: null, huella: '', resultado: null }); pintarCCR('form'); };
+      $('ccr-nueva').onclick = () => { Object.assign(est, { cliente: null, items: [itemVacio()], valor: 0, abonos: 0, retPct: 0, libre: true, fecha: '', emisor: 'NATURAL', idSolicitud: null, huella: '', resultado: null }); pintarCCR('form'); };
     }
   }
   function validarCCR() {
@@ -266,15 +321,17 @@
       if (!(i.cantidad >= 1)) return n + 'la cantidad debe ser 1 o más.';
       if (!(i.valor > 0)) return n + 'escribe el valor unitario (mayor que cero).'; }
     if (!(est.valor > 0)) return 'Escribe el valor a cobrar (mayor que cero).'; if (est.valor > 999999999) return 'El valor es demasiado alto; revisa los ceros.';
-    if (est.abonos < 0) return 'Los abonos no pueden ser negativos.'; if (est.abonos >= est.valor && est.abonos > 0) return 'Los abonos no pueden ser iguales ni mayores al valor: no habría saldo por cobrar.';
+    if (est.fecha && est.fecha > new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)) return 'La fecha del documento no puede ser futura.'; if (est.retPct < 0 || est.retPct > 30) return 'La retención debe estar entre 0 y 30 %.'; const R = calcRet(); if (est.abonos < 0) return 'Los abonos no pueden ser negativos.'; if (est.abonos >= R.neto && est.abonos > 0) return 'Los abonos no pueden ser iguales ni mayores al valor: no habría saldo por cobrar.';
     return '';
   }
   async function generarCCR() {
     if (est.enVuelo) return; est.enVuelo = true; const b = $('ccr-generar'); b.disabled = true; b.textContent = 'Generando…'; $('ccr-err').textContent = '';
-    const v = est.valor, c = est.cliente;
-    const payload = { idSolicitud: est.idSolicitud, tipoDoc: 'Cuenta de Cobro', cliente: { nombre: c.nombre, nit: c.nit || '', telefono: c.telefono || '' },
-      items: est.items.map(i => ({ uuid: i.uuid, nombre: i.concepto.trim(), cantidad: i.cantidad, precio: i.valor, specs: '', subtotal: i.cantidad * i.valor })), totales: { subtotal: v, iva: 0, granTotal: v },
-      opciones: { mostrarDesc: true, terminos: '', planPago: null, abonos: est.abonos, emisorPersonaNatural: false } };
+    const R = calcRet(), v = R.total, c = est.cliente;
+    const itemsDoc = est.items.map(i => ({ uuid: i.uuid, nombre: i.concepto.trim(), cantidad: i.cantidad, precio: i.valor, specs: (i.detalle || '').trim(), subtotal: i.cantidad * i.valor }));
+    if (R.ajuste > 0) itemsDoc.push({ uuid: uuid(), nombre: 'Ajuste para cubrir la retención en la fuente (' + textoPct(R.pct) + ' %)', cantidad: 1, precio: R.ajuste, specs: '', subtotal: R.ajuste });
+    const payload = { idSolicitud: est.idSolicitud, tipoDoc: 'Cuenta de Cobro', fecha: est.fecha || undefined, cliente: { nombre: c.nombre, nit: c.nit || '', telefono: c.telefono || '' },
+      items: itemsDoc, totales: { subtotal: v, iva: 0, granTotal: v },
+      opciones: { mostrarDesc: true, terminos: '', planPago: null, abonos: est.abonos, retencionPct: R.pct || undefined, emisorPersonaNatural: est.emisor !== 'AST' } };
     const r = await window.callApi('createDocument', payload);
     est.enVuelo = false;
     if (!r.success) { b.disabled = false; b.textContent = 'Reintentar (no se duplicará)'; $('ccr-err').textContent = (r.codigo === 'SIN_RED' ? 'No hay conexión. Cuando vuelva, toca Reintentar: el documento no se repetirá.' : r.error); return; }

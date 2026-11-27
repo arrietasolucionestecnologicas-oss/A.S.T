@@ -4,7 +4,7 @@
   'use strict';
   const S = window.AST_SYNC = { revs: {}, pagos: {}, sucio: false, listaCargada: false, ultimaCarga: 0, escrituras: 0, segundoPlano: 0, oyentesPagos: [] };
   const ES_LECTURA = /^(get|preview|version|evaluar|login|logout)/;
-  const afecta = /^(createProject|updateProject|addProjectMovement|updateProjectMovement|deleteProjectMovement|marcarMovimientosFacturados|updateProjectChecklist|addProjectPayment|deleteProjectPayment|convertQuoteToProject|createDocument|registerRecurringPayment|addInitialPayment|updateRecurringPayment|addRecurringPayment|configureRecurringPayment|deleteProject)$/;
+  const afecta = /^(createProject|updateProject|addProjectMovement|updateProjectMovement|deleteProjectMovement|marcarMovimientosFacturados|updateProjectChecklist|addProjectPayment|updateProjectPayment|deleteProjectPayment|convertQuoteToProject|createDocument|registerRecurringPayment|addInitialPayment|updateRecurringPayment|addRecurringPayment|configureRecurringPayment|deleteProject)$/;
 
   // ------------------------------------------------------------------ revisiones por trabajo
   // Regla: una respuesta con revisión MENOR a la ya aplicada para ese trabajo es vieja y se descarta. Sin revisión (servidor anterior) se acepta.

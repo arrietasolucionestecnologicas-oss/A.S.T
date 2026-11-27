@@ -66,114 +66,14 @@ function hashToNotifId(str) {
     return Math.abs(hash);
 }
 
-async function scheduleRecurringPaymentReminders() {
-    if (!window.Capacitor || !window.Capacitor.Plugins.LocalNotifications) return;
-    try {
-        const LN = window.Capacitor.Plugins.LocalNotifications;
-        let perm = await LN.checkPermissions();
-        if (perm.display !== 'granted') {
-            perm = await LN.requestPermissions();
-            if (perm.display !== 'granted') return;
-        }
-
-        const res = await callApi('getPendingRecurringPayments', {});
-        if (!res.success || !res.data || res.data.length === 0) return;
-
-        const ahora = Date.now();
-        const DIAS_ENTRE_RECORDATORIOS_VENCIDO = 3;
-        const notifications = [];
-
-        res.data.forEach(p => {
-            const fechaAlerta = new Date(p.fechaVencimiento);
-            fechaAlerta.setHours(9, 0, 0, 0);
-            const notifId = hashToNotifId(p.idPago);
-
-            if (fechaAlerta.getTime() >= ahora) {
-                // Todavia no vence: se programa una sola vez para esa fecha.
-                notifications.push({
-                    id: notifId,
-                    title: 'Pago pendiente — ' + p.nombreProyecto,
-                    body: `Cuota de ${fmt.format(p.monto)} (${p.periodo}) de ${p.cliente}`,
-                    schedule: { at: fechaAlerta }
-                });
-                return;
-            }
-
-            // Ya vencido: NO se reprograma cada vez que se abre la app (eso
-            // generaba una notificacion nueva cada dia) -- solo cada
-            // DIAS_ENTRE_RECORDATORIOS_VENCIDO dias, como recordatorio
-            // periodico razonable.
-            const key = 'ast_last_reminder_' + p.idPago;
-            let ultimoAviso = 0;
-            try { ultimoAviso = Number(localStorage.getItem(key)) || 0; } catch (e) {}
-            const diasDesdeUltimoAviso = (ahora - ultimoAviso) / (1000 * 60 * 60 * 24);
-            if (ultimoAviso > 0 && diasDesdeUltimoAviso < DIAS_ENTRE_RECORDATORIOS_VENCIDO) return;
-
-            notifications.push({
-                id: notifId,
-                title: '⚠️ Pago VENCIDO — ' + p.nombreProyecto,
-                body: `Cuota de ${fmt.format(p.monto)} (${p.periodo}) de ${p.cliente} está vencida`,
-                schedule: { at: new Date(ahora + 3000) }
-            });
-            try { localStorage.setItem(key, String(ahora)); } catch (e) {}
-        });
-
-        if (notifications.length > 0) await LN.schedule({ notifications });
-    } catch (e) {
-        console.error('Error programando recordatorios de pago recurrente', e);
-    }
-}
+// (Reemplazado) Los avisos de pagos recurrentes y de mantenimiento de cámaras los programa AST_NOTIF (notificaciones.js) para 45 días, con la app cerrada.
+async function scheduleRecurringPaymentReminders() { if (window.AST_NOTIF) return AST_NOTIF.reprogramar(); }
 
 // --- AVISOS DE MANTENIMIENTO DE CÁMARAS (notificaciones locales en el celular) ---
 // Usa los mismos datos del panel "Mantenimiento de cámaras" (ciclo de 6 meses). Por cada cliente programa: un aviso 15 días antes (9:00 a.m.), otro el día
 // del mantenimiento (9:00 a.m.) y, si ya está vencido, un recordatorio cada 3 días. Se reprograma cada vez que se abre la app, así que si marcas un
 // mantenimiento como realizado los avisos viejos se cancelan solos.
-async function scheduleCameraMaintenanceReminders() {
-    if (!window.Capacitor || !window.Capacitor.Plugins.LocalNotifications) return;
-    try {
-        const LN = window.Capacitor.Plugins.LocalNotifications;
-        let perm = await LN.checkPermissions();
-        if (perm.display !== 'granted') {
-            perm = await LN.requestPermissions();
-            if (perm.display !== 'granted') return;
-        }
-        const res = await callApi('getMantenimientosCamaras', {});
-        if (!res.success || !Array.isArray(res.data)) return;
-
-        // Cancelar los avisos de mantenimiento programados antes (puede haber clientes que ya no estén pendientes).
-        let idsPrevios = [];
-        try { idsPrevios = JSON.parse(localStorage.getItem('ast_mant_notif_ids') || '[]'); } catch (e) {}
-        if (idsPrevios.length) { try { await LN.cancel({ notifications: idsPrevios.map(id => ({ id })) }); } catch (e) {} }
-
-        const ahora = Date.now(), DIAS_ENTRE_AVISOS_VENCIDO = 3, notifications = [];
-        res.data.forEach(m => {
-            const prox = new Date(m.proximaFecha); prox.setHours(9, 0, 0, 0);
-            const aviso = new Date(prox.getTime() - 15 * 86400000);
-            const cliente = m.cliente || 'Cliente';
-            const base = 'mantcam_' + m.id;
-            if (aviso.getTime() > ahora) {
-                notifications.push({ id: hashToNotifId(base + '_aviso'), title: 'Mantenimiento de cámaras en 15 días', body: `${cliente}: ${m.nombreProyecto}. Coordina la visita.`, schedule: { at: aviso } });
-            }
-            if (prox.getTime() > ahora) {
-                notifications.push({ id: hashToNotifId(base + '_dia'), title: 'Hoy toca mantenimiento de cámaras', body: `${cliente}: ${m.nombreProyecto}`, schedule: { at: prox } });
-                return;
-            }
-            // Ya vencido: recordatorio cada DIAS_ENTRE_AVISOS_VENCIDO días (no uno nuevo cada vez que se abre la app).
-            const key = 'ast_last_mant_reminder_' + m.id;
-            let ultimo = 0;
-            try { ultimo = Number(localStorage.getItem(key)) || 0; } catch (e) {}
-            if (ultimo > 0 && (ahora - ultimo) / 86400000 < DIAS_ENTRE_AVISOS_VENCIDO) return;
-            const dias = Math.abs(m.diasParaVencer);
-            notifications.push({ id: hashToNotifId(base + '_vencido'), title: '⚠️ Mantenimiento de cámaras VENCIDO', body: `${cliente}: ${m.nombreProyecto}. Vencido hace ${dias} día${dias === 1 ? '' : 's'}.`, schedule: { at: new Date(ahora + 3000) } });
-            try { localStorage.setItem(key, String(ahora)); } catch (e) {}
-        });
-
-        if (notifications.length > 0) await LN.schedule({ notifications });
-        try { localStorage.setItem('ast_mant_notif_ids', JSON.stringify(notifications.map(n => n.id))); } catch (e) {}
-    } catch (e) {
-        console.error('Error programando avisos de mantenimiento de cámaras', e);
-    }
-}
+async function scheduleCameraMaintenanceReminders() { /* lo cubre AST_NOTIF.reprogramar() junto con los pagos */ }
 
 function generateUUID() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -3205,6 +3105,7 @@ function openNewProjectModal() {
     document.getElementById('np-cliente').value = "";
     document.getElementById('np-contacto').value = "";
     document.getElementById('np-alcance').value = "";
+    const fechaEl = document.getElementById('np-fecha'); if (fechaEl) { const hoy = new Date(); fechaEl.max = new Date(hoy.getTime() - hoy.getTimezoneOffset() * 60000).toISOString().slice(0, 10); fechaEl.value = ""; }
     bootstrap.Modal.getOrCreateInstance(document.getElementById('newProjectModal')).show();
 }
 
@@ -3216,6 +3117,8 @@ function createNewProject() {
         contacto: document.getElementById('np-contacto').value,
         alcance: document.getElementById('np-alcance').value.trim()
     };
+    const fechaElegida = (document.getElementById('np-fecha') || {}).value || '';
+    if (fechaElegida) payload.fecha = fechaElegida;   // vacío = hoy (el servidor pone la fecha)
     if(!payload.nombreProyecto || !payload.cliente) return alert("Nombre y Cliente obligatorios");
     
     const modalInstance = bootstrap.Modal.getInstance(document.getElementById('newProjectModal'));
@@ -3227,7 +3130,7 @@ function createNewProject() {
     // OPTIMISTIC UPDATE
     projects.unshift({
         id: payload.id,
-        fecha: new Date().toISOString(),
+        fecha: fechaElegida ? new Date(fechaElegida + 'T12:00:00').toISOString() : new Date().toISOString(),
         cliente: payload.cliente,
         nombreProyecto: payload.nombreProyecto,
         contacto: payload.contacto,
@@ -3244,9 +3147,14 @@ function createNewProject() {
     callApi('createProject', payload).then(res => {
         hideSyncIndicator();
         if(res.success) {
+            // El número que manda el servidor es el real: si difiere del provisional, la app usa el del servidor.
+            const idReal = res.data && res.data.id;
+            if (idReal && idReal !== payload.id) { const pp = projects.find(x => x.id === payload.id); if (pp) pp.id = idReal; renderProjects(); }
             refreshProjectsOnly();
         } else {
-            showToast("Error de sincronización", "danger");
+            showToast((res.error && String(res.error)) || "Error de sincronización: el trabajo no se guardó", "danger");
+            projects = projects.filter(x => x.id !== payload.id); renderProjects(); calculateDashboard();   // no dejar un trabajo que el servidor no tiene
+
             refreshProjectsOnly();
         }
     });

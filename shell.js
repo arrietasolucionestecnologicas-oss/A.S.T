@@ -85,7 +85,7 @@
   function pintarMas() {
     $('view-mas').innerHTML = '<h1 class="ui-h">Más</h1><h2 class="ui-h2">Gestión</h2><div class="ui-lista">' + fila('people', 'Clientes', 'Contacto, NIT y teléfono', "switchTab('CLIENTES')") + fila('truck', 'Proveedores', 'Lugares de compra y contactos', "switchTab('PROVEEDORES')") + '</div>' +
       '<h2 class="ui-h2">Herramientas</h2><div class="ui-lista">' + fila('calculator', 'Estimador eléctrico, mano de obra y CCTV', 'Materiales y cobro por puntos', "switchTab('ESTIMADOR')") + fila('graph-up', 'Dashboard financiero', 'Ventas, gastos y utilidad por mes', "switchTab('DASHBOARD')") + fila('rulers', 'Levantamiento en campo', 'Se abre dentro de cada trabajo', "switchTab('PROYECTOS')") + '</div>' +
-      '<h2 class="ui-h2">Cuenta</h2><div class="ui-lista">' + fila('key', 'Cambiar mi clave', 'Pon una que recuerdes', 'cambiarClaveAST()') + fila('box-arrow-right', 'Cerrar sesión', 'Versión ' + (window.AST_VERSION || ''), 'cerrarSesionAST()') + '</div>';
+      '<h2 class="ui-h2">Cuenta</h2><div class="ui-lista">' + fila('key', 'Cambiar mi clave', 'Pon una que recuerdes', 'cambiarClaveAST()') + fila('bell', 'Avisos y recordatorios', 'Probar que lleguen con la app cerrada', 'avisosAST()') + fila('robot', 'Llave del asistente', 'Crear o anular el acceso de la nube', 'llaveAsistenteAST()') + fila('box-arrow-right', 'Cerrar sesión', 'Versión ' + (window.AST_VERSION || ''), 'cerrarSesionAST()') + '</div>';
   }
 
   // ---- Pagos recibidos por trabajo (cobrado = pagos registrados; pendiente = vendido - cobrado)
@@ -98,7 +98,7 @@
   // Todo dato sale de AST_SYNC: la respuesta del servidor trae la lista de pagos y el trabajo con su revisión; una respuesta vieja se descarta ahí.
   const lista_ = id => (window.AST_SYNC.pagos[id] || {}).lista;
   const proyecto_ = id => (typeof projects !== 'undefined' ? projects : []).find(x => x.id === id) || {};
-  function filaPago(x) { return '<div class="ui-fila" data-fila="' + esc(x.id) + '"><i class="bi bi-cash-coin"></i><span class="txt"><b>' + pesos(x.monto) + ' · ' + esc(x.medio) + '</b><span>' + fechaCorta(x.fecha) + (x.nota ? ' · ' + esc(x.nota) : '') + '</span></span><button type="button" class="btn btn-outline-secondary btn-sm" data-borrar="' + esc(x.id) + '" aria-label="Eliminar pago"><i class="bi bi-trash"></i></button></div>'; }
+  function filaPago(x) { return '<div class="ui-fila" data-fila="' + esc(x.id) + '"><i class="bi bi-cash-coin"></i><span class="txt"><b>' + pesos(x.monto) + ' · ' + esc(x.medio) + '</b><span>' + fechaCorta(x.fecha) + (x.nota ? ' · ' + esc(x.nota) : '') + '</span></span><button type="button" class="btn btn-outline-secondary btn-sm me-1" data-fecha="' + esc(x.id) + '" aria-label="Cambiar la fecha de este pago"><i class="bi bi-calendar-event"></i></button><button type="button" class="btn btn-outline-secondary btn-sm" data-borrar="' + esc(x.id) + '" aria-label="Eliminar pago"><i class="bi bi-trash"></i></button></div>'; }
   function armarPagos(id) {
     const cuerpo = document.querySelector('#projectDetailModal .modal-body'); if (!cuerpo) return null;
     let box = $('ui-pagos'); if (box && box.dataset.id === id) return box;
@@ -107,12 +107,14 @@
     box.innerHTML = '<h2 class="ui-h2" style="margin-top:0">Cobros del trabajo</h2><div class="ui-kpis"><div class="ui-kpi"><small id="ui-k1-l"></small><b id="ui-k1"></b></div><div class="ui-kpi"><small>Cobrado</small><b class="ui-ok" id="ui-k2"></b></div></div><div id="ui-k3"></div>' +
       '<div class="ui-lista mt-3" id="ui-pagos-lista"></div>' +
       /* PAGO RÁPIDO */ '<div id="ui-pago-rapido" class="mt-3"><div class="ui-peq mb-1">Registrar un pago recibido</div>' +
+      '<label class="ui-peq" for="ui-pago-fecha">Fecha en que te pagaron (vacía = hoy)</label><input type="date" id="ui-pago-fecha" class="form-control mb-2">' +
       '<select id="ui-pago-medio" class="form-select mb-2" aria-label="Medio de pago"><option>Efectivo</option><option>Transferencia</option><option>Nequi</option><option>Bre-B</option><option>Otro</option></select>' +
       '<button type="button" id="ui-pago-total" class="btn btn-cyan w-100 mb-2" style="display:none"></button>' +
       '<div class="d-flex gap-2 mb-2"><button type="button" id="ui-pago-mitad" class="btn btn-outline-cyan flex-fill" style="display:none"></button><button type="button" id="ui-pago-otro" class="btn btn-outline-secondary flex-fill">Otro monto…</button></div>' +
       '<div id="ui-pago-ok" class="ui-ok ui-peq" role="status"></div><div id="ui-pago-err" class="ui-aviso ui-peq" role="alert"></div>' +
       '<form id="ui-pago-form" class="mt-2" style="display:none"><input id="ui-pago-monto" class="form-control mb-2" inputmode="numeric" enterkeyhint="done" placeholder="Monto recibido (COP)" autocomplete="off" aria-label="Monto recibido"><input id="ui-pago-nota" class="form-control mb-2" placeholder="Nota (opcional)" maxlength="200" autocomplete="off" aria-label="Nota"><button class="btn btn-cyan w-100" type="submit">Registrar pago</button></form></div>';
-    $('ui-pagos-lista').addEventListener('click', ev => { const b = ev.target.closest('[data-borrar]'); if (b) borrarPago(id, b); });
+    $('ui-pagos-lista').addEventListener('click', ev => { const f = ev.target.closest('[data-fecha]'); if (f) return cambiarFechaPago(id, f.dataset.fecha); const b = ev.target.closest('[data-borrar]'); if (b) borrarPago(id, b); });
+    $('ui-pago-fecha').max = hoyISO();
     $('ui-pago-form').addEventListener('submit', ev => { ev.preventDefault(); registrarPago(id, ev.target); });
     try { const m = localStorage.getItem('ast_medio_pago'); if (m) $('ui-pago-medio').value = m; } catch (e) {}
     $('ui-pago-medio').addEventListener('change', e => { try { localStorage.setItem('ast_medio_pago', e.target.value); } catch (x) {} });
@@ -133,7 +135,7 @@
     set('ui-k1-l', cerrado ? 'Vendido' : 'Cotizado'); set('ui-k1', pesos(vendido)); set('ui-k2', pesos(recibido));
     const k3 = (cerrado ? 'c' + (pendiente > 0 ? 'a' : 'b') + pendiente : 'n'); const caja = $('ui-k3');
     if (caja.dataset.k !== k3) { caja.dataset.k = k3; caja.innerHTML = cerrado ? '<div class="ui-kpi mt-2"><small>Pendiente por cobrar</small><b class="' + (pendiente > 0 ? 'ui-aviso' : 'ui-ok') + '">' + pesos(pendiente) + '</b><div class="nota">Un trabajo cerrado no significa dinero recibido: solo cuentan los pagos registrados.</div></div>' : '<p class="ui-peq mt-2">Registra aquí anticipos y abonos a medida que los recibas.</p>'; }
-    const cont = $('ui-pagos-lista'); const firma = lista ? lista.map(x => x.id + ':' + x.monto + ':' + x.medio + ':' + x.nota).join('|') : '?';
+    const cont = $('ui-pagos-lista'); const firma = lista ? lista.map(x => x.id + ':' + x.monto + ':' + x.medio + ':' + x.nota + ':' + x.fecha).join('|') : '?';
     if (cont.dataset.f !== firma) { cont.dataset.f = firma; cont.innerHTML = !lista ? '<div class="ui-vacio" style="border:0"><b>Cargando pagos…</b></div>' : (lista.length ? lista.map(filaPago).join('') : '<div class="ui-vacio" style="border:0"><b>Sin pagos registrados</b>Aún no se ha recibido dinero de este trabajo.</div>'); }
     // Botones rápidos: solo cuando ya se cargaron los pagos y hay saldo pendiente
     const bt = $('ui-pago-total'), bm = $('ui-pago-mitad'); if (bt && bm) { const ver = !!lista && pendiente > 0; bt.style.display = ver ? 'block' : 'none'; bm.style.display = (ver && pendiente >= 2) ? 'block' : 'none'; bt.textContent = 'Pago completo · ' + pesos(pendiente); bm.textContent = '50 % · ' + pesos(Math.round(pendiente / 2)); }
@@ -158,12 +160,28 @@
     const err = $('ui-pago-err'), ok = $('ui-pago-ok'); err.textContent = ''; ok.textContent = ''; if (enVueloPago[id] || (btn && btn.disabled)) return; enVueloPago[id] = true;
     const botones = ['ui-pago-total', 'ui-pago-mitad', 'ui-pago-otro'].map($).concat(btn ? [btn] : []); const textos = botones.map(b => b && b.textContent); botones.forEach(b => { if (b) b.disabled = true; }); if (btn) btn.textContent = 'Guardando…';
     if (!pagoPendiente || pagoPendiente.k !== id + '|' + monto) pagoPendiente = { k: id + '|' + monto, id: uuid() };
-    const d = await window.callApi('addProjectPayment', { idPago: pagoPendiente.id, projectId: id, monto: monto, medio: $('ui-pago-medio').value, nota: nota });
+    const fechaP = ($('ui-pago-fecha') || {}).value || '';
+    const d = await window.callApi('addProjectPayment', { idPago: pagoPendiente.id, projectId: id, monto: monto, medio: $('ui-pago-medio').value, nota: nota, fecha: (fechaP && fechaP !== hoyISO()) ? fechaP : undefined });
     botones.forEach((b, i) => { if (b) { b.disabled = false; b.textContent = textos[i]; } }); enVueloPago[id] = false; pintarPagos(id);
     if (!d.success) { err.textContent = d.codigo === 'SIN_RED' ? 'Sin conexión: no se pudo confirmar el guardado del pago. Toca de nuevo cuando vuelva la red: si ya se había guardado, no se duplica.' : d.error; return; }
-    pagoPendiente = null; $('ui-pago-monto').value = ''; $('ui-pago-nota').value = ''; $('ui-pago-form').style.display = 'none'; $('projectDetailModal').classList.remove('ui-escribiendo');
+    pagoPendiente = null; if ($('ui-pago-fecha')) $('ui-pago-fecha').value = ''; $('ui-pago-monto').value = ''; $('ui-pago-nota').value = ''; $('ui-pago-form').style.display = 'none'; $('projectDetailModal').classList.remove('ui-escribiendo');
     ok.textContent = '✓ Pago de ' + pesos(monto) + ' registrado'; setTimeout(() => { if (ok.textContent.indexOf('registrado') > 0) ok.textContent = ''; }, 3500);
     if (!(d.data && d.data.pagos)) await recargarPagos(id);   // servidor anterior a 2.1: no devuelve la lista
+  }
+  const hoyISO = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  // Cambiar la fecha de un pago ya registrado (para que el mes de «plata real» sea el mes en que de verdad te pagaron).
+  function cambiarFechaPago(id, pid) {
+    const inp = document.createElement('input'); inp.type = 'date'; inp.max = hoyISO(); inp.style.cssText = 'position:fixed;opacity:0;left:0;top:0;width:1px;height:1px';
+    const x = (lista_(id) || []).find(q => q.id === pid); if (x) { try { inp.value = new Date(x.fecha).toISOString().slice(0, 10); } catch (e) {} }
+    document.body.appendChild(inp);
+    inp.addEventListener('change', async () => {
+      const v = inp.value; inp.remove(); if (!v) return;
+      const d = await window.callApi('updateProjectPayment', { id: pid, projectId: id, fecha: v });
+      if (!d.success) { aviso('No se pudo cambiar la fecha: ' + d.error); return; }
+      aviso('Fecha del pago actualizada.'); if (!(d.data && d.data.pagos)) await recargarPagos(id);
+    });
+    inp.addEventListener('blur', () => setTimeout(() => inp.remove(), 400));
+    try { inp.showPicker ? inp.showPicker() : inp.click(); } catch (e) { inp.click(); }
   }
   const borrando = {};
   async function borrarPago(id, b) {
