@@ -214,6 +214,10 @@
                     <i class="bi bi-folder-plus"></i> NUEVO
                 </button>
             </div>
+            <div class="input-group mb-3">
+                <span class="input-group-text bg-dark border-secondary text-cyan"><i class="bi bi-search"></i></span>
+                <input type="search" id="projects-search" class="form-control bg-dark text-white border-secondary" placeholder="Buscar trabajo: cliente, nombre, palabra clave…" aria-label="Buscar trabajos" autocomplete="off" oninput="renderProjects()">
+            </div>
             <div id="projects-list"></div>
         </div>
 

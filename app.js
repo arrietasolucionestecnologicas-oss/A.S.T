@@ -2766,8 +2766,12 @@ function renderProjectListGrouped(container, lista) {
     }
 }
 
+// Búsqueda por palabras clave (sin importar mayúsculas ni tildes; deben estar TODAS las palabras): nombre, cliente, contacto, estado y alcance del trabajo.
+function _normBusqueda(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); }
 function renderProjects() {
     const container = document.getElementById('projects-list');
+    const inp = document.getElementById('projects-search'), term = inp ? inp.value : '';
+    if (_normBusqueda(term)) return renderProjectsFiltered(term);
     if (projects.length === 0) {
         container.innerHTML = '<div class="text-muted text-center mt-5">No hay trabajos activos.</div>';
         return;
@@ -2781,24 +2785,22 @@ async function fetchProjects() {
 
 function renderProjectsFiltered(term) {
     const container = document.getElementById('projects-list');
-
+    const palabras = _normBusqueda(term).split(/\s+/).filter(Boolean);
     let lista = projects;
-    if (term) {
-        lista = projects.filter(p =>
-            p.nombreProyecto.toLowerCase().includes(term) ||
-            p.cliente.toLowerCase().includes(term) ||
-            (p.contacto && p.contacto.toLowerCase().includes(term)) ||
-            p.estado.toLowerCase().includes(term)
-        );
+    if (palabras.length) {
+        lista = projects.filter(p => {
+            const pajar = _normBusqueda([p.nombreProyecto, p.cliente, p.contacto, p.estado, p.alcance].join(' '));
+            return palabras.every(w => pajar.includes(w));
+        });
     }
-
     if (lista.length === 0) {
-        container.innerHTML = `<div class="text-muted text-center mt-5">Sin resultados para "<strong>${term}</strong>".</div>`;
+        container.innerHTML = '<div class="text-muted text-center mt-5">Sin resultados para "<strong>' + escHtml_cli(term) + '</strong>".</div>';
         return;
     }
-
     renderProjectListGrouped(container, lista);
+    if (palabras.length) container.insertAdjacentHTML('afterbegin', '<div class="ui-peq mb-2">' + lista.length + ' trabajo' + (lista.length === 1 ? '' : 's') + ' encontrado' + (lista.length === 1 ? '' : 's') + '</div>');
 }
+function escHtml_cli(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
 function renderHistoryFiltered(term) {
     const container = document.getElementById('history-list');
